@@ -34,8 +34,15 @@ if [[ -n "${_RALPH_LIB_LOADED:-}" ]]; then
 fi
 _RALPH_LIB_LOADED=1
 
+# Caller-provided variables (set before sourcing this lib) -- not misspellings
+# shellcheck disable=SC2153
+PROGRESS_FILE="${PROGRESS_FILE:-}"
+TASK_STATE_FILE="${TASK_STATE_FILE:-}"
+
 # Source dynamic phase definitions from phases.conf
+# shellcheck source-path=SCRIPTDIR
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/phases-lib.sh"
+# shellcheck source-path=SCRIPTDIR
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/task-state-lib.sh"
 
 # =============================================================================
@@ -63,8 +70,12 @@ fi
 
 if [[ -t 1 ]]; then
     _BOLD=$'\033[1m'      _DIM=$'\033[2m'       _RESET=$'\033[0m'
-    _RED=$'\033[0;31m'    _GREEN=$'\033[0;32m'  _YELLOW=$'\033[1;33m'
-    _CYAN=$'\033[0;36m'   _MAGENTA=$'\033[0;35m' _WHITE=$'\033[1;37m'
+    _ITALIC=$'\033[3m'    _UNDERLINE=$'\033[4m'  _REVERSE=$'\033[7m'
+    _RED=$'\033[0;31m'    _GREEN=$'\033[0;32m'   _YELLOW=$'\033[1;33m'
+    _BLUE=$'\033[0;34m'   _MAGENTA=$'\033[0;35m' _CYAN=$'\033[0;36m'
+    _WHITE=$'\033[1;37m'  _GRAY=$'\033[0;90m'
+    _BG_RED=$'\033[41m'   _BG_GREEN=$'\033[42m'  _BG_BLUE=$'\033[44m'
+    _BG_MAGENTA=$'\033[45m' _BG_CYAN=$'\033[46m'
 
     _SYM_STEP="${_CYAN}▸${_RESET}"
     _SYM_WARN="${_YELLOW}⚠${_RESET}"
@@ -72,16 +83,33 @@ if [[ -t 1 ]]; then
     _SYM_ERROR="${_RED}✗${_RESET}"
     _SYM_WAIT="${_MAGENTA}⏳${_RESET}"
     _SYM_OK="${_GREEN}✓${_RESET}"
+
+    # Pipeline-consistent aliases
+    _SYM_CHECK="$_SYM_OK"
+    _SYM_CROSS="$_SYM_ERROR"
+    _SYM_ARROW="$_SYM_STEP"
+    _SYM_PENDING="${_DIM}○${_RESET}"
+    _SYM_RUNNING="${_MAGENTA}●${_RESET}"
+    _SYM_DONE="${_GREEN}●${_RESET}"
 else
-    _BOLD='' _DIM='' _RESET=''
-    _RED='' _GREEN='' _YELLOW='' _CYAN='' _MAGENTA='' _WHITE=''
+    _BOLD='' _DIM='' _RESET='' _ITALIC='' _UNDERLINE='' _REVERSE=''
+    _RED='' _GREEN='' _YELLOW='' _BLUE='' _MAGENTA='' _CYAN=''
+    _WHITE='' _GRAY='' _BG_RED='' _BG_GREEN='' _BG_BLUE=''
+    _BG_MAGENTA='' _BG_CYAN=''
 
     _SYM_STEP='>'
-    _SYM_WARN='[WARN]'
-    _SYM_BLOCK='[BLOCKED]'
-    _SYM_ERROR='[ERR]'
-    _SYM_WAIT='[...]'
-    _SYM_OK='[OK]'
+    _SYM_WARN='[!]'
+    _SYM_BLOCK='[x]'
+    _SYM_ERROR='[x]'
+    _SYM_WAIT='[~]'
+    _SYM_OK='[ok]'
+
+    _SYM_CHECK='[ok]'
+    _SYM_CROSS='[x]'
+    _SYM_ARROW='>'
+    _SYM_PENDING='[ ]'
+    _SYM_RUNNING='[*]'
+    _SYM_DONE='[+]'
 fi
 
 _ralph_repeat_char() {
@@ -131,7 +159,8 @@ _ralph_render_banner() {
 
     local gum_border="rounded"
     local gum_color="57"
-    local fallback_border="$(_ralph_repeat_char "─" 1)"
+    local fallback_border
+    fallback_border="$(_ralph_repeat_char "─" 1)"
     local fallback_title_color="${_BOLD}${_WHITE}"
 
     case "$style" in
@@ -175,6 +204,58 @@ _ralph_render_banner() {
     else
         _ralph_box_fallback "$fallback_border" "$fallback_title_color" "$title" "${lines[@]}"
     fi
+    echo ""
+}
+
+# Task progress dot display: ●──●──◉──○──○
+_draw_task_progress() {
+    local completed=$1
+    local total=$2
+
+    printf '  '
+    for ((i=0; i<total; i++)); do
+        if ((i < completed)); then
+            printf '%b' "${_GREEN}●${_RESET}"
+        elif ((i == completed)); then
+            printf '%b' "${_MAGENTA}◉${_RESET}"
+        else
+            printf '%b' "${_DIM}○${_RESET}"
+        fi
+        if ((i < total - 1)); then
+            if ((i < completed)); then
+                printf '%b' "${_GREEN}──${_RESET}"
+            else
+                printf '%b' "${_DIM}──${_RESET}"
+            fi
+        fi
+    done
+    echo ""
+}
+
+_ralph_stage_icon() {
+    case "$1" in
+        pending)  printf '%b' "${_DIM}○${_RESET}" ;;
+        running)  printf '%b' "${_MAGENTA}●${_RESET}" ;;
+        done)     printf '%b' "${_GREEN}✓${_RESET}" ;;
+        skipped)  printf '%b' "${_DIM}⊘${_RESET}" ;;
+        failed)   printf '%b' "${_RED}✗${_RESET}" ;;
+        *)        printf '%b' "${_DIM}○${_RESET}" ;;
+    esac
+}
+
+_draw_ralph_stage_tracker() {
+    local select_st="$1"
+    local agent_st="$2"
+    local verify_st="$3"
+    local commit_st="$4"
+
+    echo ""
+    printf '  %b%bIteration Stages%b\n' "$_BOLD" "$_CYAN" "$_RESET"
+    printf '  %b──────────────────────%b\n' "$_DIM" "$_RESET"
+    printf '     %b  %s\n' "$(_ralph_stage_icon "$select_st")" "Task selection"
+    printf '     %b  %s\n' "$(_ralph_stage_icon "$agent_st")" "Agent run"
+    printf '     %b  %s\n' "$(_ralph_stage_icon "$verify_st")" "Verification"
+    printf '     %b  %s\n' "$(_ralph_stage_icon "$commit_st")" "Commit"
     echo ""
 }
 
@@ -379,9 +460,9 @@ setup_logging() {
     mkdir -p "$LOG_DIR"
     rotate_logs
     LOG_FILE="$LOG_DIR/${LOG_PREFIX}-$(date +%Y%m%d-%H%M%S).log"
-    _ralph_render_banner "section" "Ralph Session" \
-        "Agent:    $AGENT_LABEL" \
-        "Log File: $LOG_FILE"
+    log_header "Ralph Session"
+    log_info "Agent:    ${_BOLD}$AGENT_LABEL${_RESET}"
+    log_info "Log File: ${_DIM}$LOG_FILE${_RESET}"
 }
 
 log() {
@@ -397,49 +478,56 @@ log() {
 
     local short_ts
     short_ts=$(date '+%H:%M:%S')
-    local icon="$_SYM_STEP"
-    local rendered="$msg"
-    case "$msg" in
-        WARNING:*)
-            icon="$_SYM_WARN"
-            rendered="${_YELLOW}${msg}${_RESET}"
-            ;;
-        TASK_BLOCKED:*|BLOCKED:*)
-            icon="$_SYM_BLOCK"
-            rendered="${_YELLOW}${msg}${_RESET}"
-            ;;
-        ERROR:*|RALPH_ERROR:*|ABORT:*)
-            icon="$_SYM_ERROR"
-            rendered="${_RED}${msg}${_RESET}"
-            ;;
-        RATE_LIMIT:*)
-            icon="$_SYM_WAIT"
-            rendered="${_MAGENTA}${msg}${_RESET}"
-            ;;
-        *"complete"*|*"completed"*)
-            icon="$_SYM_OK"
-            ;;
-    esac
-
-    printf '  %b%s%b  %b %b\n' "$_DIM" "$short_ts" "$_RESET" "$icon" "$rendered"
+    printf '  %b%s%b  %b %s\n' "$_DIM" "$short_ts" "$_RESET" "$_SYM_STEP" "$msg"
 }
 
-# =============================================================================
-# Visual Model Banner
-# =============================================================================
-
-# Print a configuration banner.
-# Uses EFFORT_LABEL (set by each script) for the second row label.
-print_model_banner() {
-    local model="$1"
-    local level="$2"
-    local phase="$3"
-
-    _ralph_render_banner "section" "Model Configuration" \
-        "Model:      $model" \
-        "${EFFORT_LABEL}:     $level" \
-        "Phase:      $phase"
+# Header box matching pipeline style (cyan border, gum --border-foreground 57)
+log_header() {
+    local msg="$1"
+    if [[ -n "${LOG_FILE:-}" ]]; then
+        local timestamp
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        echo "[$timestamp] === $msg ===" >> "$LOG_FILE"
+    fi
+    echo ""
+    if [[ "$HAS_GUM" == "true" ]]; then
+        gum style --bold --foreground 255 --border rounded --border-foreground 57 \
+            --padding "0 2" --margin "0 2" "$msg"
+    else
+        # Strip ANSI codes for width calculation
+        local stripped
+        stripped=$(printf '%s' "$msg" | sed $'s/\033\\[[0-9;]*m//g')
+        local len=${#stripped}
+        local border
+        border=$(_ralph_repeat_char "─" $((len + 4)))
+        printf '  %b╭%s╮%b\n' "$_CYAN" "$border" "$_RESET"
+        printf '  %b│%b  %b%s%b  %b│%b\n' "$_CYAN" "$_RESET" "${_BOLD}${_WHITE}" "$msg" "$_RESET" "$_CYAN" "$_RESET"
+        printf '  %b╰%s╯%b\n' "$_CYAN" "$border" "$_RESET"
+    fi
+    echo ""
 }
+
+# Icon + timestamp + message (matches pipeline log_step)
+log_step() {
+    local icon="$1"
+    local msg="$2"
+    if [[ -n "${LOG_FILE:-}" ]]; then
+        local timestamp
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        echo "[$timestamp] $msg" >> "$LOG_FILE"
+    fi
+    local short_ts
+    short_ts=$(date '+%H:%M:%S')
+    printf '  %b%s%b  %b %s\n' "$_DIM" "$short_ts" "$_RESET" "$icon" "$msg"
+}
+
+# Semantic log helpers
+log_info()       { log_step "$_SYM_STEP" "$*"; }
+log_warn()       { log_step "$_SYM_WARN" "${_YELLOW}$*${_RESET}"; }
+log_error()      { log_step "$_SYM_ERROR" "${_RED}$*${_RESET}"; }
+log_success()    { log_step "$_SYM_OK" "${_GREEN}$*${_RESET}"; }
+log_blocked()    { log_step "$_SYM_BLOCK" "${_YELLOW}$*${_RESET}"; }
+log_rate_limit() { log_step "$_SYM_WAIT" "${_MAGENTA}$*${_RESET}"; }
 
 # =============================================================================
 # Rate-Limit Detection & Recovery
@@ -658,7 +746,7 @@ wait_for_rate_limit_reset() {
     local max_cycles="$3"
 
     if [[ $wait_cycle -ge $max_cycles ]]; then
-        log "ABORT: Hit rate limit $((wait_cycle + 1)) times (max: $max_cycles). Stopping."
+        log_error "Hit rate limit $((wait_cycle + 1)) times (max: $max_cycles). Stopping."
         exit 1
     fi
 
@@ -668,14 +756,15 @@ wait_for_rate_limit_reset() {
                || date -d "+${wait_seconds} seconds" '+%H:%M:%S' 2>/dev/null \
                || echo "unknown")
 
-    log "RATE_LIMIT: Waiting ${wait_seconds}s (resuming ~${resume_time}). Wait cycle $((wait_cycle + 1))/$max_cycles"
+    log_rate_limit "Waiting ${wait_seconds}s (resuming ~${_BOLD}${resume_time}${_RESET}${_MAGENTA}). Cycle $((wait_cycle + 1))/$max_cycles"
 
     # Countdown display every 60 seconds
     local remaining=$wait_seconds
     while [[ $remaining -gt 0 ]]; do
         local display_mins=$((remaining / 60))
         local display_secs=$((remaining % 60))
-        printf "\r  Rate limit cooldown: %dm %ds remaining...  " "$display_mins" "$display_secs"
+        printf "\r  %b⏳ Rate limit cooldown: %b%dm %ds%b remaining...  %b" \
+            "$_MAGENTA" "$_BOLD" "$display_mins" "$display_secs" "$_RESET$_MAGENTA" "$_RESET"
 
         local sleep_chunk=60
         if [[ $remaining -lt 60 ]]; then
@@ -684,9 +773,10 @@ wait_for_rate_limit_reset() {
         sleep "$sleep_chunk"
         remaining=$((remaining - sleep_chunk))
     done
-    printf "\r  Rate limit cooldown: complete!                    \n"
+    printf "\r  %b✓ Rate limit cooldown: %bcomplete!%b                    %b\n" \
+        "$_GREEN" "$_BOLD" "$_RESET$_GREEN" "$_RESET"
 
-    log "RATE_LIMIT: Cooldown finished. Resuming..."
+    log_success "Cooldown finished. Resuming..."
 }
 
 # Compute the wait time from agent output during a rate limit event.
@@ -858,14 +948,15 @@ recover_dirty_tree() {
 # =============================================================================
 
 show_status() {
-    _ralph_render_banner "section" "Harvx Task Status" \
-        "Current completion snapshot"
+    log_header "Harvx Task Status"
 
     for phase in $ALL_PHASES; do
         local range
         range=$(get_phase_range "$phase")
         local name
         name=$(get_phase_name "$phase")
+        local icon
+        icon=$(_phase_icon "$phase")
         local start="${range%%:*}"
         local end="${range##*:}"
         local start_num=$((10#${start#T-}))
@@ -880,15 +971,23 @@ show_status() {
             pct=$((completed * 100 / total))
         fi
 
-        # Simple progress bar (20 chars wide)
+        # Colored progress bar (20 chars wide)
         local filled=$((pct / 5))
         local empty=$((20 - filled))
         local bar=""
         local i
-        for ((i = 0; i < filled; i++)); do bar+="#"; done
-        for ((i = 0; i < empty; i++)); do bar+="-"; done
+        for ((i = 0; i < filled; i++)); do bar+="█"; done
+        for ((i = 0; i < empty; i++)); do bar+="░"; done
 
-        printf "  %-35s [%-20s] %3d%% (%d/%d)\n" "$name" "$bar" "$pct" "$completed" "$total"
+        local bar_color="$_GREEN"
+        if [[ $pct -eq 0 ]]; then
+            bar_color="$_DIM"
+        elif [[ $pct -lt 50 ]]; then
+            bar_color="$_YELLOW"
+        fi
+
+        printf "  %s %-32s %b%-20s%b %3d%% (%d/%d)\n" \
+            "$icon" "$name" "$bar_color" "$bar" "$_RESET" "$pct" "$completed" "$total"
     done
 
     echo ""
@@ -910,10 +1009,11 @@ show_status() {
     done
     local total_pct=$((total_completed * 100 / total_tasks))
 
-    echo "  Total: $total_completed/$total_tasks tasks completed ($total_pct%)"
+    printf '  %b%bTotal: %d/%d tasks completed (%d%%)%b\n' \
+        "$_BOLD" "$_WHITE" "$total_completed" "$total_tasks" "$total_pct" "$_RESET"
     echo ""
-    echo "  Default Model:  $DEFAULT_MODEL"
-    printf "  Default %-8s %s\n" "${EFFORT_LABEL}:" "$DEFAULT_EFFORT"
+    printf '  %bDefault Model:%b  %b%s%b\n' "$_DIM" "$_RESET" "$_BOLD" "$DEFAULT_MODEL" "$_RESET"
+    printf '  %bDefault %-8s%b %b%s%b\n' "$_DIM" "${EFFORT_LABEL}:" "$_RESET" "$_BOLD" "$DEFAULT_EFFORT" "$_RESET"
     echo ""
 }
 
@@ -932,6 +1032,8 @@ run_ralph_loop() {
     phase_name=$(get_phase_name "$phase_id")
     local task_range
     task_range=$(get_phase_range "$phase_id")
+    local phase_icon
+    phase_icon=$(_phase_icon "$phase_id")
 
     if [[ -z "$phase_name" || -z "$task_range" ]]; then
         echo "ERROR: Unknown phase '$phase_id'"
@@ -939,26 +1041,12 @@ run_ralph_loop() {
         exit 1
     fi
 
-    log "=========================================="
-    log "Ralph Loop Starting ($AGENT_LABEL)"
-    log "Phase: $phase_name ($phase_id)"
-    log "Task Range: $task_range"
-    log "Max Iterations: $max_iterations"
-    if [[ -n "$model" ]]; then
-        log "Model: $model"
-    fi
-    log "${EFFORT_LABEL}: $effort"
-    log "=========================================="
-
-    _ralph_render_banner "start" "Ralph Loop Starting ($AGENT_LABEL)" \
+    _ralph_render_banner "start" "$phase_icon Ralph Loop ($AGENT_LABEL)" \
         "Phase:          $phase_name ($phase_id)" \
         "Task Range:     $task_range" \
         "Max Iterations: $max_iterations" \
         "Model:          $model" \
         "${EFFORT_LABEL}:         $effort"
-
-    # Display model configuration banner
-    print_model_banner "$model" "$effort" "$phase_name"
 
     # Allow agent-specific setup (e.g., export CLAUDE_CODE_EFFORT_LEVEL)
     pre_agent_setup "$effort"
@@ -970,23 +1058,28 @@ run_ralph_loop() {
     local max_limit_waits=${MAX_LIMIT_WAITS:-$DEFAULT_MAX_LIMIT_WAITS}
     local last_completed_task=""
 
+    # Count total tasks for progress dots
+    local range_start="${task_range%%:*}"
+    local range_end="${task_range##*:}"
+    local total_tasks_in_phase=$(( 10#${range_end#T-} - 10#${range_start#T-} + 1 ))
+
     while [[ $iteration -lt $max_iterations ]]; do
         iteration=$((iteration + 1))
 
         local remaining
         remaining=$(count_remaining_tasks "$task_range")
-        log ""
-        log "--- Iteration $iteration / $max_iterations (${remaining} tasks remaining) ---"
-        _ralph_render_banner "section" "Iteration $iteration / $max_iterations" \
-            "Phase:     $phase_name" \
-            "Remaining: ${remaining} task(s)"
+        local completed_count=$((total_tasks_in_phase - remaining))
+
+        log_header "$phase_icon Iteration $iteration / $max_iterations"
+        _draw_task_progress "$completed_count" "$total_tasks_in_phase"
+        log_info "Phase: ${_BOLD}$phase_name${_RESET}  Remaining: ${_BOLD}${remaining}${_RESET} task(s)"
 
         # --- Pre-iteration dirty tree recovery ---
         recover_dirty_tree "$task_range" "$last_completed_task"
 
         if [[ "$remaining" -eq 0 ]]; then
-            log "All tasks in $phase_name are complete!"
-            _ralph_render_banner "summary" "Phase Complete" \
+            log_success "All tasks in $phase_name are complete!"
+            _ralph_render_banner "summary" "$phase_icon Phase Complete" \
                 "$phase_name has no remaining tasks."
             break
         fi
@@ -995,7 +1088,7 @@ run_ralph_loop() {
         local selection
         selection=$(select_next_task "$task_range")
         if [[ -z "$selection" ]]; then
-            log "TASK_BLOCKED: No eligible tasks found in $task_range"
+            log_blocked "No eligible tasks found in $task_range"
             _ralph_render_banner "blocked" "Task Selection Blocked" \
                 "No eligible tasks found in $task_range"
             break
@@ -1004,8 +1097,8 @@ run_ralph_loop() {
         if [[ "$selection" == BLOCKED:* ]]; then
             local blocked_task="${selection#BLOCKED:}"
             blocked_task="${blocked_task%%:*}"
-            local missing_deps="${selection#BLOCKED:${blocked_task}:}"
-            log "TASK_BLOCKED: ${blocked_task} requires ${missing_deps}"
+            local missing_deps="${selection#BLOCKED:"${blocked_task}":}"
+            log_blocked "${blocked_task} requires ${missing_deps}"
             _ralph_render_banner "blocked" "Task Selection Blocked" \
                 "${blocked_task} requires: ${missing_deps}"
             break
@@ -1016,29 +1109,28 @@ run_ralph_loop() {
         local task_list
         task_list=$(get_task_list_for_single "$selected_task")
         if [[ -z "$task_list" ]]; then
-            log "RALPH_ERROR: Could not resolve spec file for $selected_task"
+            log_error "Could not resolve spec file for $selected_task"
             exit 1
         fi
-        log "Selected task for iteration: $selected_task"
+        log_info "Selected: ${_BOLD}$selected_task${_RESET}"
 
         # Generate prompt scoped to exactly one task.
         local prompt
         prompt=$(generate_prompt "$phase_id" "$phase_name" "$selected_range" "$task_list" "$selected_task")
 
         if [[ "$dry_run" == "true" ]]; then
-            log "DRY RUN -- Generated prompt:"
+            log_info "DRY RUN -- Generated prompt:"
             echo "---"
             echo "$prompt"
             echo "---"
             echo ""
-            echo "$(get_dry_run_command "$model" "$effort")"
-            print_model_banner "$model" "$effort" "$phase_name"
+            get_dry_run_command "$model" "$effort"
             exit 0
         fi
 
         # Write prompt to temp file (avoids shell escaping issues)
         local prompt_file
-        prompt_file=$(mktemp /tmp/${LOG_PREFIX}-prompt-XXXXXX.md)
+        prompt_file=$(mktemp /tmp/"${LOG_PREFIX}"-prompt-XXXXXX.md)
         ralph_register_temp_file "$prompt_file"
         echo "$prompt" > "$prompt_file"
 
@@ -1047,7 +1139,7 @@ run_ralph_loop() {
         start_head=$(git rev-parse HEAD 2>/dev/null || echo "")
 
         # Run agent with the prompt
-        log "Spawning $AGENT_LABEL (iteration $iteration)..."
+        log_step "$_SYM_RUNNING" "Spawning ${_BOLD}$AGENT_LABEL${_RESET} (iteration $iteration)..."
         local start_time
         start_time=$(date +%s)
 
@@ -1065,17 +1157,17 @@ run_ralph_loop() {
         # Log output to file
         echo "$output" >> "$LOG_FILE"
 
-        log "$AGENT_LABEL exited (code=$exit_code, duration=${duration}s)"
+        log_info "$AGENT_LABEL exited (code=$exit_code, duration=${duration}s)"
 
         # --- Rate-limit detection (checked FIRST, before other signals) ---
         if is_rate_limited "$output"; then
-            log "RATE_LIMIT: Rate limit detected in agent output."
+            log_rate_limit "Rate limit detected in agent output."
 
             local wait_seconds
             wait_seconds=$(compute_rate_limit_wait "$output" "$rate_limit_waits")
             if [[ ! "$wait_seconds" =~ ^[0-9]+$ ]] || [[ "$wait_seconds" -le 0 ]]; then
                 wait_seconds=$(get_backoff_seconds "$rate_limit_waits")
-                log "WARNING: Invalid rate-limit wait duration; using fallback backoff of ${wait_seconds}s."
+                log_warn "Invalid rate-limit wait duration; using fallback backoff of ${wait_seconds}s."
             fi
 
             # Stash any partial work from the interrupted iteration so next attempt starts clean
@@ -1091,23 +1183,23 @@ run_ralph_loop() {
 
         # Check for completion signals
         if echo "$output" | grep -q "PHASE_COMPLETE"; then
-            log "PHASE_COMPLETE signal received!"
-            log "All tasks in $phase_name are done."
+            log_success "PHASE_COMPLETE signal received!"
+            log_success "All tasks in $phase_name are done."
             break
         fi
 
         if echo "$output" | grep -q "RALPH_ERROR"; then
             local error_msg
             error_msg=$(echo "$output" | grep "RALPH_ERROR" | head -1)
-            log "ERROR: $error_msg"
+            log_error "$error_msg"
             consecutive_errors=$((consecutive_errors + 1))
 
             if [[ $consecutive_errors -ge 3 ]]; then
-                log "ABORT: 3 consecutive errors. Stopping loop."
+                log_error "3 consecutive errors. Stopping loop."
                 exit 1
             fi
 
-            log "Cooling down for ${COOLDOWN_AFTER_ERROR}s before retry..."
+            log_warn "Cooling down for ${COOLDOWN_AFTER_ERROR}s before retry..."
             sleep "$COOLDOWN_AFTER_ERROR"
             continue
         fi
@@ -1115,8 +1207,8 @@ run_ralph_loop() {
         if echo "$output" | grep -q "TASK_BLOCKED"; then
             local blocked_msg
             blocked_msg=$(echo "$output" | grep "TASK_BLOCKED" | head -1)
-            log "BLOCKED: $blocked_msg"
-            log "No more tasks available in this phase. Stopping."
+            log_blocked "$blocked_msg"
+            log_blocked "No more tasks available in this phase."
             _ralph_render_banner "blocked" "Task Blocked" \
                 "$blocked_msg" \
                 "No more tasks available in this phase."
@@ -1145,7 +1237,7 @@ run_ralph_loop() {
             consecutive_errors=0
             rate_limit_waits=0
             last_completed_task="$selected_task"
-            log "Task completed with commit! (total completed this session: $tasks_completed)"
+            log_success "Task completed with commit! (total this session: $tasks_completed)"
 
         elif [[ "$progress_made" == "true" && "$commit_made" == "false" ]]; then
             # Progress but no commit -- attempt auto-commit recovery
@@ -1155,51 +1247,38 @@ run_ralph_loop() {
                 consecutive_errors=0
                 rate_limit_waits=0
                 last_completed_task="$selected_task"
-                log "Task completed with recovery commit! (total completed this session: $tasks_completed)"
+                log_success "Task completed with recovery commit! (total this session: $tasks_completed)"
             else
                 # Auto-commit failed -- still count progress but warn loudly
                 tasks_completed=$((tasks_completed + (remaining - new_remaining)))
                 consecutive_errors=0
                 rate_limit_waits=0
                 last_completed_task="$selected_task"
-                log "WARNING: Task progress counted but auto-commit failed. Uncommitted changes remain."
-                log "  Next iteration will attempt dirty-tree recovery before proceeding."
-                _ralph_render_banner "warning" "Commit Recovery Warning" \
-                    "Task progress was recorded, but auto-commit failed." \
-                    "Next iteration will run dirty-tree recovery."
+                log_warn "Task progress counted but auto-commit failed. Uncommitted changes remain."
+                log_warn "Next iteration will attempt dirty-tree recovery before proceeding."
             fi
 
         else
             # No progress at all
-            log "WARNING: No task completed in this iteration."
-            _ralph_render_banner "warning" "No Progress This Iteration" \
-                "No task completion signal was detected."
+            log_warn "No task completed in this iteration."
             consecutive_errors=$((consecutive_errors + 1))
 
             if [[ $consecutive_errors -ge 3 ]]; then
-                log "ABORT: 3 iterations without progress. Stopping."
+                log_error "3 iterations without progress. Stopping."
                 exit 1
             fi
         fi
 
         if [[ $iteration -lt $max_iterations ]]; then
-            log "Sleeping ${SLEEP_BETWEEN_ITERATIONS}s before next iteration..."
+            log_info "Sleeping ${SLEEP_BETWEEN_ITERATIONS}s before next iteration..."
             sleep "$SLEEP_BETWEEN_ITERATIONS"
         fi
     done
 
-    log ""
-    log "=========================================="
-    log "Ralph Loop Complete ($AGENT_LABEL)"
-    log "Phase: $phase_name"
-    log "Iterations: $iteration"
-    log "Tasks Completed: $tasks_completed"
     local final_remaining
     final_remaining=$(count_remaining_tasks "$task_range")
-    log "Tasks Remaining: $final_remaining"
-    log "=========================================="
 
-    _ralph_render_banner "summary" "Ralph Loop Complete ($AGENT_LABEL)" \
+    _ralph_render_banner "summary" "$phase_icon Ralph Loop Complete ($AGENT_LABEL)" \
         "Phase:           $phase_name" \
         "Iterations:      $iteration" \
         "Tasks Completed: $tasks_completed" \
@@ -1212,22 +1291,16 @@ run_single_task() {
     local model="$3"
     local effort="$4"
 
-    log "=========================================="
-    log "Ralph Single Task Mode ($AGENT_LABEL)"
-    log "Task: $task_id"
-    if [[ -n "$model" ]]; then
-        log "Model: $model"
-    fi
-    log "${EFFORT_LABEL}: $effort"
-    log "=========================================="
+    # Determine phase from task number
+    local phase_id
+    phase_id=$(get_phase_for_task "$task_id")
+    local phase_icon
+    phase_icon=$(_phase_icon "$phase_id")
 
-    _ralph_render_banner "start" "Ralph Single Task Mode ($AGENT_LABEL)" \
+    _ralph_render_banner "start" "$phase_icon Single Task ($AGENT_LABEL)" \
         "Task:   $task_id" \
         "Model:  $model" \
         "${EFFORT_LABEL}: $effort"
-
-    # Display model configuration banner
-    print_model_banner "$model" "$effort" "Single Task: $task_id"
 
     # Allow agent-specific setup (e.g., export CLAUDE_CODE_EFFORT_LEVEL)
     pre_agent_setup "$effort"
@@ -1236,13 +1309,9 @@ run_single_task() {
     task_list=$(get_task_list_for_single "$task_id")
 
     if [[ -z "$task_list" ]]; then
-        log "ERROR: Task $task_id not found in docs/tasks/"
+        log_error "Task $task_id not found in docs/tasks/"
         exit 1
     fi
-
-    # Determine phase from task number
-    local phase_id
-    phase_id=$(get_phase_for_task "$task_id")
 
     local phase_name
     phase_name=$(get_phase_name "$phase_id")
@@ -1252,18 +1321,17 @@ run_single_task() {
     prompt=$(generate_prompt "$phase_id" "$phase_name" "$task_range" "$task_list" "$task_id")
 
     if [[ "$dry_run" == "true" ]]; then
-        log "DRY RUN -- Generated prompt:"
+        log_info "DRY RUN -- Generated prompt:"
         echo "---"
         echo "$prompt"
         echo "---"
         echo ""
-        echo "$(get_dry_run_command "$model" "$effort")"
-        print_model_banner "$model" "$effort" "Single Task: $task_id"
+        get_dry_run_command "$model" "$effort"
         exit 0
     fi
 
     local prompt_file
-    prompt_file=$(mktemp /tmp/${LOG_PREFIX}-prompt-XXXXXX.md)
+    prompt_file=$(mktemp /tmp/"${LOG_PREFIX}"-prompt-XXXXXX.md)
     ralph_register_temp_file "$prompt_file"
     echo "$prompt" > "$prompt_file"
 
@@ -1274,7 +1342,7 @@ run_single_task() {
     local start_head
     start_head=$(git rev-parse HEAD 2>/dev/null || echo "")
 
-    log "Spawning $AGENT_LABEL for $task_id..."
+    log_step "$_SYM_RUNNING" "Spawning ${_BOLD}$AGENT_LABEL${_RESET} for $task_id..."
     local start_time
     start_time=$(date +%s)
 
@@ -1294,15 +1362,15 @@ run_single_task() {
     # Also display to terminal
     echo "$output"
 
-    log "$AGENT_LABEL exited (code=$exit_code, duration=${duration}s)"
+    log_info "$AGENT_LABEL exited (code=$exit_code, duration=${duration}s)"
 
     # --- Rate-limit detection ---
     if is_rate_limited "$output"; then
-        log "RATE_LIMIT: Rate limit detected during single task run."
+        log_rate_limit "Rate limit detected during single task run."
         if is_tree_dirty; then
             stash_dirty_tree "rate-limit interrupt during $task_id"
         fi
-        log "Single task aborted due to rate limit. Re-run when limit resets."
+        log_error "Single task aborted due to rate limit. Re-run when limit resets."
         exit 1
     fi
 
@@ -1315,24 +1383,19 @@ run_single_task() {
             log "COMMIT_RECOVERY: $task_id marked complete but no commit detected."
             run_commit_recovery "$task_id" || true
         fi
-        log "Single task $task_id completed successfully."
-        _ralph_render_banner "summary" "Single Task Complete" \
+        log_success "Single task $task_id completed successfully."
+        _ralph_render_banner "summary" "$phase_icon Single Task Complete" \
             "$task_id completed successfully."
     else
         if is_tree_dirty; then
-            log "WARNING: Task $task_id not marked complete. Uncommitted changes remain."
-            log "  Review with: git status && git diff"
-            _ralph_render_banner "warning" "Single Task Warning" \
-                "$task_id not marked complete." \
-                "Uncommitted changes remain in working tree."
+            log_warn "Task $task_id not marked complete. Uncommitted changes remain."
+            log_info "Review with: git status && git diff"
         else
-            log "WARNING: Task $task_id not marked complete and no changes detected."
-            _ralph_render_banner "warning" "Single Task Warning" \
-                "$task_id not marked complete and no changes were detected."
+            log_warn "Task $task_id not marked complete and no changes detected."
         fi
     fi
 
-    log "Single task run complete."
+    log_info "Single task run complete."
 }
 
 run_all_phases() {
@@ -1344,27 +1407,27 @@ run_all_phases() {
     for phase in $ALL_PHASES; do
         local remaining
         remaining=$(count_remaining_tasks "$(get_phase_range "$phase")")
+        local phase_icon
+        phase_icon=$(_phase_icon "$phase")
 
         if [[ "$remaining" -eq 0 ]]; then
-            log "Skipping $(get_phase_name "$phase") -- all tasks complete"
+            log_step "${_DIM}⊘${_RESET}" "${_DIM}Skipping $(get_phase_name "$phase") -- all tasks complete${_RESET}"
             continue
         fi
 
-        log "Starting $(get_phase_name "$phase") ($remaining tasks remaining)"
-        _ralph_render_banner "section" "Starting Phase $phase" \
-            "$(get_phase_name "$phase")" \
-            "${remaining} task(s) remaining"
+        log_header "$phase_icon Starting Phase $phase: $(get_phase_name "$phase")"
+        log_info "${remaining} task(s) remaining"
         run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model" "$effort"
 
         # Check if phase completed
         remaining=$(count_remaining_tasks "$(get_phase_range "$phase")")
         if [[ "$remaining" -gt 0 ]]; then
-            log "Phase incomplete ($remaining tasks remaining). Stopping sequential run."
+            log_error "Phase incomplete ($remaining tasks remaining). Stopping sequential run."
             exit 1
         fi
     done
 
-    log "ALL PHASES COMPLETE!"
+    log_success "ALL PHASES COMPLETE!"
     _ralph_render_banner "summary" "All Phases Complete" \
         "All configured phases finished successfully."
 }
@@ -1492,7 +1555,7 @@ main() {
     fi
 
     # Change to project root
-    cd "$PROJECT_ROOT"
+    cd "$PROJECT_ROOT" || exit 1
 
     setup_logging
 

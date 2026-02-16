@@ -4,6 +4,7 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source-path=SCRIPTDIR
 source "$SCRIPT_DIR/phases-lib.sh"
 
 # ── UI: Detection & Colors ──────────────────────────────────────────
@@ -49,6 +50,7 @@ DEFAULT_FIX_AGENT="codex"
 DEFAULT_BASE_BRANCH="main"
 
 PHASE_ID=""
+# shellcheck disable=SC2034  # used for debugging/metadata
 PHASE_MODE="single"   # single | all | from
 FROM_PHASE=""
 PHASES_TO_RUN=()
@@ -170,8 +172,14 @@ log_header() {
             --padding "0 2" --margin "0 2" "$msg"
     else
         local len=${#msg}
+        local cols
+        cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+        local max_border=$(( cols - 6 ))  # leave room for "  ╭" prefix + "╮"
+        (( max_border < 20 )) && max_border=20
+        local border_len=$(( len + 4 ))
+        (( border_len > max_border )) && border_len=$max_border
         local border
-        border="$(printf '─%.0s' $(seq 1 $((len + 4))))"
+        border="$(printf '─%.0s' $(seq 1 "$border_len"))"
         printf '  %b╭%s╮%b\n' "$_CYAN" "$border" "$_RESET"
         printf '  %b│%b  %b%s%b  %b│%b\n' "$_CYAN" "$_RESET" "$_BOLD$_WHITE" "$msg" "$_RESET" "$_CYAN" "$_RESET"
         printf '  %b╰%s╯%b\n' "$_CYAN" "$border" "$_RESET"
@@ -181,12 +189,19 @@ log_header() {
 
 die() {
     _log_raw "ERROR: $1"
+    local cols
+    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    local max_width=$(( cols - 6 ))  # leave margin for border + padding
+    (( max_width < 40 )) && max_width=40
     if [[ "$HAS_GUM" == "true" ]]; then
         gum style --foreground 196 --bold --border rounded --border-foreground 196 \
-            --padding "0 2" --margin "0 2" "ERROR: $1"
+            --padding "0 2" --margin "0 2" --width "$max_width" "ERROR: $1"
     else
         echo ""
-        printf '  %b%b ERROR %b %b%s%b\n' "$_BG_RED" "$_WHITE" "$_RESET" "$_RED" "$1" "$_RESET"
+        # Wrap long messages using fold
+        printf '%s' "$1" | fold -s -w "$max_width" | while IFS= read -r line; do
+            printf '  %b%b ERROR %b %b%s%b\n' "$_BG_RED" "$_WHITE" "$_RESET" "$_RED" "$line" "$_RESET"
+        done
     fi
     exit 1
 }
@@ -197,7 +212,7 @@ _stage_status() {
     local label="$1"
     local status="$2"  # pending | running | done | skipped | failed | warning
 
-    local icon width_label padded
+    local icon padded
     case "$status" in
         pending)  icon="$_SYM_PENDING";  padded="${_DIM}${label}${_RESET}" ;;
         running)  icon="$_SYM_RUNNING";  padded="${_BOLD}${label}${_RESET}" ;;
@@ -288,6 +303,7 @@ resolve_phases_to_run() {
         if ! validate_single_phase "$FROM_PHASE"; then
             die "Invalid --from-phase '$FROM_PHASE'. Expected one of: ${ALL_PHASE_IDS[*]}"
         fi
+        # shellcheck disable=SC2034
         PHASE_MODE="from"
         local collecting=false
         for p in "${ALL_PHASE_IDS[@]}"; do
@@ -297,12 +313,14 @@ resolve_phases_to_run() {
             fi
         done
     elif [[ "$PHASE_ID" == "all" ]]; then
+        # shellcheck disable=SC2034
         PHASE_MODE="all"
         PHASES_TO_RUN=("${ALL_PHASE_IDS[@]}")
     else
         if ! validate_single_phase "$PHASE_ID"; then
             die "Invalid --phase '$PHASE_ID'. Expected one of: ${ALL_PHASE_IDS[*]}, all"
         fi
+        # shellcheck disable=SC2034
         PHASE_MODE="single"
         PHASES_TO_RUN=("$PHASE_ID")
     fi
@@ -1129,7 +1147,7 @@ run_implementation() {
 
     if [[ "$impl_rc" -ne 0 ]]; then
         IMPLEMENT_STATUS="failed"
-        IMPLEMENT_REASON="implementation exited with code $impl_rc (see $impl_log)"
+        IMPLEMENT_REASON="implementation exited with code $impl_rc (see ${impl_log#"$PROJECT_ROOT"/})"
         log_step "$_SYM_CROSS" "Implementation ${_RED}failed${_RESET}: $IMPLEMENT_REASON"
         persist_metadata
         return 1
@@ -1243,8 +1261,7 @@ run_review_once() {
         fi
 
         if [[ "$review_rc" -ne 0 ]]; then
-            die "Review command failed in cycle $cycle with exit code $review_rc (see $review_log)"
-            return 1
+            die "Review command failed in cycle $cycle with exit code $review_rc (see ${review_log#"$PROJECT_ROOT"/})"
         fi
     fi
 
@@ -1284,7 +1301,7 @@ run_fix_once() {
     if capture_cmd "$fix_log" "$fix_script" "${fix_args[@]}"; then
         log_step "$_SYM_CHECK" "Fix cycle $cycle ${_GREEN}completed${_RESET}"
     else
-        die "Fix command failed in cycle $cycle (see $fix_log)"
+        die "Fix command failed in cycle $cycle (see ${fix_log#"$PROJECT_ROOT"/})"
     fi
 
     FIX_CYCLES=$((FIX_CYCLES + 1))
