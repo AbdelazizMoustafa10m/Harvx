@@ -466,6 +466,134 @@ wait_for_rate_limit_reset() {
 }
 
 # =============================================================================
+# Recovery Functions
+# =============================================================================
+
+# Check if the working tree has uncommitted changes.
+is_tree_dirty() {
+    local status
+    status=$(git status --porcelain 2>/dev/null)
+    [[ -n "$status" ]]
+}
+
+# Get a human-readable summary of dirty files for logging.
+get_dirty_summary() {
+    local modified added deleted
+    modified=$(git status --porcelain 2>/dev/null | grep -c '^ M\|^.M' || true)
+    added=$(git status --porcelain 2>/dev/null | grep -c '^A \|^??' || true)
+    deleted=$(git status --porcelain 2>/dev/null | grep -c '^ D\|^D ' || true)
+    echo "${modified} modified, ${added} new/untracked, ${deleted} deleted"
+}
+
+# Attempt to auto-commit all pending changes as a recovery step.
+# Use when agent updated PROGRESS.md but failed to create a commit.
+# Arguments: task_id
+# Returns 0 on success, 1 on failure.
+run_commit_recovery() {
+    local task_id="$1"
+
+    if ! is_tree_dirty; then
+        log "COMMIT_RECOVERY: Working tree is clean, nothing to commit."
+        return 0
+    fi
+
+    local dirty_summary
+    dirty_summary=$(get_dirty_summary)
+    log "COMMIT_RECOVERY: Attempting auto-commit for $task_id ($dirty_summary)."
+
+    # Stage all changes (respects .gitignore)
+    if ! git add -A 2>/dev/null; then
+        log "COMMIT_RECOVERY: git add -A failed."
+        return 1
+    fi
+
+    # Check if anything is actually staged
+    if git diff --cached --quiet 2>/dev/null; then
+        log "COMMIT_RECOVERY: Nothing staged after git add (changes may be gitignored)."
+        return 0
+    fi
+
+    # Create recovery commit
+    if git commit -m "$(cat <<EOF
+chore(recovery): auto-commit pending changes for ${task_id}
+
+This commit was created by the Ralph loop recovery mechanism.
+The agent completed ${task_id} but did not create a git commit
+(likely due to permission restrictions in dontAsk mode).
+EOF
+    )" 2>/dev/null; then
+        local new_head
+        new_head=$(git rev-parse --short HEAD 2>/dev/null)
+        log "COMMIT_RECOVERY: Successfully committed as $new_head."
+        return 0
+    else
+        log "COMMIT_RECOVERY: git commit failed."
+        return 1
+    fi
+}
+
+# Stash dirty working tree changes, preserving them for later inspection.
+# Use when agent was interrupted mid-task (e.g., rate limit hit).
+# Arguments: context_msg (e.g., "rate-limit interrupt during T-014")
+# Returns 0 on success, 1 if nothing to stash or stash failed.
+stash_dirty_tree() {
+    local context_msg="$1"
+
+    if ! is_tree_dirty; then
+        return 1
+    fi
+
+    local dirty_summary
+    dirty_summary=$(get_dirty_summary)
+    local stash_msg="ralph-recovery: ${context_msg} (${dirty_summary})"
+
+    # Include untracked files in stash
+    if git stash push -u -m "$stash_msg" 2>/dev/null; then
+        local stash_ref
+        stash_ref=$(git stash list | head -1 | cut -d: -f1)
+        log "STASH_RECOVERY: Stashed partial work as $stash_ref"
+        log "  Message: $stash_msg"
+        log "  To inspect: git stash show -p $stash_ref"
+        log "  To restore: git stash pop $stash_ref"
+        return 0
+    else
+        log "STASH_RECOVERY: git stash failed."
+        return 1
+    fi
+}
+
+# Pre-iteration dirty tree check and recovery.
+# If the tree is dirty at the start of an iteration, this means either:
+#   (a) A prior iteration completed a task but didn't commit -> auto-commit
+#   (b) A prior iteration was interrupted mid-task -> stash partial work
+# Arguments: task_range, last_task_id (may be empty on first iteration)
+recover_dirty_tree() {
+    local task_range="$1"
+    local last_task_id="$2"
+
+    if ! is_tree_dirty; then
+        return 0
+    fi
+
+    local dirty_summary
+    dirty_summary=$(get_dirty_summary)
+    log "DIRTY_TREE: Working tree is dirty at iteration start ($dirty_summary)."
+
+    # Case (a): last task is marked complete but wasn't committed
+    if [[ -n "$last_task_id" ]] && is_task_completed "$last_task_id"; then
+        log "DIRTY_TREE: $last_task_id is marked complete in PROGRESS.md. Running commit recovery..."
+        if run_commit_recovery "$last_task_id"; then
+            return 0
+        fi
+        log "DIRTY_TREE: Commit recovery failed. Falling through to stash."
+    fi
+
+    # Case (b): interrupted mid-task or commit recovery failed -> stash
+    stash_dirty_tree "dirty tree at iteration start${last_task_id:+ (last task: $last_task_id)}"
+    return 0
+}
+
+# =============================================================================
 # Main Loop
 # =============================================================================
 
@@ -509,6 +637,7 @@ run_ralph_loop() {
     local consecutive_errors=0
     local rate_limit_waits=0
     local max_limit_waits=${MAX_LIMIT_WAITS:-$DEFAULT_MAX_LIMIT_WAITS}
+    local last_completed_task=""
 
     while [[ $iteration -lt $max_iterations ]]; do
         iteration=$((iteration + 1))
@@ -517,6 +646,9 @@ run_ralph_loop() {
         remaining=$(count_remaining_tasks "$task_range")
         log ""
         log "--- Iteration $iteration / $max_iterations (${remaining} tasks remaining) ---"
+
+        # --- Pre-iteration dirty tree recovery ---
+        recover_dirty_tree "$task_range" "$last_completed_task"
 
         if [[ "$remaining" -eq 0 ]]; then
             log "All tasks in $phase_name are complete!"
@@ -620,6 +752,11 @@ run_ralph_loop() {
                 log "RATE_LIMIT: Could not parse reset time. Using backoff: ${wait_seconds}s."
             fi
 
+            # Stash any partial work from the interrupted iteration so next attempt starts clean
+            if is_tree_dirty; then
+                stash_dirty_tree "rate-limit interrupt during $selected_task"
+            fi
+
             wait_for_rate_limit_reset "$wait_seconds" "$rate_limit_waits" "$max_limit_waits"
             rate_limit_waits=$((rate_limit_waits + 1))
             # Do NOT increment consecutive_errors for rate limits
@@ -678,16 +815,30 @@ run_ralph_loop() {
             tasks_completed=$((tasks_completed + (remaining - new_remaining)))
             consecutive_errors=0
             rate_limit_waits=0
+            last_completed_task="$selected_task"
             log "Task completed with commit! (total completed this session: $tasks_completed)"
+
         elif [[ "$progress_made" == "true" && "$commit_made" == "false" ]]; then
-            # Progress but no commit -- warn but count it
-            tasks_completed=$((tasks_completed + (remaining - new_remaining)))
-            consecutive_errors=0
-            rate_limit_waits=0
-            log "WARNING: Task marked complete in PROGRESS.md but no git commit was made."
-            log "  Consider committing manually or granting git commit permission."
+            # Progress but no commit -- attempt auto-commit recovery
+            log "COMMIT_RECOVERY: $selected_task marked complete but no commit detected."
+            if run_commit_recovery "$selected_task"; then
+                tasks_completed=$((tasks_completed + (remaining - new_remaining)))
+                consecutive_errors=0
+                rate_limit_waits=0
+                last_completed_task="$selected_task"
+                log "Task completed with recovery commit! (total completed this session: $tasks_completed)"
+            else
+                # Auto-commit failed -- still count progress but warn loudly
+                tasks_completed=$((tasks_completed + (remaining - new_remaining)))
+                consecutive_errors=0
+                rate_limit_waits=0
+                last_completed_task="$selected_task"
+                log "WARNING: Task progress counted but auto-commit failed. Uncommitted changes remain."
+                log "  Next iteration will attempt dirty-tree recovery before proceeding."
+            fi
+
         else
-            # No progress
+            # No progress at all
             log "WARNING: No task completed in this iteration."
             consecutive_errors=$((consecutive_errors + 1))
 
