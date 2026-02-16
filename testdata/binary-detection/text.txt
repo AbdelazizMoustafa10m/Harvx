@@ -1,0 +1,3 @@
+Hello, this is a plain text file.
+It contains only ASCII characters and newlines.
+No binary content here.

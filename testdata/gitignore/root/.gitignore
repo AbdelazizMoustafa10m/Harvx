@@ -1,0 +1,7 @@
+# Root .gitignore for testing
+*.log
+*.tmp
+node_modules/
+build/
+.env
+**/*.bak

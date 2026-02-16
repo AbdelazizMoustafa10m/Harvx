@@ -1,0 +1,8 @@
+# This is a comment
+
+# Another comment with blank lines around it
+
+*.secret
+
+# Trailing whitespace should be handled
+*.cache

@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 8 |
+| Completed | 14 |
 | In Progress | 0 |
-| Not Started | 87 |
+| Not Started | 81 |
 
 ---
 
@@ -43,12 +43,12 @@
 | T-006 | Version Command & Build Info | Must Have | Small (2-4hrs) | Completed |
 | T-007 | Global Flags Implementation | Must Have | Medium (6-8hrs) | Completed |
 | T-008 | Generate Subcommand (harvx generate / harvx gen) | Must Have | Medium (6-10hrs) | Completed |
-| T-009 | Shell Completions (harvx completion) | Should Have | Small (2-4hrs) | Not Started |
-| T-010 | Exit Code Handling | Must Have | Small (2-4hrs) | Not Started |
-| T-011 | .gitignore Parsing & Matching | Must Have | Medium (6-10hrs) | Not Started |
-| T-012 | Default Ignore Patterns & .harvxignore Support | Must Have | Medium (6-8hrs) | Not Started |
-| T-013 | Binary File Detection & Large File Skipping | Must Have | Small (3-5hrs) | Not Started |
-| T-014 | Extension/Pattern Filtering, --git-tracked-only & Symlinks | Must Have | Medium (8-12hrs) | Not Started |
+| T-009 | Shell Completions (harvx completion) | Should Have | Small (2-4hrs) | Completed |
+| T-010 | Exit Code Handling | Must Have | Small (2-4hrs) | Completed |
+| T-011 | .gitignore Parsing & Matching | Must Have | Medium (6-10hrs) | Completed |
+| T-012 | Default Ignore Patterns & .harvxignore Support | Must Have | Medium (6-8hrs) | Completed |
+| T-013 | Binary File Detection & Large File Skipping | Must Have | Small (3-5hrs) | Completed |
+| T-014 | Extension/Pattern Filtering, --git-tracked-only & Symlinks | Must Have | Medium (8-12hrs) | Completed |
 | T-015 | Parallel File Discovery Engine (Walker with errgroup) | Must Have | Large (14-20hrs) | Not Started |
 
 **Deliverable:** `harvx` produces correct Markdown output for any repository with default settings.
@@ -414,25 +414,6 @@ _None currently_
 
 ---
 
-## Notes
-
-### Key Technical Decisions (from agent research)
-
-1. **koanf v2 over Viper** -- Produces 313% smaller binary, doesn't force-lowercase keys (which breaks TOML spec). Better fit for single-binary distribution.
-2. **zeebo/xxh3 over cespare/xxhash** -- PRD specifies XXH3, but cespare/xxhash implements XXH64. zeebo/xxh3 provides proper XXH3 in pure Go with SIMD optimizations.
-3. **Go stdlib regexp only** -- RE2 engine guarantees O(n) matching time for untrusted input. All Gitleaks patterns adapted without lookaheads.
-4. **malivvan/tree-sitter vs direct wazero** -- Needs evaluation. malivvan provides higher-level API but is pre-release (Jan 2025). Decision documented in T-042.
-5. **BurntSushi/toml v1.5.0** -- Latest stable. MetaData.Undecoded() enables unknown-key detection.
-6. **Bubble Tea v1.x** -- v2 still in RC as of Feb 2026. Stable v1.2+ recommended for production.
-
-### Phase Index Files
-
-Detailed phase-level documentation with Mermaid dependency graphs, implementation order, and tech stack summaries:
-- [PHASE-2-INDEX.md](PHASE-2-INDEX.md) -- Profile System
-- [PHASE-3-SECURITY-INDEX.md](PHASE-3-SECURITY-INDEX.md) -- Secret Redaction
-- [PHASE-3-COMPRESSION-INDEX.md](PHASE-3-COMPRESSION-INDEX.md) -- Tree-Sitter Compression
-- [PHASE-5-INDEX.md](PHASE-5-INDEX.md) -- Workflows
-
 ### T-005: Cobra CLI Framework & Root Command
 
 - **Status:** Completed
@@ -572,4 +553,241 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
 
 ---
 
-_Last updated: 2026-02-16 (T-008)_
+### T-009: Shell Completions (harvx completion)
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `harvx completion` subcommand generating shell completion scripts for Bash, Zsh, Fish, and PowerShell
+- Rich Long help text with installation instructions for each shell (Bash, Zsh, Fish, PowerShell)
+- When run with no arguments, displays help with installation instructions (exit 0)
+- Uses `GenBashCompletionV2` (not deprecated GenBashCompletion) for modern Bash completion with descriptions
+- `cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs)` for strict argument validation
+- Flag completion functions registered on root command for `--format` (markdown, xml) and `--target` (claude, chatgpt, generic)
+- Both completion functions return `cobra.ShellCompDirectiveNoFileComp` to suppress file path suggestions
+- 12 test functions covering: command registration, properties, ValidArgs, all 4 shell script generation, no-args help display, invalid shell rejection, too many args rejection, Long help content verification, format flag completion, target flag completion, subcommand name registration
+
+**Files created/modified:**
+
+- `internal/cli/completion.go` - Completion subcommand with help text and shell script generation (new)
+- `internal/cli/completion_test.go` - 12 test functions (new)
+- `internal/cli/root.go` - Added `completeFormat` and `completeTarget` functions, registered flag completion functions in `init()`
+- `docs/tasks/PROGRESS.md` - Updated with T-009 completion entry
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (all packages)
+- `go mod tidy` - pass (no drift)
+
+---
+
+### T-010: Exit Code Handling
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `HarvxError` custom error type in `internal/pipeline/errors.go` carrying exit code, message, and optional underlying error
+- `HarvxError` implements `error` interface via `Error()` and supports `errors.Is`/`errors.As` via `Unwrap()`
+- Three convenience constructors: `NewError` (code 1), `NewPartialError` (code 2), `NewRedactionError` (code 1, no underlying error)
+- `extractExitCode()` function in `internal/cli/root.go` that determines exit code from error type using `errors.As`
+- `Execute()` updated to log errors to stderr via `slog.Error` before returning the extracted exit code
+- 19 unit tests for `HarvxError` covering: constructor codes, message formatting, `Unwrap`, `errors.Is`, `errors.As`, error interface compliance, stdlib error wrapping, message preservation
+- 10 unit tests for `extractExitCode` covering: nil (0), generic error (1), HarvxError code 1, HarvxError code 2, redaction error, wrapped HarvxError, deeply wrapped HarvxError
+
+**Files created/modified:**
+
+- `internal/pipeline/errors.go` - HarvxError type and constructors (new)
+- `internal/pipeline/errors_test.go` - 19 unit tests for error type (new)
+- `internal/cli/root.go` - Updated Execute() with extractExitCode() and slog.Error logging
+- `internal/cli/root_test.go` - Added 10 tests for extractExitCode function
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (all packages)
+- `go mod tidy` - pass (no drift)
+
+### T-011: .gitignore Parsing & Matching
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `GitignoreMatcher` type in `internal/discovery/gitignore.go` that loads and evaluates `.gitignore` patterns hierarchically
+- `NewGitignoreMatcher(rootDir)` constructor that walks the directory tree, discovers all `.gitignore` files, and compiles patterns using `sabhiram/go-gitignore`
+- `IsIgnored(path, isDir)` method that checks patterns from root down to the file's parent directory
+- Nested `.gitignore` support: each directory's `.gitignore` applies only to files within its subtree
+- Parent `.gitignore` rules are inherited by all subdirectories
+- Correct handling of negation patterns (`!important.log`), directory-only patterns (`build/`), and doublestar patterns (`**/*.tmp`)
+- Graceful handling of missing `.gitignore` files (no error, IsIgnored returns false)
+- `.git/` directory is always skipped during discovery
+- Path normalization: leading `./`, OS-native separators, and trailing `/` for directories
+- `PatternCount()` diagnostic method for logging
+- Performance: O(patterns) per path check, not O(files)
+- Test fixtures under `testdata/gitignore/` with 5 scenarios: root (nested), negation, comments, deep nesting, empty (no gitignore)
+- 16 test functions + 1 benchmark covering all acceptance criteria edge cases
+
+**Files created/modified:**
+
+- `go.mod` - Added `sabhiram/go-gitignore` dependency
+- `internal/discovery/gitignore.go` - GitignoreMatcher implementation (new)
+- `internal/discovery/gitignore_test.go` - 16 test functions + 1 benchmark (new)
+- `testdata/gitignore/root/.gitignore` - Root fixture with wildcard, directory, and doublestar patterns
+- `testdata/gitignore/root/src/.gitignore` - Nested fixture with `*.generated.go` and `vendor/`
+- `testdata/gitignore/root/README.md` - Sample file for fixture
+- `testdata/gitignore/root/src/main.go` - Sample file for fixture
+- `testdata/gitignore/negation/.gitignore` - Negation pattern fixture (`!important.log`)
+- `testdata/gitignore/comments/.gitignore` - Comments and blank lines fixture
+- `testdata/gitignore/deep/.gitignore` - Root of deep nesting fixture
+- `testdata/gitignore/deep/a/b/.gitignore` - Deeply nested `.gitignore`
+- `testdata/gitignore/deep/a/b/c/file.txt` - Deep nested sample file
+- `testdata/gitignore/empty/file.txt` - Empty directory fixture (no .gitignore)
+- `docs/tasks/PROGRESS.md` - Updated with T-011 completion entry
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./internal/discovery/...` - pass (16 tests + 1 benchmark)
+- `go mod tidy` - pass
+
+### T-012: Default Ignore Patterns & .harvxignore Support
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `Ignorer` interface in `internal/discovery/ignore.go` -- the key abstraction for all ignore-pattern matchers
+- `CompositeIgnorer` that chains multiple `Ignorer` implementations (returns true if ANY source matches)
+- `DefaultIgnorePatterns` exported slice with all 41 default patterns from the PRD (directories, env files, certificates, sensitive names, lock files, compiled artifacts, OS/editor files)
+- `SensitivePatterns` exported subset for security-sensitive override warnings
+- `DefaultIgnoreMatcher` compiles default patterns into a gitignore matcher at construction time
+- `IsSensitivePath()` utility function with pre-compiled matcher for override warning checks
+- `HarvxignoreMatcher` loads and evaluates `.harvxignore` files with full hierarchical support (same model as `GitignoreMatcher`)
+- All three matchers (`GitignoreMatcher`, `DefaultIgnoreMatcher`, `HarvxignoreMatcher`) plus `CompositeIgnorer` implement `Ignorer` with compile-time interface compliance checks
+- Nil ignorer filtering in `NewCompositeIgnorer` for safe construction
+- Test fixtures under `testdata/harvxignore/` (basic, negation, empty)
+- Comprehensive test coverage: 13 test functions for defaults, 8 test functions for composite ignorer, 15 test functions for harvxignore, plus 2 benchmarks
+
+**Files created/modified:**
+
+- `internal/discovery/ignore.go` - Ignorer interface + CompositeIgnorer (new)
+- `internal/discovery/defaults.go` - DefaultIgnorePatterns, SensitivePatterns, DefaultIgnoreMatcher, IsSensitivePath (new)
+- `internal/discovery/harvxignore.go` - HarvxignoreMatcher with hierarchical .harvxignore support (new)
+- `internal/discovery/defaults_test.go` - 13 test functions + 1 benchmark (new)
+- `internal/discovery/ignore_test.go` - 8 test functions (new)
+- `internal/discovery/harvxignore_test.go` - 15 test functions + 1 benchmark (new)
+- `internal/discovery/gitignore.go` - Added compile-time Ignorer interface compliance check
+- `testdata/harvxignore/basic/.harvxignore` - Basic patterns fixture (new)
+- `testdata/harvxignore/negation/.harvxignore` - Negation patterns fixture (new)
+- `testdata/harvxignore/empty/file.txt` - Empty directory fixture (new)
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./internal/discovery/...` - pass (all tests)
+- `go mod tidy` - pass
+
+### T-013: Binary File Detection & Large File Skipping
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `IsBinary(path string) (bool, error)` function in `internal/discovery/binary.go` that reads the first 8KB of a file and checks for null bytes, matching Git's approach
+- `IsLargeFile(path string, maxBytes int64) (bool, int64, error)` function that uses `os.Stat` to check file size without reading content
+- `BinaryDetectionBytes` constant (8192) and `DefaultMaxFileSize` constant (1,048,576 bytes = 1MB) exported for use by the pipeline
+- Uses `bytes.IndexByte` for assembly-optimized null byte detection
+- Both functions are safe for concurrent use (no shared mutable state)
+- Proper error wrapping with `fmt.Errorf("context: %w", err)` preserving `os.ErrPermission` and `os.ErrNotExist` sentinels
+- Empty files are explicitly not considered binary
+- Edge cases handled: permission denied, file not found, symlink targets, null byte boundary at exactly 8KB
+- Test fixtures under `testdata/binary-detection/` (text.txt, binary.bin, empty.txt)
+- 10 test functions with 13+ table-driven subtests plus 3 testdata fixture subtests
+- 4 benchmarks covering large file, small file, binary file, and IsLargeFile
+
+**Files created/modified:**
+
+- `internal/discovery/binary.go` - IsBinary and IsLargeFile implementation (new)
+- `internal/discovery/binary_test.go` - Comprehensive tests and benchmarks (new)
+- `testdata/binary-detection/text.txt` - Plain text fixture (new)
+- `testdata/binary-detection/binary.bin` - Binary fixture with PNG-like header (generated by test helper)
+- `testdata/binary-detection/empty.txt` - Empty file fixture (generated by test helper)
+- `docs/tasks/PROGRESS.md` - Updated with T-013 completion entry
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./internal/discovery/...` - pass (all tests)
+- `go mod tidy` - pass
+
+### T-014: Extension/Pattern Filtering, --git-tracked-only & Symlinks
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `PatternFilter` type in `internal/discovery/filter.go` implementing include/exclude/extension-based filtering with `bmatcuk/doublestar` v4 glob patterns
+- Include patterns and extension filters combined with OR logic; exclude patterns take precedence (exclude always wins)
+- Extension matching is case-insensitive with leading dot normalization (`.ts` → `ts`)
+- `HasFilters()` method for pass-through detection when no filters are configured
+- `GitTrackedFiles(root)` function in `internal/discovery/git_tracked.go` that runs `git ls-files` and returns a path set for `--git-tracked-only` mode
+- `SymlinkResolver` type in `internal/discovery/symlink.go` with two-step Resolve/MarkVisited design for loop detection
+- `IsSymlink()` standalone helper using `os.Lstat` for symlink detection
+- Thread-safe `SymlinkResolver` with `sync.RWMutex` for concurrent discovery
+- Dangling symlink detection via `filepath.EvalSymlinks` error checking
+- Reset capability for restarting discovery passes
+
+**Files created/modified:**
+
+- `go.mod` / `go.sum` - Added `bmatcuk/doublestar/v4` v4.10.0
+- `internal/discovery/filter.go` - PatternFilter with doublestar glob matching (new)
+- `internal/discovery/filter_test.go` - 14 test functions + 1 benchmark (new)
+- `internal/discovery/git_tracked.go` - GitTrackedFiles implementation (new)
+- `internal/discovery/git_tracked_test.go` - 13 subtests covering real git repos, empty repos, non-git dirs (new)
+- `internal/discovery/symlink.go` - SymlinkResolver and IsSymlink (new)
+- `internal/discovery/symlink_test.go` - 19 test functions + 4 benchmarks covering loops, dangling, chains, concurrency (new)
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (all packages)
+- `go mod tidy` - pass (no drift)
+
+---
+
+## Notes
+
+### Key Technical Decisions (from agent research)
+
+1. **koanf v2 over Viper** -- Produces 313% smaller binary, doesn't force-lowercase keys (which breaks TOML spec). Better fit for single-binary distribution.
+2. **zeebo/xxh3 over cespare/xxhash** -- PRD specifies XXH3, but cespare/xxhash implements XXH64. zeebo/xxh3 provides proper XXH3 in pure Go with SIMD optimizations.
+3. **Go stdlib regexp only** -- RE2 engine guarantees O(n) matching time for untrusted input. All Gitleaks patterns adapted without lookaheads.
+4. **malivvan/tree-sitter vs direct wazero** -- Needs evaluation. malivvan provides higher-level API but is pre-release (Jan 2025). Decision documented in T-042.
+5. **BurntSushi/toml v1.5.0** -- Latest stable. MetaData.Undecoded() enables unknown-key detection.
+6. **Bubble Tea v1.x** -- v2 still in RC as of Feb 2026. Stable v1.2+ recommended for production.
+
+### Phase Index Files
+
+Detailed phase-level documentation with Mermaid dependency graphs, implementation order, and tech stack summaries:
+- [PHASE-2-INDEX.md](PHASE-2-INDEX.md) -- Profile System
+- [PHASE-3-SECURITY-INDEX.md](PHASE-3-SECURITY-INDEX.md) -- Secret Redaction
+- [PHASE-3-COMPRESSION-INDEX.md](PHASE-3-COMPRESSION-INDEX.md) -- Tree-Sitter Compression
+- [PHASE-5-INDEX.md](PHASE-5-INDEX.md) -- Workflows
+
+
+_Last updated: 2026-02-16 (T-014)_

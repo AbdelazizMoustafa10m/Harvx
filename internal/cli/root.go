@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/harvx/harvx/internal/config"
@@ -47,15 +48,46 @@ context file optimized for large language models like Claude, ChatGPT, and other
 
 func init() {
 	flagValues = config.BindFlags(rootCmd)
+
+	// Register flag completion functions for flags with fixed valid values.
+	// These enable intelligent tab completion (e.g., --format <TAB>).
+	rootCmd.RegisterFlagCompletionFunc("format", completeFormat)
+	rootCmd.RegisterFlagCompletionFunc("target", completeTarget)
+}
+
+// completeFormat returns the valid values for the --format flag.
+func completeFormat(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{"markdown", "xml"}, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeTarget returns the valid values for the --target flag.
+func completeTarget(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{"claude", "chatgpt", "generic"}, cobra.ShellCompDirectiveNoFileComp
 }
 
 // Execute runs the root command and returns an appropriate exit code.
-// It returns pipeline.ExitSuccess (0) on success, pipeline.ExitError (1) on failure.
+// If the error is a *pipeline.HarvxError, its Code is used.
+// Generic errors return ExitError (1). Nil returns ExitSuccess (0).
 func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
-		return int(pipeline.ExitError)
+		slog.Error(err.Error())
+		return extractExitCode(err)
 	}
 	return int(pipeline.ExitSuccess)
+}
+
+// extractExitCode determines the process exit code from an error.
+// If the error is a *pipeline.HarvxError, its Code field is used.
+// Otherwise, ExitError (1) is returned for any non-nil error.
+func extractExitCode(err error) int {
+	if err == nil {
+		return int(pipeline.ExitSuccess)
+	}
+	var harvxErr *pipeline.HarvxError
+	if errors.As(err, &harvxErr) {
+		return harvxErr.Code
+	}
+	return int(pipeline.ExitError)
 }
 
 // RootCmd returns the root cobra.Command for use in testing and subcommand registration.

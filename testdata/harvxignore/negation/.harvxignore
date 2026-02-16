@@ -1,0 +1,4 @@
+# Negation pattern test
+*.log
+!important.log
+temp/

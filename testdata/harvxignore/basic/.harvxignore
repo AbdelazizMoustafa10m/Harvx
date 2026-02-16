@@ -1,0 +1,5 @@
+# Basic .harvxignore patterns for testing
+docs/internal/
+*.draft.md
+scratch/
+*.wip

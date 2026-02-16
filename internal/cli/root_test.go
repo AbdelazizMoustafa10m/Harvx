@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/harvx/harvx/internal/pipeline"
@@ -170,4 +172,89 @@ func TestRootCommandLongDescription(t *testing.T) {
 func TestGlobalFlagsReturnsValues(t *testing.T) {
 	fv := GlobalFlags()
 	require.NotNil(t, fv, "GlobalFlags() should return non-nil FlagValues")
+}
+
+func TestExtractExitCode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{
+			name: "nil error returns ExitSuccess",
+			err:  nil,
+			want: int(pipeline.ExitSuccess),
+		},
+		{
+			name: "generic error returns ExitError",
+			err:  errors.New("something went wrong"),
+			want: int(pipeline.ExitError),
+		},
+		{
+			name: "HarvxError with ExitError code",
+			err:  pipeline.NewError("fatal error", errors.New("cause")),
+			want: int(pipeline.ExitError),
+		},
+		{
+			name: "HarvxError with ExitPartial code",
+			err:  pipeline.NewPartialError("partial failure", errors.New("some files failed")),
+			want: int(pipeline.ExitPartial),
+		},
+		{
+			name: "redaction error returns ExitError",
+			err:  pipeline.NewRedactionError("secrets detected"),
+			want: int(pipeline.ExitError),
+		},
+		{
+			name: "wrapped HarvxError preserves exit code",
+			err:  fmt.Errorf("command failed: %w", pipeline.NewPartialError("partial", nil)),
+			want: int(pipeline.ExitPartial),
+		},
+		{
+			name: "deeply wrapped HarvxError preserves exit code",
+			err:  fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", pipeline.NewError("deep", nil))),
+			want: int(pipeline.ExitError),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := extractExitCode(tt.err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExtractExitCode_NilReturnsZero(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 0, extractExitCode(nil))
+}
+
+func TestExtractExitCode_GenericErrorReturnsOne(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 1, extractExitCode(errors.New("generic")))
+}
+
+func TestExtractExitCode_PartialErrorReturnsTwo(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 2, extractExitCode(pipeline.NewPartialError("partial", nil)))
+}
+
+func TestExtractExitCode_WrappedGenericErrorReturnsOne(t *testing.T) {
+	t.Parallel()
+
+	// A generic error wrapped with fmt.Errorf (no HarvxError in the chain)
+	// should still return ExitError (1).
+	wrappedGeneric := fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", errors.New("root")))
+	assert.Equal(t, 1, extractExitCode(wrappedGeneric))
+}
+
+func TestExtractExitCode_RedactionErrorReturnsOne(t *testing.T) {
+	t.Parallel()
+
+	// Explicitly verify NewRedactionError maps to exit code 1 through extractExitCode.
+	assert.Equal(t, 1, extractExitCode(pipeline.NewRedactionError("secrets found")))
 }
