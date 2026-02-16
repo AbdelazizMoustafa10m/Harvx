@@ -34,7 +34,8 @@ LOG_DIR="$PROJECT_ROOT/scripts/logs"
 PROGRESS_FILE="$PROJECT_ROOT/docs/tasks/PROGRESS.md"
 
 DEFAULT_MAX_ITERATIONS=20
-DEFAULT_MODEL=""  # empty = use codex default
+DEFAULT_MODEL="gpt-5.3-codex"
+DEFAULT_REASONING="high"  # model_reasoning_effort: minimal, low, medium, high, xhigh
 SLEEP_BETWEEN_ITERATIONS=5
 COOLDOWN_AFTER_ERROR=30
 
@@ -187,6 +188,26 @@ log() {
 }
 
 # =============================================================================
+# Visual Model Banner
+# =============================================================================
+
+print_model_banner() {
+    local model="$1"
+    local level="$2"
+    local phase="$3"
+
+    echo ""
+    echo "┌──────────────────────────────────────────────────┐"
+    echo "│            MODEL CONFIGURATION                   │"
+    echo "├──────────────────────────────────────────────────┤"
+    printf "│  Model:      %-36s│\n" "$model"
+    printf "│  Reasoning:  %-36s│\n" "$level"
+    printf "│  Phase:      %-36s│\n" "$phase"
+    echo "└──────────────────────────────────────────────────┘"
+    echo ""
+}
+
+# =============================================================================
 # Codex Execution
 # =============================================================================
 
@@ -194,9 +215,10 @@ build_codex_cmd() {
     local prompt_file="$1"
     local model="$2"
 
-    # Base command: codex exec with full-auto and ephemeral session
+    # Base command: codex exec with explicit no-approval + workspace sandbox
     local cmd="codex exec"
-    cmd+=" --full-auto"
+    cmd+=" --sandbox workspace-write"
+    cmd+=" -a never"
     cmd+=" --ephemeral"
 
     # Model override
@@ -214,14 +236,21 @@ build_codex_cmd() {
 run_codex() {
     local prompt_file="$1"
     local model="$2"
+    local reasoning="$3"
 
     local args=()
     args+=(exec)
-    args+=(--full-auto)
+    args+=(--sandbox workspace-write)
+    args+=(-a never)
     args+=(--ephemeral)
 
     if [[ -n "$model" ]]; then
         args+=(-m "$model")
+    fi
+
+    # Set reasoning effort level
+    if [[ -n "$reasoning" ]]; then
+        args+=(-c "model_reasoning_effort=\"$reasoning\"")
     fi
 
     # Read prompt from file and pass as positional argument
@@ -240,6 +269,7 @@ run_ralph_loop() {
     local max_iterations="$2"
     local dry_run="$3"
     local model="$4"
+    local reasoning="$5"
 
     local phase_name
     phase_name=$(get_phase_name "$phase_id")
@@ -260,7 +290,11 @@ run_ralph_loop() {
     if [[ -n "$model" ]]; then
         log "Model: $model"
     fi
+    log "Reasoning: $reasoning"
     log "=========================================="
+
+    # Display model configuration banner
+    print_model_banner "$model" "$reasoning" "$phase_name" | tee -a "$LOG_FILE"
 
     local iteration=0
     local tasks_completed=0
@@ -293,7 +327,8 @@ run_ralph_loop() {
             echo "$prompt"
             echo "---"
             echo ""
-            echo "Codex command: codex exec --full-auto --ephemeral${model:+ -m $model} \"<prompt>\""
+            echo "Codex command: codex exec --sandbox workspace-write -a never --ephemeral${model:+ -m $model} -c model_reasoning_effort=\"$reasoning\" \"<prompt>\""
+            print_model_banner "$model" "$reasoning" "$phase_name"
             exit 0
         fi
 
@@ -309,7 +344,7 @@ run_ralph_loop() {
 
         local output=""
         local exit_code=0
-        output=$(run_codex "$prompt_file" "$model") || exit_code=$?
+        output=$(run_codex "$prompt_file" "$model" "$reasoning") || exit_code=$?
 
         local end_time
         end_time=$(date +%s)
@@ -393,6 +428,7 @@ run_single_task() {
     local task_id="$1"
     local dry_run="$2"
     local model="$3"
+    local reasoning="$4"
 
     log "=========================================="
     log "Ralph Single Task Mode (Codex CLI)"
@@ -400,7 +436,11 @@ run_single_task() {
     if [[ -n "$model" ]]; then
         log "Model: $model"
     fi
+    log "Reasoning: $reasoning"
     log "=========================================="
+
+    # Display model configuration banner
+    print_model_banner "$model" "$reasoning" "Single Task: $task_id" | tee -a "$LOG_FILE"
 
     local task_list
     task_list=$(get_task_list_for_single "$task_id")
@@ -438,7 +478,8 @@ run_single_task() {
         echo "$prompt"
         echo "---"
         echo ""
-        echo "Codex command: codex exec --full-auto --ephemeral${model:+ -m $model} \"<prompt>\""
+        echo "Codex command: codex exec --sandbox workspace-write -a never --ephemeral${model:+ -m $model} -c model_reasoning_effort=\"$reasoning\" \"<prompt>\""
+        print_model_banner "$model" "$reasoning" "Single Task: $task_id"
         exit 0
     fi
 
@@ -447,7 +488,7 @@ run_single_task() {
     echo "$prompt" > "$prompt_file"
 
     log "Spawning Codex CLI for $task_id..."
-    run_codex "$prompt_file" "$model" | tee -a "$LOG_FILE"
+    run_codex "$prompt_file" "$model" "$reasoning" | tee -a "$LOG_FILE"
 
     rm -f "$prompt_file"
     log "Single task run complete."
@@ -457,6 +498,7 @@ run_all_phases() {
     local max_iterations="$1"
     local dry_run="$2"
     local model="$3"
+    local reasoning="$4"
 
     for phase in $ALL_PHASES; do
         local remaining
@@ -468,7 +510,7 @@ run_all_phases() {
         fi
 
         log "Starting $(get_phase_name "$phase") ($remaining tasks remaining)"
-        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model"
+        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model" "$reasoning"
 
         # Check if phase completed
         remaining=$(count_remaining_tasks "$(get_phase_range "$phase")")
@@ -511,14 +553,16 @@ Options:
   --phase <id>         Phase to run (required unless --task)
   --task <T-XXX>       Run a single specific task
   --max-iterations <n> Max loop iterations (default: 20)
-  --model <name>       Model to use (e.g., o3, o4-mini, gpt-4.1)
-  --dry-run            Print generated prompt without running
+  --model <name>       Model to use (default: gpt-5.3-codex)
+  --reasoning <level>  Reasoning effort: minimal, low, medium, high, xhigh (default: high)
+  --dry-run            Print generated prompt and model config without running
   --status             Show task completion status and exit
   -h, --help           Show this help
 
 Examples:
   ./scripts/ralph_codex.sh --phase 1                        # Run all Phase 1 tasks
   ./scripts/ralph_codex.sh --phase 1 --model o3             # Use o3 model
+  ./scripts/ralph_codex.sh --phase 1 --reasoning xhigh      # Max reasoning effort
   ./scripts/ralph_codex.sh --phase 1 --max-iterations 5     # Cap at 5 iterations
   ./scripts/ralph_codex.sh --task T-003                      # Run single task T-003
   ./scripts/ralph_codex.sh --phase 1 --dry-run               # Preview the prompt
@@ -584,6 +628,9 @@ show_status() {
 
     echo "  Total: $total_completed/$total_tasks tasks completed ($total_pct%)"
     echo ""
+    echo "  Default Model:     $DEFAULT_MODEL"
+    echo "  Default Reasoning: $DEFAULT_REASONING"
+    echo ""
 }
 
 main() {
@@ -593,6 +640,7 @@ main() {
     local task=""
     local max_iterations=$DEFAULT_MAX_ITERATIONS
     local model="$DEFAULT_MODEL"
+    local reasoning="$DEFAULT_REASONING"
     local dry_run="false"
     local show_status_flag="false"
 
@@ -612,6 +660,10 @@ main() {
                 ;;
             --model)
                 model="$2"
+                shift 2
+                ;;
+            --reasoning)
+                reasoning="$2"
                 shift 2
                 ;;
             --dry-run)
@@ -675,11 +727,11 @@ main() {
 
     # Run
     if [[ -n "$task" ]]; then
-        run_single_task "$task" "$dry_run" "$model"
+        run_single_task "$task" "$dry_run" "$model" "$reasoning"
     elif [[ "$phase" == "all" ]]; then
-        run_all_phases "$max_iterations" "$dry_run" "$model"
+        run_all_phases "$max_iterations" "$dry_run" "$model" "$reasoning"
     else
-        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model"
+        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model" "$reasoning"
     fi
 }
 

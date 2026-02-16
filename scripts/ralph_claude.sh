@@ -33,7 +33,8 @@ LOG_DIR="$PROJECT_ROOT/scripts/logs"
 PROGRESS_FILE="$PROJECT_ROOT/docs/tasks/PROGRESS.md"
 
 DEFAULT_MAX_ITERATIONS=20
-DEFAULT_MODEL=""  # empty = use claude default
+DEFAULT_MODEL="claude-opus-4-6"
+DEFAULT_EFFORT="high"  # CLAUDE_CODE_EFFORT_LEVEL: low, medium, high
 SLEEP_BETWEEN_ITERATIONS=5
 COOLDOWN_AFTER_ERROR=30
 
@@ -186,6 +187,26 @@ log() {
 }
 
 # =============================================================================
+# Visual Model Banner
+# =============================================================================
+
+print_model_banner() {
+    local model="$1"
+    local level="$2"
+    local phase="$3"
+
+    echo ""
+    echo "┌──────────────────────────────────────────────────┐"
+    echo "│            MODEL CONFIGURATION                   │"
+    echo "├──────────────────────────────────────────────────┤"
+    printf "│  Model:   %-39s│\n" "$model"
+    printf "│  Effort:  %-39s│\n" "$level"
+    printf "│  Phase:   %-39s│\n" "$phase"
+    echo "└──────────────────────────────────────────────────┘"
+    echo ""
+}
+
+# =============================================================================
 # Main Loop
 # =============================================================================
 
@@ -194,6 +215,7 @@ run_ralph_loop() {
     local max_iterations="$2"
     local dry_run="$3"
     local model="$4"
+    local effort="$5"
 
     local phase_name
     phase_name=$(get_phase_name "$phase_id")
@@ -214,7 +236,14 @@ run_ralph_loop() {
     if [[ -n "$model" ]]; then
         log "Model: $model"
     fi
+    log "Effort: $effort"
     log "=========================================="
+
+    # Display model configuration banner
+    print_model_banner "$model" "$effort" "$phase_name" | tee -a "$LOG_FILE"
+
+    # Export effort level for Claude Code
+    export CLAUDE_CODE_EFFORT_LEVEL="$effort"
 
     local iteration=0
     local tasks_completed=0
@@ -247,7 +276,8 @@ run_ralph_loop() {
             echo "$prompt"
             echo "---"
             echo ""
-            echo "Claude command: cat <prompt> | claude -p${model:+ --model $model} --allowedTools '...'"
+            echo "Claude command: CLAUDE_CODE_EFFORT_LEVEL=$effort cat <prompt> | claude -p --permission-mode dontAsk${model:+ --model $model} --allowedTools '...'"
+            print_model_banner "$model" "$effort" "$phase_name"
             exit 0
         fi
 
@@ -257,11 +287,11 @@ run_ralph_loop() {
         echo "$prompt" > "$prompt_file"
 
         # Build Claude CLI args
-        local claude_args="-p"
+        local claude_args="-p --permission-mode dontAsk"
         if [[ -n "$model" ]]; then
             claude_args+=" --model $model"
         fi
-        claude_args+=" --allowedTools 'Edit,Write,Bash(go build*),Bash(go test*),Bash(go vet*),Bash(go mod*),Bash(git add*),Bash(git commit*),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(mkdir*),Bash(ls*),Read,Glob,Grep,Task'"
+        claude_args+=" --allowedTools 'Edit,Write,Read,Glob,Grep,Task,WebSearch,WebFetch,Bash(go build*),Bash(go test*),Bash(go vet*),Bash(go mod*),Bash(go get*),Bash(go run*),Bash(go fmt*),Bash(go install*),Bash(go version*),Bash(go generate*),Bash(git add*),Bash(git commit*),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(mkdir*),Bash(ls*),Bash(make*),Bash(chmod*),Bash(curl *),Bash(wget *),Bash(golangci-lint*),Bash(./bin/*),Bash(./scripts/*)'"
 
         # Run Claude Code with the prompt
         log "Spawning Claude Code (iteration $iteration)..."
@@ -354,6 +384,7 @@ run_single_task() {
     local task_id="$1"
     local dry_run="$2"
     local model="$3"
+    local effort="$4"
 
     log "=========================================="
     log "Ralph Single Task Mode (Claude Code)"
@@ -361,7 +392,14 @@ run_single_task() {
     if [[ -n "$model" ]]; then
         log "Model: $model"
     fi
+    log "Effort: $effort"
     log "=========================================="
+
+    # Display model configuration banner
+    print_model_banner "$model" "$effort" "Single Task: $task_id" | tee -a "$LOG_FILE"
+
+    # Export effort level for Claude Code
+    export CLAUDE_CODE_EFFORT_LEVEL="$effort"
 
     local task_list
     task_list=$(get_task_list_for_single "$task_id")
@@ -399,7 +437,8 @@ run_single_task() {
         echo "$prompt"
         echo "---"
         echo ""
-        echo "Claude command: cat <prompt> | claude -p${model:+ --model $model} --allowedTools '...'"
+        echo "Claude command: CLAUDE_CODE_EFFORT_LEVEL=$effort cat <prompt> | claude -p --permission-mode dontAsk${model:+ --model $model} --allowedTools '...'"
+        print_model_banner "$model" "$effort" "Single Task: $task_id"
         exit 0
     fi
 
@@ -408,11 +447,11 @@ run_single_task() {
     echo "$prompt" > "$prompt_file"
 
     # Build Claude CLI args
-    local claude_args="-p"
+    local claude_args="-p --permission-mode dontAsk"
     if [[ -n "$model" ]]; then
         claude_args+=" --model $model"
     fi
-    claude_args+=" --allowedTools 'Edit,Write,Bash(go build*),Bash(go test*),Bash(go vet*),Bash(go mod*),Bash(git add*),Bash(git commit*),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(mkdir*),Bash(ls*),Read,Glob,Grep,Task'"
+    claude_args+=" --allowedTools 'Edit,Write,Read,Glob,Grep,Task,WebSearch,WebFetch,Bash(go build*),Bash(go test*),Bash(go vet*),Bash(go mod*),Bash(go get*),Bash(go run*),Bash(go fmt*),Bash(go install*),Bash(go version*),Bash(go generate*),Bash(git add*),Bash(git commit*),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(mkdir*),Bash(ls*),Bash(make*),Bash(chmod*),Bash(curl *),Bash(wget *),Bash(golangci-lint*),Bash(./bin/*),Bash(./scripts/*)'"
 
     log "Spawning Claude Code for $task_id..."
     eval "cat '$prompt_file' | claude $claude_args" 2>&1 | tee -a "$LOG_FILE"
@@ -425,6 +464,7 @@ run_all_phases() {
     local max_iterations="$1"
     local dry_run="$2"
     local model="$3"
+    local effort="$4"
 
     for phase in $ALL_PHASES; do
         local remaining
@@ -436,7 +476,7 @@ run_all_phases() {
         fi
 
         log "Starting $(get_phase_name "$phase") ($remaining tasks remaining)"
-        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model"
+        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model" "$effort"
 
         # Check if phase completed
         remaining=$(count_remaining_tasks "$(get_phase_range "$phase")")
@@ -479,14 +519,16 @@ Options:
   --phase <id>         Phase to run (required unless --task)
   --task <T-XXX>       Run a single specific task
   --max-iterations <n> Max loop iterations (default: 20)
-  --model <name>       Model to use (e.g., claude-sonnet-4-5-20250929, claude-opus-4-6)
-  --dry-run            Print generated prompt without running
+  --model <name>       Model to use (default: claude-opus-4-6)
+  --effort <level>     Thinking effort: low, medium, high (default: high)
+  --dry-run            Print generated prompt and model config without running
   --status             Show task completion status and exit
   -h, --help           Show this help
 
 Examples:
   ./scripts/ralph_claude.sh --phase 1                        # Run all Phase 1 tasks
   ./scripts/ralph_claude.sh --phase 1 --model claude-sonnet-4-5-20250929  # Use Sonnet
+  ./scripts/ralph_claude.sh --phase 1 --effort medium        # Lower thinking effort
   ./scripts/ralph_claude.sh --phase 1 --max-iterations 5     # Cap at 5 iterations
   ./scripts/ralph_claude.sh --task T-003                      # Run single task T-003
   ./scripts/ralph_claude.sh --phase 1 --dry-run               # Preview the prompt
@@ -552,6 +594,9 @@ show_status() {
 
     echo "  Total: $total_completed/$total_tasks tasks completed ($total_pct%)"
     echo ""
+    echo "  Default Model:  $DEFAULT_MODEL"
+    echo "  Default Effort: $DEFAULT_EFFORT"
+    echo ""
 }
 
 main() {
@@ -561,6 +606,7 @@ main() {
     local task=""
     local max_iterations=$DEFAULT_MAX_ITERATIONS
     local model="$DEFAULT_MODEL"
+    local effort="$DEFAULT_EFFORT"
     local dry_run="false"
     local show_status_flag="false"
 
@@ -580,6 +626,10 @@ main() {
                 ;;
             --model)
                 model="$2"
+                shift 2
+                ;;
+            --effort)
+                effort="$2"
                 shift 2
                 ;;
             --dry-run)
@@ -639,11 +689,11 @@ main() {
 
     # Run
     if [[ -n "$task" ]]; then
-        run_single_task "$task" "$dry_run" "$model"
+        run_single_task "$task" "$dry_run" "$model" "$effort"
     elif [[ "$phase" == "all" ]]; then
-        run_all_phases "$max_iterations" "$dry_run" "$model"
+        run_all_phases "$max_iterations" "$dry_run" "$model" "$effort"
     else
-        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model"
+        run_ralph_loop "$phase" "$max_iterations" "$dry_run" "$model" "$effort"
     fi
 }
 
