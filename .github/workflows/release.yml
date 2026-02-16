@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    name: GoReleaser Snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && hashFiles('go.mod') != '' && hashFiles('.goreleaser.yaml') != '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Validate release snapshot
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: build --snapshot --clean
+
+  snapshot-not-ready:
+    name: Release Snapshot (Not Ready)
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && (hashFiles('go.mod') == '' || hashFiles('.goreleaser.yaml') == '') }}
+    steps:
+      - name: Explain skip reason
+        run: |
+          {
+            echo "## Release Snapshot"
+            echo "Skipped because release prerequisites are not present yet."
+            echo "- Required: \`go.mod\`"
+            echo "- Required: \`.goreleaser.yaml\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate release prerequisites
+        run: |
+          set -euo pipefail
+          [[ -f go.mod ]] || { echo "::error::Missing go.mod"; exit 1; }
+          [[ -f .goreleaser.yaml ]] || { echo "::error::Missing .goreleaser.yaml"; exit 1; }
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Locate checksum artifact
+        id: checksum
+        run: |
+          set -euo pipefail
+          checksum_file="$(find dist -maxdepth 1 -type f -name '*checksums*' | head -n 1)"
+          echo "path=${checksum_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest checksum provenance
+        if: steps.checksum.outputs.path != ''
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ steps.checksum.outputs.path }}
