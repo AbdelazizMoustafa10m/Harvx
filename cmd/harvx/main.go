@@ -1,17 +1,12 @@
 // Package main is the entry point for the harvx CLI tool.
 package main
 
-import "fmt"
+import (
+	"os"
 
-// Build-time metadata injected via ldflags.
-// These will move to internal/buildinfo in T-006.
-var (
-	version   = "dev"
-	commit    = "none"
-	date      = "unknown"
-	goVersion = "unknown"
+	"github.com/harvx/harvx/internal/cli"
 )
 
 func main() {
-	fmt.Println("harvx")
+	os.Exit(cli.Execute())
 }

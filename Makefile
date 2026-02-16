@@ -15,15 +15,13 @@ DIST_DIR   := dist
 CMD_DIR    := ./cmd/harvx
 
 # ─── Linker Flags ────────────────────────────────────────────────────────────
-# Target package for ldflags injection. Will change to
-# github.com/harvx/harvx/internal/buildinfo once T-006 is done.
-LDFLAGS_PKG := main
+LDFLAGS_PKG := github.com/harvx/harvx/internal/buildinfo
 
 LDFLAGS := -s -w \
-	-X '$(LDFLAGS_PKG).version=$(VERSION)' \
-	-X '$(LDFLAGS_PKG).commit=$(COMMIT)' \
-	-X '$(LDFLAGS_PKG).date=$(DATE)' \
-	-X '$(LDFLAGS_PKG).goVersion=$(GO_VERSION)'
+	-X '$(LDFLAGS_PKG).Version=$(VERSION)' \
+	-X '$(LDFLAGS_PKG).Commit=$(COMMIT)' \
+	-X '$(LDFLAGS_PKG).Date=$(DATE)' \
+	-X '$(LDFLAGS_PKG).GoVersion=$(GO_VERSION)'
 
 # ─── Phony Targets ───────────────────────────────────────────────────────────
 .PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot help

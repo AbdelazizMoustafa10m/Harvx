@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 2 |
+| Completed | 6 |
 | In Progress | 0 |
-| Not Started | 93 |
+| Not Started | 89 |
 
 ---
 
@@ -37,10 +37,10 @@
 |------|------|----------|--------|--------|
 | T-001 | Go Project Initialization & Directory Structure | Must Have | Small (2-4hrs) | Completed |
 | T-002 | Makefile Setup | Must Have | Small (2-4hrs) | Completed |
-| T-003 | Central Data Types (FileDescriptor & Pipeline DTOs) | Must Have | Small (2-4hrs) | Not Started |
-| T-004 | Structured Logging with slog | Must Have | Small (2-4hrs) | Not Started |
-| T-005 | Cobra CLI Framework & Root Command | Must Have | Medium (6-8hrs) | Not Started |
-| T-006 | Version Command & Build Info | Must Have | Small (2-4hrs) | Not Started |
+| T-003 | Central Data Types (FileDescriptor & Pipeline DTOs) | Must Have | Small (2-4hrs) | Completed |
+| T-004 | Structured Logging with slog | Must Have | Small (2-4hrs) | Completed |
+| T-005 | Cobra CLI Framework & Root Command | Must Have | Medium (6-8hrs) | Completed |
+| T-006 | Version Command & Build Info | Must Have | Small (2-4hrs) | Completed |
 | T-007 | Global Flags Implementation | Must Have | Medium (6-8hrs) | Not Started |
 | T-008 | Generate Subcommand (harvx generate / harvx gen) | Must Have | Medium (6-10hrs) | Not Started |
 | T-009 | Shell Completions (harvx completion) | Should Have | Small (2-4hrs) | Not Started |
@@ -348,6 +348,72 @@ _None currently_
 
 ---
 
+### T-003: Central Data Types (FileDescriptor & Pipeline DTOs)
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `FileDescriptor` struct with all 13 fields: Path, AbsPath, Size, Tier, TokenCount, ContentHash, Content, IsCompressed, Redactions, Language, IsSymlink, IsBinary, Error
+- `ExitCode` type with constants: ExitSuccess (0), ExitError (1), ExitPartial (2)
+- `OutputFormat` string-based enum: FormatMarkdown ("markdown"), FormatXML ("xml")
+- `LLMTarget` string-based enum: TargetClaude ("claude"), TargetChatGPT ("chatgpt"), TargetGeneric ("generic")
+- `DiscoveryResult` struct: Files slice, TotalFound, TotalSkipped, SkipReasons map
+- `DefaultTier` constant (2) per PRD Section 5.3
+- `FileDescriptor.IsValid()` helper method
+- All types have JSON struct tags; Error field uses `json:"-"`
+- Comprehensive GoDoc comments on all exported types, fields, and methods
+- Zero external dependencies (stdlib only)
+
+**Files created/modified:**
+
+- `internal/pipeline/types.go` - Central data types (new)
+- `internal/pipeline/types_test.go` - 13 test functions covering constants, zero values, JSON round-trips, validation (new)
+- `internal/pipeline/.gitkeep` - To be deleted (superseded by real files)
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./internal/pipeline/...` - pass (13 tests)
+
+---
+
+### T-004: Structured Logging with slog
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `SetupLogging(level, format)` function configures the global slog default logger with text or JSON handler, directing all output to os.Stderr
+- `SetupLoggingWithWriter(level, format, writer)` variant for testing with custom writer
+- `ResolveLogLevel(verbose, quiet)` resolves log level with priority: HARVX_DEBUG=1 > --verbose > --quiet > default(info)
+- `ResolveLogFormat()` reads HARVX_LOG_FORMAT env var, returns "json" or "text"
+- `NewLogger(component)` returns child logger with "component" attribute for subsystem identification
+- JSON format via `slog.NewJSONHandler`, text format via `slog.NewTextHandler`
+- Case-insensitive format matching (e.g., "JSON", "Json", "json" all work)
+- All functions are idempotent and safe to call multiple times
+- Comprehensive doc comments on all exported functions
+- Zero imports from other internal packages (no circular dependencies)
+- Added `stretchr/testify v1.9+` as first external dependency in go.mod
+
+**Files created/modified:**
+
+- `internal/config/logging.go` - Logging setup functions (new)
+- `internal/config/logging_test.go` - 11 test functions covering level resolution, format selection, JSON/text output, stderr routing, idempotency, component loggers, level inheritance (new)
+- `go.mod` - Added stretchr/testify dependency
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./internal/config/...` - pass (11 test functions)
+- `go mod tidy` - pass
+
+---
+
 ## Notes
 
 ### Key Technical Decisions (from agent research)
@@ -367,6 +433,73 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
 - [PHASE-3-COMPRESSION-INDEX.md](PHASE-3-COMPRESSION-INDEX.md) -- Tree-Sitter Compression
 - [PHASE-5-INDEX.md](PHASE-5-INDEX.md) -- Workflows
 
+### T-005: Cobra CLI Framework & Root Command
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- Cobra CLI framework integrated with root `harvx` command
+- Root command with `Use: "harvx"`, `Short: "Harvest your context."`, and multi-line Long description
+- `SilenceUsage: true` and `SilenceErrors: true` for clean error handling
+- `PersistentPreRunE` initializes logging via T-004's `config.ResolveLogLevel` / `config.ResolveLogFormat` / `config.SetupLogging`
+- `--verbose` / `-v` and `--quiet` / `-q` persistent flags registered on root command
+- `Execute()` function returns `pipeline.ExitSuccess` (0) or `pipeline.ExitError` (1) exit codes from T-003
+- `RootCmd()` accessor for testing and subcommand registration
+- `cmd/harvx/main.go` simplified to `os.Exit(cli.Execute())`
+- 9 unit tests covering command properties, flags, help output, unknown flag handling
+
+**Files created/modified:**
+
+- `internal/cli/root.go` - Root command definition with Cobra (new)
+- `internal/cli/root_test.go` - 9 unit tests (new)
+- `cmd/harvx/main.go` - Rewired to use `cli.Execute()`
+- `go.mod` / `go.sum` - Added `spf13/cobra v1.10.2`, `spf13/pflag v1.0.9`, `inconshreveable/mousetrap v1.1.0`
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (9 cli tests + existing tests)
+- `go mod tidy` - pass (no drift)
+
 ---
 
-_Last updated: 2026-02-16 (T-002)_
+### T-006: Version Command & Build Info
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `internal/buildinfo` package with exported `Version`, `Commit`, `Date`, `GoVersion` variables (defaults: "dev"/"unknown") and `OS()`/`Arch()` helpers using `runtime.GOOS`/`runtime.GOARCH`
+- `harvx version` subcommand registered on root command via `init()`
+- Human-readable output format: version header + indented commit, built, go version, os/arch
+- `harvx version --json` outputs pretty-printed JSON with all 6 keys (version, commit, date, goVersion, os, arch)
+- Makefile ldflags updated from `main` package to `internal/buildinfo` package, variable names changed from lowercase to exported (e.g., `Version` not `version`)
+- `cmd/harvx/main.go` cleaned up -- removed old ldflags variables, now just calls `cli.Execute()`
+- `cmd/harvx/main_test.go` updated to reference `buildinfo` package instead of removed `main` vars
+- 9 unit tests covering: subcommand registration, properties, --json flag, human output format, JSON output format/keys, OS/arch in output, default values, versionInfo struct round-trip
+
+**Files created/modified:**
+
+- `internal/buildinfo/buildinfo.go` - Build-time variables and OS/Arch helpers (new)
+- `internal/cli/version.go` - Version subcommand with human + JSON output (new)
+- `internal/cli/version_test.go` - 9 unit tests (new)
+- `Makefile` - Updated LDFLAGS_PKG to `internal/buildinfo`, capitalized variable names
+- `cmd/harvx/main.go` - Removed old ldflags variables
+- `cmd/harvx/main_test.go` - Updated to use `buildinfo` package
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (all packages)
+- `go mod tidy` - pass (no drift)
+- `make build && bin/harvx version` - shows injected version info
+- `bin/harvx version --json` - outputs valid JSON with all expected keys
+
+---
+
+_Last updated: 2026-02-16 (T-006)_
