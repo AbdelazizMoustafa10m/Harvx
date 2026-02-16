@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 7 |
+| Completed | 8 |
 | In Progress | 0 |
-| Not Started | 88 |
+| Not Started | 87 |
 
 ---
 
@@ -42,7 +42,7 @@
 | T-005 | Cobra CLI Framework & Root Command | Must Have | Medium (6-8hrs) | Completed |
 | T-006 | Version Command & Build Info | Must Have | Small (2-4hrs) | Completed |
 | T-007 | Global Flags Implementation | Must Have | Medium (6-8hrs) | Completed |
-| T-008 | Generate Subcommand (harvx generate / harvx gen) | Must Have | Medium (6-10hrs) | Not Started |
+| T-008 | Generate Subcommand (harvx generate / harvx gen) | Must Have | Medium (6-10hrs) | Completed |
 | T-009 | Shell Completions (harvx completion) | Should Have | Small (2-4hrs) | Not Started |
 | T-010 | Exit Code Handling | Must Have | Small (2-4hrs) | Not Started |
 | T-011 | .gitignore Parsing & Matching | Must Have | Medium (6-10hrs) | Not Started |
@@ -540,4 +540,36 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
 
 ---
 
-_Last updated: 2026-02-16 (T-007)_
+### T-008: Generate Subcommand (harvx generate / harvx gen)
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `harvx generate` subcommand registered with alias `gen`
+- Running `harvx` (no subcommand) delegates to the generate logic via `rootCmd.RunE`
+- `--preview` flag on generate command (stub for now)
+- `internal/pipeline/pipeline.go` with `Run(ctx, cfg)` stub that logs configuration at info/debug levels
+- `context.Context` threaded from `cmd.Context()` into the pipeline for cancellation support
+- Generate command inherits all global flags from T-007
+- `harvx generate --help` and `harvx help generate` show descriptive help text
+- 11 unit tests covering: command registration, alias, properties, --preview flag, global flag inheritance, help output, alias resolution, pipeline invocation, root delegation, and context cancellation
+
+**Files created/modified:**
+
+- `internal/pipeline/pipeline.go` - Pipeline Run stub (new)
+- `internal/cli/generate.go` - Generate subcommand definition (new)
+- `internal/cli/generate_test.go` - 11 unit tests (new)
+- `internal/cli/root.go` - Added RunE to delegate to generate when no subcommand is given
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (all packages)
+- `go mod tidy` - pass (no drift)
+
+---
+
+_Last updated: 2026-02-16 (T-008)_

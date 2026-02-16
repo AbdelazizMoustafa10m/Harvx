@@ -39,6 +39,10 @@ context file optimized for large language models like Claude, ChatGPT, and other
 		slog.Debug("logging initialized", "level", level, "format", format)
 		return nil
 	},
+	// When no subcommand is given, delegate to the generate command.
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runGenerate(cmd, args)
+	},
 }
 
 func init() {
