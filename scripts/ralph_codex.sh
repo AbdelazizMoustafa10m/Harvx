@@ -84,46 +84,98 @@ get_phase_name() {
 }
 
 # =============================================================================
-# Task List Generation
+# Task Selection
 # =============================================================================
 
-get_task_list_for_range() {
+is_task_completed() {
+    local task_id="$1"
+    grep -q "${task_id}.*Completed" "$PROGRESS_FILE" 2>/dev/null
+}
+
+get_task_file() {
+    local task_id="$1"
+    find "$PROJECT_ROOT/docs/tasks" -name "${task_id}-*.md" -type f 2>/dev/null | head -1
+}
+
+get_task_name() {
+    local task_id="$1"
+    local task_file
+    task_file=$(get_task_file "$task_id")
+    if [[ -z "$task_file" ]]; then
+        return 0
+    fi
+    head -1 "$task_file" | sed 's/^# //' | sed "s/^${task_id}: //"
+}
+
+get_missing_dependencies() {
+    local task_id="$1"
+    local task_file
+    task_file=$(get_task_file "$task_id")
+    if [[ -z "$task_file" ]]; then
+        return 0
+    fi
+
+    local dep_line
+    dep_line=$(grep -m1 '^\*\*Dependencies:\*\*' "$task_file" 2>/dev/null || true)
+    if [[ -z "$dep_line" ]]; then
+        return 0
+    fi
+
+    local missing=()
+    while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        if ! is_task_completed "$dep"; then
+            missing+=("$dep")
+        fi
+    done < <(echo "$dep_line" | grep -oE 'T-[0-9]{3}' || true)
+
+    echo "${missing[*]-}"
+}
+
+select_next_task() {
     local range="$1"
     local start="${range%%:*}"
     local end="${range##*:}"
+    local start_num=$((10#${start#T-}))
+    local end_num=$((10#${end#T-}))
 
-    # Extract numeric parts
-    local start_num="${start#T-}"
-    local end_num="${end#T-}"
+    local first_blocked_task=""
+    local first_blocked_missing=""
 
-    # Remove leading zeros for arithmetic
-    start_num=$((10#$start_num))
-    end_num=$((10#$end_num))
-
-    local task_list=""
     for ((i = start_num; i <= end_num; i++)); do
-        local task_id=$(printf "T-%03d" "$i")
-        # Find the task file
-        local task_file=$(find "$PROJECT_ROOT/docs/tasks" -name "${task_id}-*.md" -type f 2>/dev/null | head -1)
-        if [[ -n "$task_file" ]]; then
-            local task_name=$(head -1 "$task_file" | sed 's/^# //' | sed "s/^${task_id}: //")
-            # Check status in PROGRESS.md
-            local status="Not Started"
-            if grep -q "${task_id}.*Completed" "$PROGRESS_FILE" 2>/dev/null; then
-                status="Completed"
-            fi
-            task_list+="- [ ] ${task_id}: ${task_name} [${status}]"$'\n'
+        local task_id
+        task_id=$(printf "T-%03d" "$i")
+
+        if is_task_completed "$task_id"; then
+            continue
+        fi
+
+        local missing
+        missing=$(get_missing_dependencies "$task_id")
+        if [[ -z "$missing" ]]; then
+            echo "$task_id"
+            return 0
+        fi
+
+        if [[ -z "$first_blocked_task" ]]; then
+            first_blocked_task="$task_id"
+            first_blocked_missing="$missing"
         fi
     done
-    echo "$task_list"
+
+    if [[ -n "$first_blocked_task" ]]; then
+        echo "BLOCKED:${first_blocked_task}:${first_blocked_missing}"
+    fi
 }
 
 get_task_list_for_single() {
     local task_id="$1"
-    local task_file=$(find "$PROJECT_ROOT/docs/tasks" -name "${task_id}-*.md" -type f 2>/dev/null | head -1)
+    local task_file
+    task_file=$(get_task_file "$task_id")
     if [[ -n "$task_file" ]]; then
-        local task_name=$(head -1 "$task_file" | sed 's/^# //' | sed "s/^${task_id}: //")
-        echo "- [ ] ${task_id}: ${task_name}"
+        local task_name
+        task_name=$(get_task_name "$task_id")
+        echo "- [ ] ${task_id}: ${task_name} [Not Started]"
     fi
 }
 
@@ -136,6 +188,7 @@ generate_prompt() {
     local phase_name="$2"
     local task_range="$3"
     local task_list="$4"
+    local task_id="$5"
 
     local prompt
     prompt=$(cat "$PROMPT_TEMPLATE")
@@ -145,6 +198,7 @@ generate_prompt() {
     prompt="${prompt//\{\{TASK_RANGE\}\}/$task_range}"
     prompt="${prompt//\{\{PHASE_ID\}\}/$phase_id}"
     prompt="${prompt//\{\{TASK_LIST\}\}/$task_list}"
+    prompt="${prompt//\{\{TASK_ID\}\}/$task_id}"
 
     echo "$prompt"
 }
@@ -207,32 +261,6 @@ print_model_banner() {
     echo ""
 }
 
-# =============================================================================
-# Codex Execution
-# =============================================================================
-
-build_codex_cmd() {
-    local prompt_file="$1"
-    local model="$2"
-
-    # Base command: codex exec with explicit no-approval + workspace sandbox
-    local cmd="codex exec"
-    cmd+=" --sandbox workspace-write"
-    cmd+=" -a never"
-    cmd+=" --ephemeral"
-
-    # Model override
-    if [[ -n "$model" ]]; then
-        cmd+=" -m $model"
-    fi
-
-    # The prompt is passed as a positional argument via command substitution
-    # codex exec doesn't support stdin piping natively
-    cmd+=" \"\$(cat '$prompt_file')\""
-
-    echo "$cmd"
-}
-
 run_codex() {
     local prompt_file="$1"
     local model="$2"
@@ -253,7 +281,7 @@ run_codex() {
         args+=(-c "model_reasoning_effort=\"$reasoning\"")
     fi
 
-    # Read prompt from file and pass as positional argument
+    # Read prompt from file and pass as a positional argument.
     local prompt_content
     prompt_content=$(cat "$prompt_file")
 
@@ -313,13 +341,35 @@ run_ralph_loop() {
             break
         fi
 
-        # Generate fresh task list each iteration
-        local task_list
-        task_list=$(get_task_list_for_range "$task_range")
+        # Select the next unblocked task in this phase.
+        local selection
+        selection=$(select_next_task "$task_range")
+        if [[ -z "$selection" ]]; then
+            log "TASK_BLOCKED: No eligible tasks found in $task_range"
+            break
+        fi
 
-        # Generate prompt
+        if [[ "$selection" == BLOCKED:* ]]; then
+            local blocked_task="${selection#BLOCKED:}"
+            blocked_task="${blocked_task%%:*}"
+            local missing_deps="${selection#BLOCKED:${blocked_task}:}"
+            log "TASK_BLOCKED: ${blocked_task} requires ${missing_deps}"
+            break
+        fi
+
+        local selected_task="$selection"
+        local selected_range="${selected_task}:${selected_task}"
+        local task_list
+        task_list=$(get_task_list_for_single "$selected_task")
+        if [[ -z "$task_list" ]]; then
+            log "RALPH_ERROR: Could not resolve spec file for $selected_task"
+            exit 1
+        fi
+        log "Selected task for iteration: $selected_task"
+
+        # Generate prompt scoped to exactly one task.
         local prompt
-        prompt=$(generate_prompt "$phase_id" "$phase_name" "$task_range" "$task_list")
+        prompt=$(generate_prompt "$phase_id" "$phase_name" "$selected_range" "$task_list" "$selected_task")
 
         if [[ "$dry_run" == "true" ]]; then
             log "DRY RUN -- Generated prompt:"
@@ -470,7 +520,7 @@ run_single_task() {
     local task_range="${task_id}:${task_id}"
 
     local prompt
-    prompt=$(generate_prompt "$phase_id" "$phase_name" "$task_range" "$task_list")
+    prompt=$(generate_prompt "$phase_id" "$phase_name" "$task_range" "$task_list" "$task_id")
 
     if [[ "$dry_run" == "true" ]]; then
         log "DRY RUN -- Generated prompt:"

@@ -4,34 +4,29 @@ You are Claude Code working on **Harvx**, a Go CLI tool that packages codebases 
 
 ## Your Mission
 
-Pick the next uncompleted task from the specified phase, implement it, verify it, update progress, and commit.
+Implement the assigned task, verify it, update progress, and commit.
 
 ## Phase Scope
 
 **Phase:** {{PHASE_NAME}}
+**Assigned Task:** {{TASK_ID}}
 **Task Range:** {{TASK_RANGE}}
-**Tasks in scope:**
+**Task in scope:**
 
 {{TASK_LIST}}
 
 ## Instructions
 
-### Step 1: Find Next Task
+### Step 1: Read State + Task Specification
 
 1. Read `docs/tasks/PROGRESS.md`
-2. Find the next task in the range {{TASK_RANGE}} that is "Not Started"
-3. Skip tasks whose dependencies are not yet completed
-4. If ALL tasks in this phase are completed, output exactly: `PHASE_COMPLETE`
+2. Read the task spec file for `{{TASK_ID}}`: `docs/tasks/{{TASK_ID}}-*.md`
+3. Understand acceptance criteria, dependencies, technical notes, files to create
+4. If the task references PRD sections, read `docs/prd/PRD-Harvx.md` for context
 
-### Step 2: Read Task Specification
+### Step 2: Implement
 
-1. Read the task spec file: `docs/tasks/T-XXX-*.md` (glob to find it)
-2. Understand acceptance criteria, dependencies, technical notes, files to create
-3. If the task references PRD sections, read `docs/prd/PRD-Harvx.md` for context
-
-### Step 3: Implement
-
-Use `/implement-task T-XXX` to orchestrate the implementation.
+Use `/implement-task {{TASK_ID}}` to orchestrate the implementation.
 
 This will:
 1. Spawn a Go engineer subagent for implementation
@@ -44,7 +39,7 @@ If `/implement-task` is not available, implement directly:
 3. Write tests alongside implementation
 4. Follow Go conventions from CLAUDE.md
 
-### Step 4: Verify
+### Step 3: Verify
 
 Run ALL of these -- every single one must pass:
 
@@ -57,7 +52,7 @@ go mod tidy              # Module hygiene
 
 If any check fails, fix the issue and re-verify. Do NOT proceed with a failing build.
 
-### Step 5: Update Progress
+### Step 4: Update Progress
 
 Update `docs/tasks/PROGRESS.md`:
 
@@ -70,34 +65,42 @@ Update `docs/tasks/PROGRESS.md`:
    - Files created/modified
    - Verification status
 
-### Step 6: Git Commit
+### Step 5: Git Commit
 
-Stage and commit the changes:
+Stage and commit the changes.
+
+This is critical: do not exit after updating code/`PROGRESS.md` unless a commit was created for `{{TASK_ID}}`.
 
 ```bash
 git add <specific-files>
-git commit -m "feat(<scope>): implement T-XXX <task-name>
+git commit -m "feat(<scope>): implement {{TASK_ID}} <task-name>
 
 - <key change 1>
 - <key change 2>
 
-Task: T-XXX
+Task: {{TASK_ID}}
 Phase: {{PHASE_ID}}"
 ```
 
 Use conventional commit format. Scope should match the primary package (e.g., `discovery`, `cli`, `config`).
 
-### Step 7: Exit
+### Step 6: Exit
 
-After completing ONE task, exit cleanly. The loop will restart you with fresh context for the next task.
+Before exiting, all of these must be true:
+1. `docs/tasks/PROGRESS.md` was updated for `{{TASK_ID}}`
+2. A commit was created that includes both task implementation changes and `PROGRESS.md`
+3. `git status --porcelain` is empty (clean working tree)
+
+After all checks pass, exit cleanly. The loop will restart with fresh context for the next task.
 
 Do NOT try to implement multiple tasks in one iteration.
 
 ## Completion Signals
 
-- If you completed a task successfully: just exit normally after committing
-- If ALL tasks in this phase are done: output `PHASE_COMPLETE` and exit
+- If you completed a task successfully: exit only after a successful commit and clean working tree
+- If the assigned task is already completed, output `PHASE_COMPLETE` and exit
 - If a task is blocked by unfinished dependencies: output `TASK_BLOCKED: T-XXX requires T-YYY` and exit
+- If commit fails or working tree is not clean: output `RALPH_ERROR: commit missing for {{TASK_ID}}` and exit
 - If you encounter an unrecoverable error: output `RALPH_ERROR: <description>` and exit
 
 ## Rules
@@ -106,6 +109,7 @@ Do NOT try to implement multiple tasks in one iteration.
 2. Every task must have passing tests before committing.
 3. Never commit with failing `go build`, `go vet`, or `go test`.
 4. Always update PROGRESS.md before committing.
-5. Use structured git commits with task references.
-6. Read CLAUDE.md for project conventions.
-7. When in doubt, read the PRD at `docs/prd/PRD-Harvx.md`.
+5. A task is not complete until changes are committed.
+6. Use structured git commits with task references.
+7. Read CLAUDE.md for project conventions.
+8. When in doubt, read the PRD at `docs/prd/PRD-Harvx.md`.
