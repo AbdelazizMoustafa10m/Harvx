@@ -1,6 +1,6 @@
 # Harvx Task Index
 
-> **Total Tasks:** 95 | **Must Have:** 76 | **Should Have:** 16 | **Nice to Have:** 3
+> **Total Tasks:** 95 across 10 phases | **Must Have:** 76 | **Should Have:** 16 | **Nice to Have:** 3
 >
 > **Estimated Total Effort:** ~650-950 hours (~14 weeks at full pace)
 
@@ -11,15 +11,15 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 ## Quick Navigation
 
 - [Phase 1: Foundation](#phase-1-foundation-t-001--t-015)
-- [Phase 2: Intelligence -- Profiles](#phase-2-intelligence--profiles-t-016--t-025)
-- [Phase 2: Intelligence -- Relevance & Tokens](#phase-2-intelligence--relevance--tokens-t-026--t-033)
-- [Phase 3: Security](#phase-3-security-t-034--t-041)
-- [Phase 3: Compression](#phase-3-compression-t-042--t-050)
-- [Phase 4: Output & Rendering](#phase-4-output--rendering-t-051--t-058)
-- [Phase 4: State & Diff](#phase-4-state--diff-t-059--t-065)
-- [Phase 5: Workflows](#phase-5-workflows-t-066--t-078)
-- [Phase 5: Interactive TUI](#phase-5-interactive-tui-t-079--t-087)
-- [Phase 6: Polish & Distribution](#phase-6-polish--distribution-t-088--t-094)
+- [Phase 2: Profiles](#phase-2-profiles-t-016--t-025)
+- [Phase 3: Relevance & Tokens](#phase-3-relevance--tokens-t-026--t-033)
+- [Phase 4: Security](#phase-4-security-t-034--t-041)
+- [Phase 5: Compression](#phase-5-compression-t-042--t-050)
+- [Phase 6: Output & Rendering](#phase-6-output--rendering-t-051--t-058)
+- [Phase 7: State & Diff](#phase-7-state--diff-t-059--t-065)
+- [Phase 8: Workflows](#phase-8-workflows-t-066--t-078)
+- [Phase 9: Interactive TUI](#phase-9-interactive-tui-t-079--t-087)
+- [Phase 10: Polish & Distribution](#phase-10-polish--distribution-t-088--t-095)
 
 ---
 
@@ -49,7 +49,7 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 
 ---
 
-## Phase 2: Intelligence -- Profiles (T-016 -- T-025)
+## Phase 2: Profiles (T-016 -- T-025)
 
 > TOML configuration, profile inheritance, framework templates
 
@@ -70,7 +70,7 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 
 ---
 
-## Phase 2: Intelligence -- Relevance & Tokens (T-026 -- T-033)
+## Phase 3: Relevance & Tokens (T-026 -- T-033)
 
 > Priority-based file sorting, token counting, budget enforcement
 
@@ -87,7 +87,7 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 
 ---
 
-## Phase 3: Security (T-034 -- T-041)
+## Phase 4: Security (T-034 -- T-041)
 
 > Secret detection, redaction pipeline, regression testing
 
@@ -102,11 +102,11 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 | [T-040](T-040-cli-redaction-flags.md) | CLI Redaction Flags and Profile Configuration | Must Have | Medium (6-10hrs) | T-037, T-039 |
 | [T-041](T-041-regression-test-corpus.md) | Secret Detection Regression Test Corpus & Fuzz Testing | Must Have | Medium (8-12hrs) | T-040 |
 
-**Phase index:** [PHASE-3-SECURITY-INDEX.md](PHASE-3-SECURITY-INDEX.md)
+**Phase index:** [PHASE-4-INDEX.md](PHASE-4-INDEX.md)
 
 ---
 
-## Phase 3: Compression (T-042 -- T-050)
+## Phase 5: Compression (T-042 -- T-050)
 
 > Tree-sitter WASM code compression via wazero
 
@@ -122,11 +122,11 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 | [T-049](T-049-compression-orchestrator.md) | Compression Orchestrator and Pipeline Integration | Must Have | Medium (10-14hrs) | T-044, T-045, T-046, T-048 |
 | [T-050](T-050-regex-fallback-compression-tests.md) | Regex Heuristic Fallback and E2E Compression Tests | Must Have | Medium (10-14hrs) | T-049 |
 
-**Phase index:** [PHASE-3-COMPRESSION-INDEX.md](PHASE-3-COMPRESSION-INDEX.md)
+**Phase index:** [PHASE-5-INDEX.md](PHASE-5-INDEX.md)
 
 ---
 
-## Phase 4: Output & Rendering (T-051 -- T-058)
+## Phase 6: Output & Rendering (T-051 -- T-058)
 
 > Markdown/XML output, directory tree, content hashing, splitting
 
@@ -143,7 +143,7 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 
 ---
 
-## Phase 4: State & Diff (T-059 -- T-065)
+## Phase 7: State & Diff (T-059 -- T-065)
 
 > State caching, differential output, git-aware diffing
 
@@ -159,7 +159,7 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 
 ---
 
-## Phase 5: Workflows (T-066 -- T-078)
+## Phase 8: Workflows (T-066 -- T-078)
 
 > Pipeline library, review workflows, session bootstrap, workspace
 
@@ -179,11 +179,11 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 | [T-077](T-077-mcp-server.md) | MCP Server v1.1 (`harvx mcp serve`) | Nice to Have | Large (16-24hrs) | T-066, T-070, T-072 |
 | [T-078](T-078-workflow-integration-tests.md) | Workflow Integration Tests (E2E) | Must Have | Medium (10-14hrs) | T-070, T-071, T-072, T-073 |
 
-**Phase index:** [PHASE-5-INDEX.md](PHASE-5-INDEX.md)
+**Phase index:** [PHASE-8-INDEX.md](PHASE-8-INDEX.md)
 
 ---
 
-## Phase 5: Interactive TUI (T-079 -- T-087)
+## Phase 9: Interactive TUI (T-079 -- T-087)
 
 > Bubble Tea terminal UI with file tree, live token counting
 
@@ -201,7 +201,7 @@ This index organizes all implementation tasks for Harvx -- a Go CLI tool that pa
 
 ---
 
-## Phase 6: Polish & Distribution (T-088 -- T-094)
+## Phase 10: Polish & Distribution (T-088 -- T-095)
 
 > Cross-platform builds, testing infrastructure, release automation
 
@@ -275,26 +275,34 @@ Phase 1: Foundation (Weeks 1-3)
   T-007 -> T-008
   T-011 -> T-012 -> T-014 -> T-015
 
-Phase 2: Intelligence (Weeks 4-6)
-  Profiles: T-016 -> T-017 -> T-019 -> T-020 -> T-022 -> T-025
+Phase 2: Profiles (Week 4)
+  T-016 -> T-017 -> T-019 -> T-020 -> T-022 -> T-025
+
+Phase 3: Relevance & Tokens (Weeks 5-6)
   Relevance: T-026 -> T-027 -> T-028
   Tokens: T-029 -> T-030 -> T-031
 
-Phase 3: Security & Compression (Weeks 7-9)
-  Security: T-034 -> T-035 -> T-037 -> T-040 -> T-041
-  Compression: T-042 + T-043 -> T-044/T-045/T-046 -> T-049 -> T-050
+Phase 4: Security (Weeks 7-8)
+  T-034 -> T-035 -> T-037 -> T-040 -> T-041
 
-Phase 4: Output & Diff (Weeks 10-11)
-  Output: T-051 -> T-052 -> T-053, T-055 -> T-056, T-057 -> T-058
-  Diff: T-059 -> T-060 -> T-061 -> T-062 -> T-063 -> T-064 -> T-065
+Phase 5: Compression (Week 9)
+  T-042 + T-043 -> T-044/T-045/T-046 -> T-049 -> T-050
 
-Phase 5: Workflows & TUI (Weeks 12-13)
-  Workflows: T-066 -> T-067, T-069 -> T-070 -> T-071 -> T-078
-  TUI: T-079 -> T-080 -> T-081, T-082, T-083 -> T-084 -> T-087
+Phase 6: Output & Rendering (Week 10)
+  T-051 -> T-052 -> T-053, T-055 -> T-056, T-057 -> T-058
 
-Phase 6: Polish & Distribution (Week 14)
+Phase 7: State & Diff (Week 11)
+  T-059 -> T-060 -> T-061 -> T-062 -> T-063 -> T-064 -> T-065
+
+Phase 8: Workflows (Week 12)
+  T-066 -> T-067, T-069 -> T-070 -> T-071 -> T-078
+
+Phase 9: Interactive TUI (Week 13)
+  T-079 -> T-080 -> T-081, T-082, T-083 -> T-084 -> T-087
+
+Phase 10: Polish & Distribution (Week 14)
   T-088 -> T-089
-  T-091, T-092, T-093, T-094 (parallel)
+  T-091, T-092, T-093, T-094, T-095 (parallel)
 ```
 
 ---

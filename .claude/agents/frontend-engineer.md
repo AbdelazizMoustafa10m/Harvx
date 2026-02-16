@@ -1,6 +1,6 @@
 ---
 name: frontend-engineer
-description: Senior TUI Engineer for implementing Bubble Tea interactive terminal UI, lipgloss styling, and keyboard-driven interfaces in Harvx. Use for TUI-related tasks (Phase 5b).
+description: Senior TUI Engineer for implementing Bubble Tea interactive terminal UI, lipgloss styling, and keyboard-driven interfaces in Harvx. Use for TUI-related tasks (Phase 9).
 model: inherit
 tools: Read,Grep,Glob,LS,Edit,MultiEdit,Create,Execute
 ---

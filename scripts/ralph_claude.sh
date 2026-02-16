@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./scripts/ralph_claude.sh --phase 1                    # Run Phase 1 tasks
-#   ./scripts/ralph_claude.sh --phase 2a --max-iterations 5
+#   ./scripts/ralph_claude.sh --phase 2 --max-iterations 5
 #   ./scripts/ralph_claude.sh --task T-003                  # Run single task
 #   ./scripts/ralph_claude.sh --phase 1 --dry-run           # Preview prompt only
 #   ./scripts/ralph_claude.sh --phase all                   # Run all phases sequentially
@@ -104,17 +104,9 @@ Usage:
   ./scripts/ralph_claude.sh --status
 
 Phases:
-  1    Foundation (T-001 to T-015)
-  2a   Profiles (T-016 to T-025)
-  2b   Relevance & Tokens (T-026 to T-033)
-  3a   Security (T-034 to T-041)
-  3b   Compression (T-042 to T-050)
-  4a   Output & Rendering (T-051 to T-058)
-  4b   State & Diff (T-059 to T-065)
-  5a   Workflows (T-066 to T-078)
-  5b   Interactive TUI (T-079 to T-087)
-  6    Polish & Distribution (T-088 to T-095)
-  all  Run all phases sequentially
+EOF
+    phases_listing
+    cat <<'EOF'
 
 Options:
   --phase <id>           Phase to run (required unless --task)

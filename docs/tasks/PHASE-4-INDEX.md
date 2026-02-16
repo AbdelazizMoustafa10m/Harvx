@@ -1,4 +1,4 @@
-# Phase 3: Security -- Secret Detection & Redaction Pipeline
+# Phase 4: Security -- Secret Detection & Redaction Pipeline
 
 ## Overview
 

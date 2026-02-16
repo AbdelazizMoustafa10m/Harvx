@@ -4,8 +4,41 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/phases-lib.sh"
 
-ALL_PHASE_IDS=(1 2a 2b 3a 3b 4a 4b 5a 5b 6)
+# ── UI: Detection & Colors ──────────────────────────────────────────
+
+HAS_GUM=false
+if command -v gum >/dev/null 2>&1; then
+    HAS_GUM=true
+fi
+
+if [[ -t 1 ]]; then
+    _BOLD=$'\033[1m'      _DIM=$'\033[2m'       _RESET=$'\033[0m'
+    _ITALIC=$'\033[3m'    _UNDERLINE=$'\033[4m'  _REVERSE=$'\033[7m'
+    _RED=$'\033[0;31m'    _GREEN=$'\033[0;32m'   _YELLOW=$'\033[1;33m'
+    _BLUE=$'\033[0;34m'   _MAGENTA=$'\033[0;35m' _CYAN=$'\033[0;36m'
+    _WHITE=$'\033[1;37m'  _GRAY=$'\033[0;90m'
+    _BG_RED=$'\033[41m'   _BG_GREEN=$'\033[42m'  _BG_BLUE=$'\033[44m'
+    _BG_MAGENTA=$'\033[45m' _BG_CYAN=$'\033[46m'
+else
+    _BOLD='' _DIM='' _RESET='' _ITALIC='' _UNDERLINE='' _REVERSE=''
+    _RED='' _GREEN='' _YELLOW='' _BLUE='' _MAGENTA='' _CYAN=''
+    _WHITE='' _GRAY='' _BG_RED='' _BG_GREEN='' _BG_BLUE=''
+    _BG_MAGENTA='' _BG_CYAN=''
+fi
+
+# Unicode status indicators
+_SYM_CHECK="${_GREEN}✓${_RESET}"
+_SYM_CROSS="${_RED}✗${_RESET}"
+_SYM_ARROW="${_CYAN}▸${_RESET}"
+_SYM_PENDING="${_DIM}○${_RESET}"
+_SYM_RUNNING="${_MAGENTA}●${_RESET}"
+_SYM_DONE="${_GREEN}●${_RESET}"
+_SYM_WARN="${_YELLOW}⚠${_RESET}"
+_SPINNER_CHARS="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+# ── Phase Configuration ─────────────────────────────────────────────
 
 DEFAULT_IMPL_AGENT="codex"
 DEFAULT_REVIEW_MODE="all"
@@ -48,9 +81,18 @@ REVIEW_CYCLES=0
 FIX_CYCLES=0
 PR_STATUS="not-run"
 
+# ── Usage ────────────────────────────────────────────────────────────
+
 usage() {
-    cat <<'USAGE'
-Harvx Phase Pipeline Orchestrator
+    if [[ "$HAS_GUM" == "true" ]]; then
+        gum style --bold --foreground 212 --border double --border-foreground 57 \
+            --padding "0 2" --margin "1 0" \
+            "Harvx Phase Pipeline Orchestrator"
+    else
+        echo ""
+        printf '%b%b  Harvx Phase Pipeline Orchestrator%b\n' "$_BOLD" "$_MAGENTA" "$_RESET"
+    fi
+    cat <<USAGE
 
 Usage:
   ./scripts/phase-pipeline.sh --phase <id> [options]
@@ -59,9 +101,9 @@ Usage:
   ./scripts/phase-pipeline.sh --interactive
 
 Required (one of):
-  --phase <id>                 Single phase (1, 2a, 2b, 3a, 3b, 4a, 4b, 5a, 5b, 6)
-  --phase all                  Run all phases sequentially (1 → 6)
-  --from-phase <id>            Start from this phase, run sequentially through phase 6
+  --phase <id>                 Single phase ($FIRST_PHASE_ID-$LAST_PHASE_ID)
+  --phase all                  Run all phases sequentially ($FIRST_PHASE_ID → $LAST_PHASE_ID)
+  --from-phase <id>            Start from this phase, run sequentially through phase $LAST_PHASE_ID
                                If omitted in an interactive terminal, a wizard is shown.
 
 Options:
@@ -83,32 +125,137 @@ Options:
 
 Examples:
   ./scripts/phase-pipeline.sh --phase 1                  # Run phase 1 only
-  ./scripts/phase-pipeline.sh --phase all                # Run all phases (1 → 6)
-  ./scripts/phase-pipeline.sh --from-phase 3a            # Run phases 3a → 3b → ... → 6
+  ./scripts/phase-pipeline.sh --phase all                # Run all phases (1 → 10)
+  ./scripts/phase-pipeline.sh --from-phase 4             # Run phases 4 → 5 → ... → 10
   ./scripts/phase-pipeline.sh --phase all --skip-pr      # All phases, no PRs
-  ./scripts/phase-pipeline.sh --from-phase 2a --dry-run  # Preview from phase 2a
+  ./scripts/phase-pipeline.sh --from-phase 2 --dry-run   # Preview from phase 2
 USAGE
+}
+
+# ── Logging & Errors ─────────────────────────────────────────────────
+
+_log_raw() {
+    local msg="$1"
+    local ts
+    ts="$(date '+%Y-%m-%d %H:%M:%S')"
+    if [[ -n "$PIPELINE_LOG" ]]; then
+        printf '[%s] %s\n' "$ts" "$msg" >> "$PIPELINE_LOG"
+    fi
 }
 
 log() {
     local msg="$1"
     local ts
-    ts="$(date '+%Y-%m-%d %H:%M:%S')"
-    if [[ -n "$PIPELINE_LOG" ]]; then
-        printf '[%s] %s\n' "$ts" "$msg" | tee -a "$PIPELINE_LOG"
+    ts="$(date '+%H:%M:%S')"
+    _log_raw "$msg"
+    printf '  %b%s%b  %s\n' "$_DIM" "$ts" "$_RESET" "$msg"
+}
+
+log_step() {
+    local icon="$1"
+    local msg="$2"
+    local ts
+    ts="$(date '+%H:%M:%S')"
+    _log_raw "$msg"
+    printf '  %b%s%b  %b %s\n' "$_DIM" "$ts" "$_RESET" "$icon" "$msg"
+}
+
+log_header() {
+    local msg="$1"
+    _log_raw "=== $msg ==="
+    echo ""
+    if [[ "$HAS_GUM" == "true" ]]; then
+        gum style --bold --foreground 255 --border rounded --border-foreground 57 \
+            --padding "0 2" --margin "0 2" "$msg"
     else
-        printf '[%s] %s\n' "$ts" "$msg"
+        local len=${#msg}
+        local border
+        border="$(printf '─%.0s' $(seq 1 $((len + 4))))"
+        printf '  %b╭%s╮%b\n' "$_CYAN" "$border" "$_RESET"
+        printf '  %b│%b  %b%s%b  %b│%b\n' "$_CYAN" "$_RESET" "$_BOLD$_WHITE" "$msg" "$_RESET" "$_CYAN" "$_RESET"
+        printf '  %b╰%s╯%b\n' "$_CYAN" "$border" "$_RESET"
     fi
+    echo ""
 }
 
 die() {
-    log "ERROR: $1"
+    _log_raw "ERROR: $1"
+    if [[ "$HAS_GUM" == "true" ]]; then
+        gum style --foreground 196 --bold --border rounded --border-foreground 196 \
+            --padding "0 2" --margin "0 2" "ERROR: $1"
+    else
+        echo ""
+        printf '  %b%b ERROR %b %b%s%b\n' "$_BG_RED" "$_WHITE" "$_RESET" "$_RED" "$1" "$_RESET"
+    fi
     exit 1
 }
 
+# ── Pipeline Stage Display ───────────────────────────────────────────
+
+_stage_status() {
+    local label="$1"
+    local status="$2"  # pending | running | done | skipped | failed | warning
+
+    local icon width_label padded
+    case "$status" in
+        pending)  icon="$_SYM_PENDING";  padded="${_DIM}${label}${_RESET}" ;;
+        running)  icon="$_SYM_RUNNING";  padded="${_BOLD}${label}${_RESET}" ;;
+        done)     icon="$_SYM_CHECK";    padded="${label}" ;;
+        skipped)  icon="${_DIM}⊘${_RESET}"; padded="${_DIM}${label}${_RESET}" ;;
+        failed)   icon="$_SYM_CROSS";    padded="${_RED}${label}${_RESET}" ;;
+        warning)  icon="$_SYM_WARN";     padded="${_YELLOW}${label}${_RESET}" ;;
+        *)        icon="$_SYM_PENDING";  padded="${label}" ;;
+    esac
+
+    printf '     %b  %b\n' "$icon" "$padded"
+}
+
+_draw_phase_progress() {
+    local current_idx=$1
+    local total=$2
+
+    printf '  '
+    for ((i=0; i<total; i++)); do
+        if ((i < current_idx)); then
+            printf '%b' "${_GREEN}●${_RESET}"
+        elif ((i == current_idx)); then
+            printf '%b' "${_MAGENTA}◉${_RESET}"
+        else
+            printf '%b' "${_DIM}○${_RESET}"
+        fi
+        if ((i < total - 1)); then
+            if ((i < current_idx)); then
+                printf '%b' "${_GREEN}──${_RESET}"
+            else
+                printf '%b' "${_DIM}──${_RESET}"
+            fi
+        fi
+    done
+    echo ""
+}
+
+_draw_stage_tracker() {
+    local impl_st="$1"
+    local review_st="$2"
+    local fix_st="$3"
+    local pr_st="$4"
+
+    echo ""
+    printf '  %b%bPipeline Stages%b\n' "$_BOLD" "$_CYAN" "$_RESET"
+    printf '  %b─────────────────────%b\n' "$_DIM" "$_RESET"
+    _stage_status "Branch bootstrap" "done"
+    _stage_status "Implementation"   "$impl_st"
+    _stage_status "Code review"      "$review_st"
+    _stage_status "Fix cycles"       "$fix_st"
+    _stage_status "PR creation"      "$pr_st"
+    echo ""
+}
+
+# ── Core Helpers ─────────────────────────────────────────────────────
+
 run_cmd() {
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "DRY-RUN: $*"
+        log_step "${_DIM}⊘${_RESET}" "${_DIM}DRY-RUN: $*${_RESET}"
         return 0
     fi
     "$@"
@@ -119,7 +266,7 @@ capture_cmd() {
     shift
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "DRY-RUN: $* > $output_file"
+        log_step "${_DIM}⊘${_RESET}" "${_DIM}DRY-RUN: $* > $output_file${_RESET}"
         : > "$output_file"
         return 0
     fi
@@ -129,14 +276,6 @@ capture_cmd() {
     local rc=$?
     set -e
     return $rc
-}
-
-validate_single_phase() {
-    local phase="$1"
-    case "$phase" in
-        1|2a|2b|3a|3b|4a|4b|5a|5b|6) return 0 ;;
-        *) return 1 ;;
-    esac
 }
 
 resolve_phases_to_run() {
@@ -172,38 +311,6 @@ resolve_phases_to_run() {
     fi
 }
 
-phase_slug() {
-    case "$1" in
-        1) echo "foundation" ;;
-        2a) echo "profiles" ;;
-        2b) echo "relevance-tokens" ;;
-        3a) echo "security" ;;
-        3b) echo "compression" ;;
-        4a) echo "output-rendering" ;;
-        4b) echo "state-diff" ;;
-        5a) echo "workflows" ;;
-        5b) echo "interactive-tui" ;;
-        6) echo "polish-distribution" ;;
-        *) die "No slug mapping for phase '$1'" ;;
-    esac
-}
-
-phase_title() {
-    case "$1" in
-        1) echo "Foundation" ;;
-        2a) echo "Intelligence: Config Profiles" ;;
-        2b) echo "Intelligence: Relevance + Tokenization" ;;
-        3a) echo "Security: Redaction + Entropy" ;;
-        3b) echo "Compression: Tree-sitter WASM" ;;
-        4a) echo "Output: Markdown/XML Rendering" ;;
-        4b) echo "State: Snapshots + Diffing" ;;
-        5a) echo "Workflows + MCP Server" ;;
-        5b) echo "TUI: Interactive Selector" ;;
-        6) echo "Polish + Distribution" ;;
-        *) echo "Unknown" ;;
-    esac
-}
-
 is_interactive_terminal() {
     [[ -t 0 && -t 1 ]]
 }
@@ -215,6 +322,8 @@ read_required_input() {
     printf '%s' "$input"
 }
 
+# ── Prompt Functions (gum primary + ANSI fallback) ───────────────────
+
 prompt_choice() {
     local out_var="$1"
     local prompt="$2"
@@ -222,21 +331,40 @@ prompt_choice() {
     shift 3
     local options=("$@")
 
+    if [[ "$HAS_GUM" == "true" ]]; then
+        local result
+        result="$(gum choose \
+            --cursor "▸ " \
+            --cursor.foreground 212 \
+            --header "$prompt" \
+            --header.foreground 255 \
+            --header.bold \
+            --selected "$default_value" \
+            --item.foreground 250 \
+            "${options[@]}")" || { printf -v "$out_var" '%s' "$default_value"; return 0; }
+        printf -v "$out_var" '%s' "$result"
+        return 0
+    fi
+
+    # ANSI fallback with colored menu
     while true; do
         echo ""
-        echo "$prompt"
+        printf '  %b%b%s%b\n' "$_BOLD" "$_WHITE" "$prompt" "$_RESET"
         local i
         for i in "${!options[@]}"; do
             local value="${options[$i]}"
-            local marker=""
             if [[ "$value" == "$default_value" ]]; then
-                marker=" (default)"
+                printf '    %b%b%d)%b %b%s%b %b(default)%b\n' \
+                    "$_BOLD" "$_CYAN" "$((i + 1))" "$_RESET" \
+                    "$_WHITE" "$value" "$_RESET" \
+                    "$_DIM" "$_RESET"
+            else
+                printf '    %b%d)%b %s\n' "$_CYAN" "$((i + 1))" "$_RESET" "$value"
             fi
-            printf "  %d) %s%s\n" "$((i + 1))" "$value" "$marker"
         done
 
         local input
-        input="$(read_required_input "Select option [${default_value}]: ")"
+        input="$(read_required_input "  ${_DIM}Select${_RESET} [${_CYAN}${default_value}${_RESET}]: ")"
         if [[ -z "$input" ]]; then
             printf -v "$out_var" '%s' "$default_value"
             return 0
@@ -255,7 +383,7 @@ prompt_choice() {
             fi
         done
 
-        echo "Invalid choice: $input"
+        printf '  %b%bInvalid choice:%b %s\n' "$_RED" "$_BOLD" "$_RESET" "$input"
     done
 }
 
@@ -263,14 +391,37 @@ prompt_yes_no() {
     local out_var="$1"
     local prompt="$2"
     local default_bool="$3"
-    local default_hint="y/N"
+
+    if [[ "$HAS_GUM" == "true" ]]; then
+        local gum_args=()
+        if [[ "$default_bool" == "true" ]]; then
+            gum_args+=(--default=yes)
+        else
+            gum_args+=(--default=no)
+        fi
+        if gum confirm "$prompt" \
+            --affirmative "Yes" --negative "No" \
+            --prompt.foreground 255 \
+            --prompt.bold \
+            --selected.background 57 \
+            --unselected.foreground 240 \
+            "${gum_args[@]}"; then
+            printf -v "$out_var" '%s' "true"
+        else
+            printf -v "$out_var" '%s' "false"
+        fi
+        return 0
+    fi
+
+    # ANSI fallback
+    local default_hint="${_DIM}y/N${_RESET}"
     if [[ "$default_bool" == "true" ]]; then
-        default_hint="Y/n"
+        default_hint="${_BOLD}Y${_RESET}${_DIM}/n${_RESET}"
     fi
 
     while true; do
         local input
-        input="$(read_required_input "$prompt [$default_hint]: ")"
+        input="$(read_required_input "  $prompt [$default_hint]: ")"
 
         if [[ -z "$input" ]]; then
             printf -v "$out_var" '%s' "$default_bool"
@@ -290,7 +441,7 @@ prompt_yes_no() {
                 return 0
                 ;;
             *)
-                echo "Please answer yes or no."
+                printf '  %bPlease answer yes or no.%b\n' "$_YELLOW" "$_RESET"
                 ;;
         esac
     done
@@ -302,9 +453,34 @@ prompt_number() {
     local default_number="$3"
     local pattern="$4"
 
+    if [[ "$HAS_GUM" == "true" ]]; then
+        local result
+        result="$(gum input \
+            --placeholder "$default_number" \
+            --header "$prompt" \
+            --header.foreground 255 \
+            --header.bold \
+            --cursor.foreground 212 \
+            --prompt "> " \
+            --prompt.foreground 57 \
+            --value "$default_number")" || { printf -v "$out_var" '%s' "$default_number"; return 0; }
+        if [[ -z "$result" ]]; then
+            result="$default_number"
+        fi
+        if [[ "$result" =~ $pattern ]]; then
+            printf -v "$out_var" '%s' "$result"
+            return 0
+        fi
+        printf '  %bInvalid number: %s (using default: %s)%b\n' "$_YELLOW" "$result" "$default_number" "$_RESET"
+        printf -v "$out_var" '%s' "$default_number"
+        return 0
+    fi
+
+    # ANSI fallback
     while true; do
         local input
-        input="$(read_required_input "$prompt [$default_number]: ")"
+        printf '\n  %b%b%s%b\n' "$_BOLD" "$_WHITE" "$prompt" "$_RESET"
+        input="$(read_required_input "  ${_DIM}Enter number${_RESET} [${_CYAN}${default_number}${_RESET}]: ")"
         if [[ -z "$input" ]]; then
             input="$default_number"
         fi
@@ -314,7 +490,7 @@ prompt_number() {
             return 0
         fi
 
-        echo "Invalid number: $input"
+        printf '  %bInvalid number:%b %s\n' "$_RED" "$_RESET" "$input"
     done
 }
 
@@ -323,8 +499,28 @@ prompt_text() {
     local prompt="$2"
     local default_value="$3"
 
+    if [[ "$HAS_GUM" == "true" ]]; then
+        local result
+        result="$(gum input \
+            --placeholder "$default_value" \
+            --header "$prompt" \
+            --header.foreground 255 \
+            --header.bold \
+            --cursor.foreground 212 \
+            --prompt "> " \
+            --prompt.foreground 57 \
+            --value "$default_value")" || { printf -v "$out_var" '%s' "$default_value"; return 0; }
+        if [[ -z "$result" ]]; then
+            result="$default_value"
+        fi
+        printf -v "$out_var" '%s' "$result"
+        return 0
+    fi
+
+    # ANSI fallback
+    printf '\n  %b%b%s%b\n' "$_BOLD" "$_WHITE" "$prompt" "$_RESET"
     local input
-    input="$(read_required_input "$prompt [$default_value]: ")"
+    input="$(read_required_input "  ${_DIM}Enter value${_RESET} [${_CYAN}${default_value}${_RESET}]: ")"
     if [[ -z "$input" ]]; then
         input="$default_value"
     fi
@@ -335,24 +531,59 @@ prompt_phase_id() {
     local out_var="$1"
     local default_phase="${2:-1}"
 
+    if [[ "$HAS_GUM" == "true" ]]; then
+        # Build display items for gum choose
+        local items=()
+        for phase_id in "${ALL_PHASE_IDS[@]}"; do
+            items+=("$(printf '%-3s  %s  %s' "$phase_id" "$(_phase_icon "$phase_id")" "$(phase_title "$phase_id")")")
+        done
+        items+=("all  🔄  Run all phases sequentially ($FIRST_PHASE_ID → $LAST_PHASE_ID)")
+        items+=("from 📍  Start from a specific phase through $LAST_PHASE_ID")
+
+        local result
+        result="$(printf '%s\n' "${items[@]}" | gum choose \
+            --cursor "▸ " \
+            --cursor.foreground 212 \
+            --header "Choose phase:" \
+            --header.foreground 255 \
+            --header.bold \
+            --item.foreground 250 \
+            --height 14)" || { printf -v "$out_var" '%s' "$default_phase"; return 0; }
+
+        # Extract phase ID (first whitespace-delimited token)
+        local selected
+        selected="$(printf '%s' "$result" | awk '{print $1}')"
+        printf -v "$out_var" '%s' "$selected"
+        return 0
+    fi
+
+    # ANSI fallback with styled menu
     while true; do
         echo ""
-        echo "Choose phase:"
+        printf '  %b%bChoose phase:%b\n\n' "$_BOLD" "$_WHITE" "$_RESET"
         local i
         for i in "${!ALL_PHASE_IDS[@]}"; do
             local phase_id="${ALL_PHASE_IDS[$i]}"
+            local icon
+            icon="$(_phase_icon "$phase_id")"
             local marker=""
             if [[ "$phase_id" == "$default_phase" ]]; then
-                marker=" (default)"
+                marker=" ${_DIM}(default)${_RESET}"
             fi
-            printf "  %2d) %-3s - %s%s\n" "$((i + 1))" "$phase_id" "$(phase_title "$phase_id")" "$marker"
+            printf '    %b%2d)%b  %b%-3s%b  %s  %s%b\n' \
+                "$_CYAN" "$((i + 1))" "$_RESET" \
+                "$_BOLD" "$phase_id" "$_RESET" \
+                "$icon" "$(phase_title "$phase_id")" "$marker"
         done
-        echo "  ──────────────────────────────────────────"
-        printf "  %2d) all  - Run all phases sequentially (1 → 6)\n" "$((${#ALL_PHASE_IDS[@]} + 1))"
-        printf "  %2d) from - Start from a specific phase through 6\n" "$((${#ALL_PHASE_IDS[@]} + 2))"
+        printf '    %b────────────────────────────────────────%b\n' "$_DIM" "$_RESET"
+        printf '    %b%2d)%b  %ball %b  🔄  Run all phases sequentially (%s → %s)\n' \
+            "$_CYAN" "$((${#ALL_PHASE_IDS[@]} + 1))" "$_RESET" "$_BOLD" "$_RESET" "$FIRST_PHASE_ID" "$LAST_PHASE_ID"
+        printf '    %b%2d)%b  %bfrom%b  📍  Start from a specific phase through %s\n' \
+            "$_CYAN" "$((${#ALL_PHASE_IDS[@]} + 2))" "$_RESET" "$_BOLD" "$_RESET" "$LAST_PHASE_ID"
 
+        echo ""
         local input
-        input="$(read_required_input "Select phase [${default_phase}]: ")"
+        input="$(read_required_input "  ${_DIM}Select phase${_RESET} [${_CYAN}${default_phase}${_RESET}]: ")"
         if [[ -z "$input" ]]; then
             printf -v "$out_var" '%s' "$default_phase"
             return 0
@@ -385,7 +616,7 @@ prompt_phase_id() {
             fi
         done
 
-        echo "Invalid phase: $input"
+        printf '  %b%bInvalid phase:%b %s\n' "$_RED" "$_BOLD" "$_RESET" "$input"
     done
 }
 
@@ -393,12 +624,48 @@ prompt_from_phase() {
     local out_var="$1"
     local default_phase="${2:-1}"
 
+    if [[ "$HAS_GUM" == "true" ]]; then
+        local items=()
+        for phase_id in "${ALL_PHASE_IDS[@]}"; do
+            # Count remaining phases
+            local count=0
+            local collecting=false
+            for p in "${ALL_PHASE_IDS[@]}"; do
+                if [[ "$p" == "$phase_id" ]]; then collecting=true; fi
+                if [[ "$collecting" == "true" ]]; then count=$((count + 1)); fi
+            done
+            local plural=""
+            if [[ $count -gt 1 ]]; then plural="s"; fi
+            items+=("$(printf '%-3s  %s  %s  (%d phase%s)' \
+                "$phase_id" "$(_phase_icon "$phase_id")" "$(phase_title "$phase_id")" "$count" "$plural")")
+        done
+
+        local result
+        result="$(printf '%s\n' "${items[@]}" | gum choose \
+            --cursor "▸ " \
+            --cursor.foreground 212 \
+            --header "Choose starting phase (runs sequentially through phase $LAST_PHASE_ID):" \
+            --header.foreground 255 \
+            --header.bold \
+            --item.foreground 250 \
+            --height 12)" || { printf -v "$out_var" '%s' "$default_phase"; return 0; }
+
+        local selected
+        selected="$(printf '%s' "$result" | awk '{print $1}')"
+        printf -v "$out_var" '%s' "$selected"
+        return 0
+    fi
+
+    # ANSI fallback
     while true; do
         echo ""
-        echo "Choose starting phase (will run sequentially through phase 6):"
+        printf '  %b%bChoose starting phase%b %b(runs sequentially through phase %s)%b:\n\n' \
+            "$_BOLD" "$_WHITE" "$_RESET" "$_DIM" "$LAST_PHASE_ID" "$_RESET"
         local i
         for i in "${!ALL_PHASE_IDS[@]}"; do
             local phase_id="${ALL_PHASE_IDS[$i]}"
+            local icon
+            icon="$(_phase_icon "$phase_id")"
             # Count remaining phases from this one
             local count=0
             local collecting=false
@@ -408,15 +675,19 @@ prompt_from_phase() {
             done
             local marker=""
             if [[ "$phase_id" == "$default_phase" ]]; then
-                marker=" (default)"
+                marker=" ${_DIM}(default)${_RESET}"
             fi
-            printf "  %2d) %-3s - %s (%d phase%s)%s\n" \
-                "$((i + 1))" "$phase_id" "$(phase_title "$phase_id")" \
-                "$count" "$(if [[ $count -gt 1 ]]; then echo "s"; fi)" "$marker"
+            printf '    %b%2d)%b  %b%-3s%b  %s  %s  %b(%d phase%s)%b%b\n' \
+                "$_CYAN" "$((i + 1))" "$_RESET" \
+                "$_BOLD" "$phase_id" "$_RESET" \
+                "$icon" "$(phase_title "$phase_id")" \
+                "$_DIM" "$count" "$(if [[ $count -gt 1 ]]; then echo "s"; fi)" "$_RESET" \
+                "$marker"
         done
 
+        echo ""
         local input
-        input="$(read_required_input "Select starting phase [${default_phase}]: ")"
+        input="$(read_required_input "  ${_DIM}Select starting phase${_RESET} [${_CYAN}${default_phase}${_RESET}]: ")"
         if [[ -z "$input" ]]; then
             printf -v "$out_var" '%s' "$default_phase"
             return 0
@@ -435,14 +706,96 @@ prompt_from_phase() {
             fi
         done
 
-        echo "Invalid phase: $input"
+        printf '  %b%bInvalid phase:%b %s\n' "$_RED" "$_BOLD" "$_RESET" "$input"
     done
 }
 
+# ── Config Summary Display ───────────────────────────────────────────
+
+_display_config_summary() {
+    local phases_display=""
+    if [[ ${#PHASES_TO_RUN[@]} -gt 1 ]]; then
+        phases_display="$(printf '%s → ' "${PHASES_TO_RUN[@]}")"
+        phases_display="${phases_display% → } (${#PHASES_TO_RUN[@]} phases)"
+    else
+        phases_display="${PHASES_TO_RUN[0]} ($(phase_title "${PHASES_TO_RUN[0]}"))"
+    fi
+
+    if [[ "$HAS_GUM" == "true" ]]; then
+        local body=""
+        body+="$(printf '  %-22s %s\n' "Phase(s)" "$phases_display")"
+        body+="$(printf '\n  %-22s %s' "Impl agent" "$IMPL_AGENT")"
+        body+="$(printf '\n  %-22s %s' "Review mode" "$REVIEW_MODE")"
+        if [[ "$REVIEW_MODE" != "none" ]]; then
+            body+="$(printf '\n  %-22s %s' "Review agent" "$REVIEW_AGENT")"
+            body+="$(printf '\n  %-22s %s' "Review concurrency" "$REVIEW_CONCURRENCY")"
+            body+="$(printf '\n  %-22s %s' "Max review cycles" "$MAX_REVIEW_CYCLES")"
+            body+="$(printf '\n  %-22s %s' "Fix agent" "$FIX_AGENT")"
+        fi
+        body+="$(printf '\n  %-22s %s' "Base branch" "$BASE_BRANCH")"
+        body+="$(printf '\n  %-22s %s' "Sync base" "$SYNC_BASE")"
+
+        local skips=""
+        [[ "$SKIP_IMPLEMENT" == "true" ]] && skips+="impl "
+        [[ "$SKIP_REVIEW" == "true" ]]    && skips+="review "
+        [[ "$SKIP_FIX" == "true" ]]       && skips+="fix "
+        [[ "$SKIP_PR" == "true" ]]        && skips+="pr "
+        if [[ -n "$skips" ]]; then
+            body+="$(printf '\n  %-22s %s' "Skip" "${skips% }")"
+        fi
+        [[ "$DRY_RUN" == "true" ]] && body+="$(printf '\n  %-22s %s' "Dry run" "yes")"
+
+        echo ""
+        gum style --border rounded --border-foreground 57 \
+            --padding "1 2" --margin "0 2" \
+            --bold --foreground 255 "Configuration" "" "$body"
+    else
+        echo ""
+        printf '  %b╭─ %b%bConfiguration%b %b─────────────────────────────╮%b\n' \
+            "$_CYAN" "$_RESET" "$_BOLD$_WHITE" "$_RESET" "$_CYAN" "$_RESET"
+        printf '  %b│%b\n' "$_CYAN" "$_RESET"
+        printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Phase(s)" "$_WHITE" "$phases_display" "$_RESET"
+        printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Impl agent" "$_MAGENTA" "$IMPL_AGENT" "$_RESET"
+        printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Review mode" "$REVIEW_MODE"
+        if [[ "$REVIEW_MODE" != "none" ]]; then
+            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Review agent" "$REVIEW_AGENT"
+            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Concurrency" "$REVIEW_CONCURRENCY"
+            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Max review cycles" "$MAX_REVIEW_CYCLES"
+            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Fix agent" "$FIX_AGENT"
+        fi
+        printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Base branch" "$BASE_BRANCH"
+        printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Sync base" "$SYNC_BASE"
+
+        local skips=""
+        [[ "$SKIP_IMPLEMENT" == "true" ]] && skips+="impl "
+        [[ "$SKIP_REVIEW" == "true" ]]    && skips+="review "
+        [[ "$SKIP_FIX" == "true" ]]       && skips+="fix "
+        [[ "$SKIP_PR" == "true" ]]        && skips+="pr "
+        if [[ -n "$skips" ]]; then
+            printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Skip" "$_YELLOW" "${skips% }" "$_RESET"
+        fi
+        if [[ "$DRY_RUN" == "true" ]]; then
+            printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Dry run" "$_YELLOW" "yes" "$_RESET"
+        fi
+        printf '  %b│%b\n' "$_CYAN" "$_RESET"
+        printf '  %b╰──────────────────────────────────────────────╯%b\n' "$_CYAN" "$_RESET"
+    fi
+}
+
+# ── Interactive Wizard ───────────────────────────────────────────────
+
 run_interactive_wizard() {
     echo ""
-    echo "Harvx Phase Pipeline Wizard"
-    echo "==========================="
+    if [[ "$HAS_GUM" == "true" ]]; then
+        gum style --bold --foreground 212 --border double --border-foreground 57 \
+            --padding "0 3" --margin "0 2" \
+            "🌾  Harvx Phase Pipeline Wizard"
+    else
+        printf '  %b╔══════════════════════════════════════╗%b\n' "$_MAGENTA" "$_RESET"
+        printf '  %b║%b  %b🌾  Harvx Phase Pipeline Wizard%b    %b║%b\n' \
+            "$_MAGENTA" "$_RESET" "$_BOLD$_WHITE" "$_RESET" "$_MAGENTA" "$_RESET"
+        printf '  %b╚══════════════════════════════════════╝%b\n' "$_MAGENTA" "$_RESET"
+    fi
 
     prompt_phase_id PHASE_ID "${PHASE_ID:-1}"
 
@@ -503,36 +856,17 @@ run_interactive_wizard() {
     # Resolve phases early so we can display them in the summary
     resolve_phases_to_run
 
-    echo ""
-    echo "Selected configuration:"
-    if [[ ${#PHASES_TO_RUN[@]} -gt 1 ]]; then
-        local phases_display
-        phases_display="$(printf '%s → ' "${PHASES_TO_RUN[@]}")"
-        phases_display="${phases_display% → }"
-        echo "  phases=$phases_display (${#PHASES_TO_RUN[@]} phases)"
-    else
-        echo "  phase=${PHASES_TO_RUN[0]} ($(phase_title "${PHASES_TO_RUN[0]}"))"
-    fi
-    echo "  impl_agent=$IMPL_AGENT"
-    echo "  review_mode=$REVIEW_MODE"
-    echo "  review_agent=$REVIEW_AGENT"
-    echo "  review_concurrency=$REVIEW_CONCURRENCY"
-    echo "  max_review_cycles=$MAX_REVIEW_CYCLES"
-    echo "  fix_agent=$FIX_AGENT"
-    echo "  base=$BASE_BRANCH"
-    echo "  sync_base=$SYNC_BASE"
-    echo "  skip_implement=$SKIP_IMPLEMENT"
-    echo "  skip_review=$SKIP_REVIEW"
-    echo "  skip_fix=$SKIP_FIX"
-    echo "  skip_pr=$SKIP_PR"
-    echo "  dry_run=$DRY_RUN"
+    _display_config_summary
 
+    echo ""
     local proceed="false"
     prompt_yes_no proceed "Proceed with this configuration?" "true"
     if [[ "$proceed" != "true" ]]; then
         die "Pipeline cancelled from interactive wizard"
     fi
 }
+
+# ── Pipeline Logic ───────────────────────────────────────────────────
 
 is_blocking_verdict() {
     local verdict="$1"
@@ -680,7 +1014,7 @@ sync_base_branch() {
         return 0
     fi
 
-    log "Syncing base branch '$BASE_BRANCH' from origin"
+    log_step "$_SYM_RUNNING" "Syncing base branch ${_BOLD}'$BASE_BRANCH'${_RESET} from origin"
     run_cmd git fetch origin "$BASE_BRANCH"
 
     local base_ref
@@ -694,6 +1028,7 @@ sync_base_branch() {
     else
         die "origin/$BASE_BRANCH not found after fetch"
     fi
+    log_step "$_SYM_CHECK" "Base branch synced"
 }
 
 bootstrap_branch() {
@@ -710,7 +1045,7 @@ bootstrap_branch() {
         base_ref="$(resolve_base_ref)"
     fi
 
-    log "Bootstrapping branch '$branch' from '$base_ref'"
+    log_step "$_SYM_RUNNING" "Bootstrapping branch ${_BOLD}'$branch'${_RESET} from ${_DIM}'$base_ref'${_RESET}"
 
     if git show-ref --verify --quiet "refs/heads/$branch"; then
         run_cmd git checkout "$branch"
@@ -720,12 +1055,13 @@ bootstrap_branch() {
 
     EXPECTED_BRANCH="$branch"
     assert_expected_branch
+    log_step "$_SYM_CHECK" "On branch ${_BOLD}$branch${_RESET}"
 }
 
 run_implementation() {
     if [[ "$SKIP_IMPLEMENT" == "true" ]]; then
         IMPLEMENT_STATUS="skipped"
-        log "Implementation skipped"
+        log_step "${_DIM}⊘${_RESET}" "${_DIM}Implementation skipped${_RESET}"
         persist_metadata
         return 0
     fi
@@ -733,12 +1069,13 @@ run_implementation() {
     assert_expected_branch
 
     local impl_script="$PROJECT_ROOT/scripts/ralph_${IMPL_AGENT}.sh"
-    log "Running implementation with $impl_script --phase $PHASE_ID"
+    log_step "$_SYM_RUNNING" "Implementation starting ${_DIM}($IMPL_AGENT agent, phase $PHASE_ID)${_RESET}"
 
     run_cmd "$impl_script" --phase "$PHASE_ID"
 
     IMPLEMENT_STATUS="completed"
     assert_expected_branch
+    log_step "$_SYM_CHECK" "Implementation ${_GREEN}completed${_RESET}"
     persist_metadata
 }
 
@@ -782,6 +1119,18 @@ extract_verdict_from_consolidated() {
     esac
 }
 
+_verdict_styled() {
+    local verdict="$1"
+    case "$verdict" in
+        APPROVED)         printf '%b%bAPPROVED%b'         "$_GREEN" "$_BOLD" "$_RESET" ;;
+        REQUEST_CHANGES)  printf '%b%bREQUEST_CHANGES%b'  "$_RED"   "$_BOLD" "$_RESET" ;;
+        NEEDS_FIXES)      printf '%b%bNEEDS_FIXES%b'      "$_RED"   "$_BOLD" "$_RESET" ;;
+        COMMENT)          printf '%b%bCOMMENT%b'           "$_YELLOW" "$_BOLD" "$_RESET" ;;
+        SKIPPED)          printf '%b%bSKIPPED%b'           "$_DIM"   "$_BOLD" "$_RESET" ;;
+        *)                printf '%b%b%s%b'                "$_YELLOW" "$_BOLD" "$verdict" "$_RESET" ;;
+    esac
+}
+
 run_review_once() {
     local cycle="$1"
 
@@ -805,7 +1154,7 @@ run_review_once() {
         review_args+=(--dry-run)
     fi
 
-    log "Running review cycle $cycle using $(basename "$review_script") mode=$REVIEW_MODE"
+    log_step "$_SYM_RUNNING" "Review cycle $cycle ${_DIM}(mode=$REVIEW_MODE)${_RESET}"
 
     export HARVX_PHASE_ID="$PHASE_ID"
     export HARVX_REVIEW_MODE="$REVIEW_MODE"
@@ -819,7 +1168,7 @@ run_review_once() {
             log "Review command returned non-zero in dry-run"
         fi
         REVIEW_VERDICT="UNKNOWN"
-        log "Review verdict: $REVIEW_VERDICT (dry-run)"
+        log_step "${_DIM}⊘${_RESET}" "Review verdict: $(_verdict_styled "$REVIEW_VERDICT") ${_DIM}(dry-run)${_RESET}"
         persist_metadata
         return 0
     else
@@ -834,7 +1183,7 @@ run_review_once() {
     if [[ "$REVIEW_VERDICT" == "UNKNOWN" ]]; then
         REVIEW_VERDICT="$(extract_verdict "$review_log")"
     fi
-    log "Review verdict: $REVIEW_VERDICT"
+    log_step "$_SYM_CHECK" "Review verdict: $(_verdict_styled "$REVIEW_VERDICT")"
     persist_metadata
 }
 
@@ -849,7 +1198,7 @@ run_fix_once() {
     fi
 
     local fix_log="$RUN_DIR/fix-cycle-${cycle}.log"
-    log "Running fix cycle $cycle using $(basename "$fix_script")"
+    log_step "$_SYM_RUNNING" "Fix cycle $cycle ${_DIM}($FIX_AGENT agent)${_RESET}"
 
     export HARVX_PHASE_ID="$PHASE_ID"
     export HARVX_FIX_AGENT="$FIX_AGENT"
@@ -864,7 +1213,7 @@ run_fix_once() {
     fi
 
     if capture_cmd "$fix_log" "$fix_script" "${fix_args[@]}"; then
-        log "Fix cycle $cycle completed"
+        log_step "$_SYM_CHECK" "Fix cycle $cycle ${_GREEN}completed${_RESET}"
     else
         die "Fix command failed in cycle $cycle (see $fix_log)"
     fi
@@ -876,7 +1225,7 @@ run_fix_once() {
 run_review_and_fix_cycles() {
     if [[ "$SKIP_REVIEW" == "true" || "$REVIEW_MODE" == "none" ]]; then
         REVIEW_VERDICT="SKIPPED"
-        log "Review skipped"
+        log_step "${_DIM}⊘${_RESET}" "${_DIM}Review skipped${_RESET}"
         persist_metadata
         return 0
     fi
@@ -886,12 +1235,12 @@ run_review_and_fix_cycles() {
 
     while is_blocking_verdict "$REVIEW_VERDICT"; do
         if [[ "$SKIP_FIX" == "true" ]]; then
-            log "Blocking review verdict but fix cycles are skipped"
+            log_step "$_SYM_WARN" "Blocking review verdict but fix cycles are skipped"
             break
         fi
 
         if (( REVIEW_CYCLES >= MAX_REVIEW_CYCLES )); then
-            log "Max review cycles reached ($MAX_REVIEW_CYCLES) with verdict $REVIEW_VERDICT"
+            log_step "$_SYM_WARN" "Max review cycles reached (${_BOLD}$MAX_REVIEW_CYCLES${_RESET}) with verdict $(_verdict_styled "$REVIEW_VERDICT")"
             break
         fi
 
@@ -910,7 +1259,7 @@ run_review_and_fix_cycles() {
 run_pr_creation() {
     if [[ "$SKIP_PR" == "true" ]]; then
         PR_STATUS="skipped"
-        log "PR creation skipped"
+        log_step "${_DIM}⊘${_RESET}" "${_DIM}PR creation skipped${_RESET}"
         persist_metadata
         return 0
     fi
@@ -925,7 +1274,7 @@ run_pr_creation() {
         die "PR script not found: scripts/review/create-pr.sh"
     fi
 
-    log "Creating PR via scripts/review/create-pr.sh"
+    log_step "$_SYM_RUNNING" "Creating pull request"
 
     local pr_args=()
     pr_args+=(--phase "$PHASE_ID")
@@ -940,8 +1289,11 @@ run_pr_creation() {
     "$pr_script" "${pr_args[@]}"
 
     PR_STATUS="completed"
+    log_step "$_SYM_CHECK" "Pull request ${_GREEN}created${_RESET}"
     persist_metadata
 }
+
+# ── Argument Parsing ─────────────────────────────────────────────────
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -1039,6 +1391,8 @@ resolve_interactive_mode() {
     fi
 }
 
+# ── Phase Execution ──────────────────────────────────────────────────
+
 run_single_phase() {
     local phase="$1"
 
@@ -1053,7 +1407,14 @@ run_single_phase() {
 
     init_artifacts
 
-    log "Starting phase $PHASE_ID: $(phase_title "$PHASE_ID")"
+    log_header "$(_phase_icon "$PHASE_ID") Phase $PHASE_ID: $(phase_title "$PHASE_ID")"
+
+    # Show stage tracker at start
+    local impl_st="pending" review_st="pending" fix_st="pending" pr_st="pending"
+    [[ "$SKIP_IMPLEMENT" == "true" ]] && impl_st="skipped"
+    [[ "$SKIP_REVIEW" == "true" || "$REVIEW_MODE" == "none" ]] && review_st="skipped"
+    [[ "$SKIP_FIX" == "true" ]] && fix_st="skipped"
+    [[ "$SKIP_PR" == "true" ]] && pr_st="skipped"
 
     ensure_clean_tree_before_bootstrap
     bootstrap_branch
@@ -1061,15 +1422,54 @@ run_single_phase() {
     run_review_and_fix_cycles
     run_pr_creation
 
-    log "Phase $PHASE_ID complete: impl=$IMPLEMENT_STATUS review=$REVIEW_VERDICT pr=$PR_STATUS"
+    # Phase completion summary
+    echo ""
+    local verdict_display
+    verdict_display="$(_verdict_styled "$REVIEW_VERDICT")"
+
+    local impl_icon pr_icon
+    case "$IMPLEMENT_STATUS" in
+        completed) impl_icon="$_SYM_CHECK" ;;
+        skipped)   impl_icon="${_DIM}⊘${_RESET}" ;;
+        *)         impl_icon="$_SYM_CROSS" ;;
+    esac
+    case "$PR_STATUS" in
+        completed) pr_icon="$_SYM_CHECK" ;;
+        skipped)   pr_icon="${_DIM}⊘${_RESET}" ;;
+        *)         pr_icon="$_SYM_CROSS" ;;
+    esac
+
+    if [[ "$HAS_GUM" == "true" ]]; then
+        local summary=""
+        summary+="$(printf '  impl=%s  review=%s  pr=%s' "$IMPLEMENT_STATUS" "$REVIEW_VERDICT" "$PR_STATUS")"
+        if [[ "$REVIEW_CYCLES" -gt 0 ]]; then
+            summary+="$(printf '  cycles=%d' "$REVIEW_CYCLES")"
+        fi
+        gum style --border rounded --border-foreground 46 \
+            --padding "0 2" --margin "0 2" \
+            --bold --foreground 46 \
+            "Phase $PHASE_ID Complete" "" "$summary"
+    else
+        printf '  %b╭─ %b%bPhase %s Complete%b %b──────────────────────╮%b\n' \
+            "$_GREEN" "$_RESET" "$_BOLD$_GREEN" "$PHASE_ID" "$_RESET" "$_GREEN" "$_RESET"
+        printf '  %b│%b  %b Implementation  %s\n' "$_GREEN" "$_RESET" "$impl_icon" "$IMPLEMENT_STATUS"
+        printf '  %b│%b  %b Review          %b\n' "$_GREEN" "$_RESET" "$_SYM_CHECK" "$verdict_display"
+        printf '  %b│%b  %b PR              %s\n' "$_GREEN" "$_RESET" "$pr_icon" "$PR_STATUS"
+        if [[ "$REVIEW_CYCLES" -gt 0 ]]; then
+            printf '  %b│%b    Review cycles: %d  Fix cycles: %d\n' "$_GREEN" "$_RESET" "$REVIEW_CYCLES" "$FIX_CYCLES"
+        fi
+        printf '  %b╰──────────────────────────────────────────╯%b\n' "$_GREEN" "$_RESET"
+    fi
 
     if is_blocking_verdict "$REVIEW_VERDICT"; then
-        log "WARNING: Phase $PHASE_ID ended with blocking review verdict: $REVIEW_VERDICT"
+        log_step "$_SYM_WARN" "${_YELLOW}Phase $PHASE_ID ended with blocking verdict: $(_verdict_styled "$REVIEW_VERDICT")${_RESET}"
     fi
 
     # Update chain base so next phase branches from this phase's branch
     CHAIN_BASE="$EXPECTED_BRANCH"
 }
+
+# ── Main ─────────────────────────────────────────────────────────────
 
 main() {
     parse_args "$@"
@@ -1084,13 +1484,30 @@ main() {
     preflight
 
     local total=${#PHASES_TO_RUN[@]}
+
+    echo ""
     if [[ $total -gt 1 ]]; then
         local phases_display
         phases_display="$(printf '%s → ' "${PHASES_TO_RUN[@]}")"
         phases_display="${phases_display% → }"
-        log "Starting multi-phase pipeline: $phases_display ($total phases) base=$BASE_BRANCH dry_run=$DRY_RUN"
+
+        if [[ "$HAS_GUM" == "true" ]]; then
+            gum style --bold --foreground 212 --border thick --border-foreground 57 \
+                --padding "0 2" --margin "0 2" \
+                "Pipeline: $phases_display ($total phases)"
+        else
+            printf '  %b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n' "$_MAGENTA" "$_RESET"
+            printf '  %b%b  Pipeline: %s (%d phases)%b\n' "$_BOLD" "$_MAGENTA" "$phases_display" "$total" "$_RESET"
+            printf '  %b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n' "$_MAGENTA" "$_RESET"
+        fi
+        echo ""
+        _draw_phase_progress 0 "$total"
+        echo ""
+
+        log "base=${_BOLD}$BASE_BRANCH${_RESET}  dry_run=${_BOLD}$DRY_RUN${_RESET}"
     else
-        log "Starting phase pipeline: phase=${PHASES_TO_RUN[0]} base=$BASE_BRANCH dry_run=$DRY_RUN"
+        log_header "$(_phase_icon "${PHASES_TO_RUN[0]}") Phase ${PHASES_TO_RUN[0]}: $(phase_title "${PHASES_TO_RUN[0]}")"
+        log "base=${_BOLD}$BASE_BRANCH${_RESET}  dry_run=${_BOLD}$DRY_RUN${_RESET}"
     fi
 
     sync_base_branch
@@ -1102,20 +1519,53 @@ main() {
         idx=$((idx + 1))
 
         if [[ $total -gt 1 ]]; then
-            log "═══════════════════════════════════════════════════"
-            log "Phase $idx/$total: $phase - $(phase_title "$phase")"
-            log "═══════════════════════════════════════════════════"
+            echo ""
+            _draw_phase_progress "$((idx - 1))" "$total"
+            printf '  %b%bPhase %d/%d:%b %s %b%s%b – %s\n\n' \
+                "$_BOLD" "$_MAGENTA" "$idx" "$total" "$_RESET" \
+                "$(_phase_icon "$phase")" "$_BOLD" "$phase" "$_RESET" \
+                "$(phase_title "$phase")"
         fi
 
         run_single_phase "$phase"
     done
 
+    # Final completion banner
+    echo ""
     if [[ $total -gt 1 ]]; then
-        log "All $total phases complete."
-    else
-        log "Pipeline complete. Metadata: $METADATA_FILE"
-        log "Artifacts: $RUN_DIR"
+        _draw_phase_progress "$total" "$total"
+        echo ""
     fi
+
+    if [[ "$HAS_GUM" == "true" ]]; then
+        if [[ $total -gt 1 ]]; then
+            gum style --bold --foreground 46 --border double --border-foreground 46 \
+                --padding "0 3" --margin "0 2" \
+                "All $total phases complete!"
+        else
+            gum style --bold --foreground 46 --border double --border-foreground 46 \
+                --padding "0 3" --margin "0 2" \
+                "Pipeline complete!" "" \
+                "  Metadata:  $METADATA_FILE" \
+                "  Artifacts: $RUN_DIR"
+        fi
+    else
+        if [[ $total -gt 1 ]]; then
+            printf '  %b╔══════════════════════════════════════╗%b\n' "$_GREEN" "$_RESET"
+            printf '  %b║%b  %b%b All %d phases complete! %b           %b║%b\n' \
+                "$_GREEN" "$_RESET" "$_BOLD" "$_GREEN" "$total" "$_RESET" "$_GREEN" "$_RESET"
+            printf '  %b╚══════════════════════════════════════╝%b\n' "$_GREEN" "$_RESET"
+        else
+            printf '  %b╔══════════════════════════════════════╗%b\n' "$_GREEN" "$_RESET"
+            printf '  %b║%b  %b%b Pipeline complete! %b               %b║%b\n' \
+                "$_GREEN" "$_RESET" "$_BOLD" "$_GREEN" "$_RESET" "$_GREEN" "$_RESET"
+            printf '  %b╚══════════════════════════════════════╝%b\n' "$_GREEN" "$_RESET"
+            echo ""
+            printf '  %bMetadata:%b  %s\n' "$_DIM" "$_RESET" "$METADATA_FILE"
+            printf '  %bArtifacts:%b %s\n' "$_DIM" "$_RESET" "$RUN_DIR"
+        fi
+    fi
+    echo ""
 }
 
 main "$@"

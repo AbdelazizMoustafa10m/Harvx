@@ -1,4 +1,4 @@
-# Phase 2: Intelligence (Profiles) -- Task Index
+# Phase 2: Profiles -- Task Index
 
 ## Overview
 

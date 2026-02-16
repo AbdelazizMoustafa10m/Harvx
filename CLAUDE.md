@@ -6,7 +6,7 @@ Harvx is a Go CLI tool that packages codebases into LLM-optimized context docume
 Single binary (~15-20MB), zero runtime dependencies, cross-platform (macOS/Linux/Windows).
 
 **PRD:** `docs/prd/PRD-Harvx.md`
-**Tasks:** `docs/tasks/T-XXX-*.md` (95 tasks across 6 phases)
+**Tasks:** `docs/tasks/T-XXX-*.md` (95 tasks across 10 phases)
 **Progress:** `docs/tasks/PROGRESS.md`
 **Index:** `docs/tasks/INDEX.md`
 
@@ -106,15 +106,15 @@ go mod tidy              # Module hygiene (no drift)
 | Phase | Tasks | Description |
 |-------|-------|-------------|
 | 1 | T-001 to T-015 | Foundation: CLI skeleton, file discovery engine |
-| 2a | T-016 to T-025 | Intelligence: TOML profiles, config merging |
-| 2b | T-026 to T-033 | Intelligence: Relevance tiers, token counting |
-| 3a | T-034 to T-041 | Security: Secret redaction, entropy analysis |
-| 3b | T-042 to T-050 | Compression: Tree-sitter WASM, language compressors |
-| 4a | T-051 to T-058 | Output: Markdown/XML rendering, tree builder |
-| 4b | T-059 to T-065 | State: Snapshots, diffing, caching |
-| 5a | T-066 to T-078 | Workflows: brief, slice, review-slice, MCP |
-| 5b | T-079 to T-087 | TUI: Bubble Tea interactive file selector |
-| 6 | T-088 to T-095 | Polish: GoReleaser, benchmarks, golden tests |
+| 2 | T-016 to T-025 | Profiles: TOML config, profile inheritance |
+| 3 | T-026 to T-033 | Relevance: Tiers, token counting, budgets |
+| 4 | T-034 to T-041 | Security: Secret redaction, entropy analysis |
+| 5 | T-042 to T-050 | Compression: Tree-sitter WASM, language compressors |
+| 6 | T-051 to T-058 | Output: Markdown/XML rendering, tree builder |
+| 7 | T-059 to T-065 | State: Snapshots, diffing, caching |
+| 8 | T-066 to T-078 | Workflows: brief, slice, review-slice, MCP |
+| 9 | T-079 to T-087 | TUI: Bubble Tea interactive file selector |
+| 10 | T-088 to T-095 | Polish: GoReleaser, benchmarks, golden tests |
 
 ## Key Technical Decisions
 

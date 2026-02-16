@@ -33,6 +33,9 @@ if [[ -n "${_RALPH_LIB_LOADED:-}" ]]; then
 fi
 _RALPH_LIB_LOADED=1
 
+# Source dynamic phase definitions from phases.conf
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/phases-lib.sh"
+
 # =============================================================================
 # Shared Configuration Defaults
 # =============================================================================
@@ -104,50 +107,6 @@ _ralph_install_traps() {
     trap '_ralph_cleanup SIGINT' SIGINT
     trap '_ralph_cleanup SIGTERM' SIGTERM
     trap '_ralph_cleanup EXIT' EXIT
-}
-
-# =============================================================================
-# Phase Definitions
-# =============================================================================
-
-declare_phases() {
-    # Phase ID -> Task Range
-    PHASE_RANGES_1="T-001:T-015"
-    PHASE_RANGES_2a="T-016:T-025"
-    PHASE_RANGES_2b="T-026:T-033"
-    PHASE_RANGES_3a="T-034:T-041"
-    PHASE_RANGES_3b="T-042:T-050"
-    PHASE_RANGES_4a="T-051:T-058"
-    PHASE_RANGES_4b="T-059:T-065"
-    PHASE_RANGES_5a="T-066:T-078"
-    PHASE_RANGES_5b="T-079:T-087"
-    PHASE_RANGES_6="T-088:T-095"
-
-    # Phase ID -> Display Name
-    PHASE_NAMES_1="Phase 1: Foundation"
-    PHASE_NAMES_2a="Phase 2a: Profiles"
-    PHASE_NAMES_2b="Phase 2b: Relevance & Tokens"
-    PHASE_NAMES_3a="Phase 3a: Security"
-    PHASE_NAMES_3b="Phase 3b: Compression"
-    PHASE_NAMES_4a="Phase 4a: Output & Rendering"
-    PHASE_NAMES_4b="Phase 4b: State & Diff"
-    PHASE_NAMES_5a="Phase 5a: Workflows"
-    PHASE_NAMES_5b="Phase 5b: Interactive TUI"
-    PHASE_NAMES_6="Phase 6: Polish & Distribution"
-
-    ALL_PHASES="1 2a 2b 3a 3b 4a 4b 5a 5b 6"
-}
-
-get_phase_range() {
-    local phase="$1"
-    local var="PHASE_RANGES_${phase}"
-    echo "${!var:-}"
-}
-
-get_phase_name() {
-    local phase="$1"
-    local var="PHASE_NAMES_${phase}"
-    echo "${!var:-}"
 }
 
 # =============================================================================
@@ -244,25 +203,6 @@ get_task_list_for_single() {
         task_name=$(get_task_name "$task_id")
         echo "- [ ] ${task_id}: ${task_name} [Not Started]"
     fi
-}
-
-# Determine phase ID from task number.
-get_phase_for_task() {
-    local task_id="$1"
-    local task_num=$((10#${task_id#T-}))
-    local phase_id=""
-    if   [[ $task_num -le 15 ]];  then phase_id="1"
-    elif [[ $task_num -le 25 ]];  then phase_id="2a"
-    elif [[ $task_num -le 33 ]];  then phase_id="2b"
-    elif [[ $task_num -le 41 ]];  then phase_id="3a"
-    elif [[ $task_num -le 50 ]];  then phase_id="3b"
-    elif [[ $task_num -le 58 ]];  then phase_id="4a"
-    elif [[ $task_num -le 65 ]];  then phase_id="4b"
-    elif [[ $task_num -le 78 ]];  then phase_id="5a"
-    elif [[ $task_num -le 87 ]];  then phase_id="5b"
-    elif [[ $task_num -le 95 ]];  then phase_id="6"
-    fi
-    echo "$phase_id"
 }
 
 # =============================================================================
@@ -800,7 +740,7 @@ show_status() {
     echo ""
 
     # Total
-    local total_tasks=95
+    local total_tasks=$TOTAL_TASK_COUNT
     local total_completed=0
     for p in $ALL_PHASES; do
         local r
@@ -1232,8 +1172,6 @@ run_all_phases() {
 # Each script must define: run_agent(), usage(), check_prerequisites(),
 # pre_agent_setup(), get_dry_run_command()
 main() {
-    declare_phases
-
     local phase=""
     local task=""
     local max_iterations=$DEFAULT_MAX_ITERATIONS

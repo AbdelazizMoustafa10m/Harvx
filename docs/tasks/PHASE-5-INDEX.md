@@ -1,177 +1,166 @@
-# Phase 5: Workflows - Task Index
+# Phase 5: Tree-Sitter Code Compression -- Task Index
 
 ## Overview
 
-Phase 5 implements first-class workflow support for Harvx, transforming it from a general-purpose context generator into a core component of automated AI code review pipelines and coding agent bootstrap systems. This phase covers:
+This index covers the AST-based code compression engine for Harvx (PRD Section 5.6). The compression subsystem uses tree-sitter grammars executed as WebAssembly modules via the wazero runtime (pure Go, zero CGO) to extract structural signatures from source files, achieving 50-70% token reduction while preserving code architecture.
 
-- **Pipeline Integration (PRD 5.10):** Core pipeline as a Go library, clean stdout mode, structured exit codes, JSON metadata output, environment variable overrides
-- **Review Pipelines (PRD 5.11.1):** `harvx brief` (stable repo context) and `harvx review-slice` (PR-specific context with bounded neighborhood)
-- **Session Bootstrap (PRD 5.11.2):** Claude Code hooks integration, lean CLAUDE.md template, `harvx slice --path` for on-demand context, MCP server
-- **Workspace Manifest (PRD 5.11.3):** `.harvx/workspace.toml` config, `harvx workspace` command for multi-repo context
-- **Output Quality (PRD 5.11.4):** `--assert-include` coverage checks, `harvx verify` faithfulness verification, golden questions harness
-
-**Total Tasks:** 13
-**Estimated Total Effort:** 116-180 hours (15-23 person-days)
-**Critical Path Length:** 6 tasks (T-066 -> T-067 -> T-068 -> T-070 -> T-071 -> T-078)
+**Total Tasks:** 9
+**Estimated Total Effort:** 75-100 person-hours (approximately 10-13 person-days)
+**Critical Path Length:** 5 tasks (T-042 -> T-043 -> T-044/T-045/T-046 -> T-049 -> T-050)
 
 ## Task Summary
 
-| ID    | Title                                      | Priority     | Effort           | Dependencies                    | Status |
-|-------|--------------------------------------------|--------------|------------------|---------------------------------|--------|
-| T-066 | Core Pipeline as Go Library API            | Must Have    | Large (14-20hrs) | T-003, T-016, T-017            | --     |
-| T-067 | Stdout Mode, Exit Codes, Non-Interactive   | Must Have    | Medium (6-10hrs) | T-066, T-002                   | --     |
-| T-068 | JSON Preview Output and Metadata Sidecar   | Must Have    | Medium (8-12hrs) | T-066, T-067                   | --     |
-| T-069 | Assert-Include and Environment Overrides   | Must Have    | Medium (6-10hrs) | T-066, T-017                   | --     |
-| T-070 | Repo Brief Command (`harvx brief`)         | Must Have    | Large (14-20hrs) | T-066, T-067, T-068            | --     |
-| T-071 | Review Slice Command (`harvx review-slice`)| Must Have    | Large (16-24hrs) | T-066, T-070, T-069            | --     |
-| T-072 | Module Slice Command (`harvx slice`)       | Must Have    | Medium (8-12hrs) | T-066, T-071                   | --     |
-| T-073 | Workspace Manifest and Command             | Must Have    | Medium (10-14hrs)| T-016, T-066, T-067            | --     |
-| T-074 | Session Bootstrap Docs and Hooks           | Must Have    | Medium (6-10hrs) | T-070, T-072, T-073            | --     |
-| T-075 | Verify Command (Faithfulness Checking)     | Must Have    | Medium (8-12hrs) | T-066, T-070                   | --     |
-| T-076 | Golden Questions Harness                   | Should Have  | Medium (8-12hrs) | T-070, T-071                   | --     |
-| T-077 | MCP Server v1.1 (`harvx mcp serve`)       | Nice to Have | Large (16-24hrs) | T-066, T-070, T-071, T-072     | --     |
-| T-078 | Workflow Integration Tests (E2E)           | Must Have    | Medium (10-14hrs)| T-067-T-073, T-075             | --     |
+| ID | Title | Priority | Effort | Dependencies | Status |
+|----|-------|----------|--------|--------------|--------|
+| [T-042](T-042-wazero-wasm-runtime-setup.md) | Wazero WASM Runtime Setup and Grammar Embedding | Must Have | Medium (8-12hrs) | None | -- |
+| [T-043](T-043-language-detection-compressor-interface.md) | Language Detection and LanguageCompressor Interface | Must Have | Small (3-4hrs) | None | -- |
+| [T-044](T-044-tier1-ts-js-compressor.md) | Tier 1 Compressor: TypeScript and JavaScript | Must Have | Large (16-20hrs) | T-042, T-043 | -- |
+| [T-045](T-045-tier1-go-compressor.md) | Tier 1 Compressor: Go | Must Have | Medium (8-12hrs) | T-042, T-043 | -- |
+| [T-046](T-046-tier1-python-rust-compressor.md) | Tier 1 Compressor: Python and Rust | Must Have | Large (14-18hrs) | T-042, T-043 | -- |
+| [T-047](T-047-tier2-java-c-cpp-compressor.md) | Tier 2 Compressor: Java, C, and C++ | Should Have | Medium (10-14hrs) | T-042, T-043 | -- |
+| [T-048](T-048-tier2-config-compressor-fallback.md) | Tier 2 Config Compressors (JSON/YAML/TOML) and Fallback | Must Have | Small (4-6hrs) | T-043 | -- |
+| [T-049](T-049-compression-orchestrator.md) | Compression Orchestrator and Pipeline Integration | Must Have | Medium (10-14hrs) | T-042, T-043, T-044, T-045, T-046, T-048 | -- |
+| [T-050](T-050-regex-fallback-compression-tests.md) | Regex Heuristic Fallback and E2E Compression Tests | Must Have | Medium (10-14hrs) | T-043, T-049 | -- |
 
 ## Dependency Graph
 
 ```mermaid
 graph TD
-    T003[T-003: Central Data Types] --> T066
-    T016[T-016: Config Types] --> T066
-    T017[T-017: Config Merging] --> T066
-    T002[T-002: Cobra CLI Setup] --> T067
-    
-    T066[T-066: Pipeline Library API] --> T067[T-067: Stdout/Exit Codes]
-    T066 --> T069[T-069: Assert-Include & Env Vars]
-    T017 --> T069
-    T067 --> T068[T-068: JSON Preview & Metadata]
-    T066 --> T068
-    
-    T066 --> T070[T-070: Brief Command]
-    T067 --> T070
-    T068 --> T070
-    
-    T070 --> T071[T-071: Review Slice Command]
-    T066 --> T071
-    T069 --> T071
-    
-    T071 --> T072[T-072: Slice Command]
-    T066 --> T072
-    
-    T016 --> T073[T-073: Workspace Command]
-    T066 --> T073
-    T067 --> T073
-    
-    T070 --> T074[T-074: Session Bootstrap Docs]
-    T072 --> T074
-    T073 --> T074
-    
-    T066 --> T075[T-075: Verify Command]
-    T070 --> T075
-    
-    T070 --> T076[T-076: Golden Questions Harness]
-    T071 --> T076
-    
-    T066 --> T077[T-077: MCP Server v1.1]
-    T070 --> T077
-    T071 --> T077
-    T072 --> T077
-    
-    T067 --> T078[T-078: Integration Tests]
-    T068 --> T078
-    T069 --> T078
-    T070 --> T078
-    T071 --> T078
-    T072 --> T078
-    T073 --> T078
-    T075 --> T078
+    T042["T-042: Wazero WASM Runtime<br/>& Grammar Embedding"]
+    T043["T-043: Language Detection<br/>& Compressor Interface"]
+    T044["T-044: Tier 1: TypeScript<br/>& JavaScript"]
+    T045["T-045: Tier 1: Go"]
+    T046["T-046: Tier 1: Python<br/>& Rust"]
+    T047["T-047: Tier 2: Java,<br/>C, C++"]
+    T048["T-048: Tier 2: JSON/YAML/TOML<br/>& Fallback"]
+    T049["T-049: Compression<br/>Orchestrator"]
+    T050["T-050: Regex Fallback<br/>& E2E Tests"]
+
+    T042 --> T044
+    T042 --> T045
+    T042 --> T046
+    T042 --> T047
+    T042 --> T049
+
+    T043 --> T044
+    T043 --> T045
+    T043 --> T046
+    T043 --> T047
+    T043 --> T048
+    T043 --> T049
+    T043 --> T050
+
+    T044 --> T049
+    T045 --> T049
+    T046 --> T049
+    T048 --> T049
+
+    T049 --> T050
+
+    style T042 fill:#e6f3ff,stroke:#0066cc
+    style T043 fill:#e6f3ff,stroke:#0066cc
+    style T044 fill:#fff3e6,stroke:#cc6600
+    style T045 fill:#fff3e6,stroke:#cc6600
+    style T046 fill:#fff3e6,stroke:#cc6600
+    style T047 fill:#f0f0f0,stroke:#666666
+    style T049 fill:#e6ffe6,stroke:#006600
+    style T050 fill:#e6ffe6,stroke:#006600
 ```
 
 ## Suggested Implementation Order
 
-### Wave 1: Foundation (Days 1-3)
+### Week 1: Foundation (Parallel Tracks)
 
-These tasks have no intra-phase dependencies and establish the architecture for all workflow commands.
+**Track A: WASM Infrastructure**
+- [ ] **T-042**: Wazero WASM Runtime Setup and Grammar Embedding
+  - Set up wazero runtime
+  - Download/build tree-sitter grammar .wasm files for all languages
+  - Implement GrammarRegistry with lazy loading and caching
+  - Evaluate malivvan/tree-sitter vs direct wazero approach
 
-- [ ] **T-066**: Core Pipeline as Go Library API -- the architectural keystone
-- [ ] **T-069**: Assert-Include and Environment Overrides -- can be built in parallel with T-067
+**Track B: Interface Design (can start immediately, no WASM dependency)**
+- [ ] **T-043**: Language Detection and LanguageCompressor Interface
+  - Define LanguageCompressor interface, Signature types, CompressedOutput
+  - Implement extension-to-language mapping
+  - Build CompressorRegistry
 
-### Wave 2: Pipeline Behavior (Days 3-5)
+**Track C: Config Compressors (can start after T-043)**
+- [ ] **T-048**: Tier 2 Config Compressors and Fallback
+  - JSON, YAML, TOML compressors (no WASM needed)
+  - Fallback compressor for unsupported languages
 
-These depend on T-066 and establish the CLI behavior patterns used by all commands.
+### Week 2: Tier 1 Language Compressors (Parallel after T-042 + T-043)
 
-- [ ] **T-067**: Stdout Mode, Exit Codes, Non-Interactive Defaults
-- [ ] **T-068**: JSON Preview Output and Metadata Sidecar
+These three tasks can be implemented in parallel by different developers:
 
-### Wave 3: Core Workflow Commands (Days 5-10)
+- [ ] **T-044**: TypeScript and JavaScript Compressor (most complex, start first)
+- [ ] **T-045**: Go Compressor
+- [ ] **T-046**: Python and Rust Compressor
 
-The heart of Phase 5 -- the workflow commands that orchestrate the pipeline.
+### Week 3: Integration and Hardening
 
-- [ ] **T-070**: Repo Brief Command (depends on T-066, T-067, T-068)
-- [ ] **T-073**: Workspace Manifest and Command (can be built in parallel with T-070)
-- [ ] **T-071**: Review Slice Command (depends on T-070 for shared patterns)
-- [ ] **T-072**: Module Slice Command (depends on T-071 for neighbor logic)
-
-### Wave 4: Quality and Documentation (Days 10-13)
-
-Verification, documentation, and quality evaluation tooling.
-
-- [ ] **T-075**: Verify Command (depends on T-066, T-070)
-- [ ] **T-074**: Session Bootstrap Documentation (depends on T-070, T-072, T-073)
-- [ ] **T-076**: Golden Questions Harness (Should Have; depends on T-070, T-071)
-
-### Wave 5: Integration and MCP (Days 13-16)
-
-End-to-end validation and the optional MCP server.
-
-- [ ] **T-078**: Workflow Integration Tests (depends on all Must Have tasks)
-- [ ] **T-077**: MCP Server v1.1 (Nice to Have; depends on T-066, T-070, T-071, T-072)
+- [ ] **T-047**: Tier 2 Java, C, C++ Compressors (can overlap with Week 2)
+- [ ] **T-049**: Compression Orchestrator and Pipeline Integration
+  - Wire everything together
+  - Integrate with CLI flags and profile settings
+  - Parallel compression with errgroup
+  - Timeout enforcement
+- [ ] **T-050**: Regex Heuristic Fallback and E2E Tests
+  - Build regex fallback engine
+  - Comprehensive golden test suite
+  - Faithfulness verification
+  - Performance benchmarks
 
 ## Technical Stack Summary
 
 | Component | Technology | Version | Purpose |
 |-----------|-----------|---------|---------|
-| CLI Framework | spf13/cobra | latest | Subcommand registration (brief, review-slice, slice, workspace, verify, mcp) |
-| Config Parsing | BurntSushi/toml | v1.5.0 | Workspace.toml and golden-questions.toml parsing |
-| Config Merging | knadh/koanf/v2 | latest | HARVX_ environment variable overrides |
-| Glob Matching | bmatcuk/doublestar/v4 | latest | Assert-include pattern matching |
-| Content Hashing | cespare/xxhash | latest | XXH3 for deterministic content hashes |
-| JSON Output | encoding/json (stdlib) | Go 1.24 | Preview --json, metadata sidecar, MCP responses |
-| Git Operations | os/exec (stdlib) | Go 1.24 | Shell out to git for diff, ref validation |
-| Logging | log/slog (stdlib) | Go 1.24 | Structured logging to stderr |
-| MCP Protocol | modelcontextprotocol/go-sdk | latest | MCP server implementation (T-077 only) |
-| Testing | stretchr/testify | latest | Assertions and test suites |
+| WASM Runtime | tetratelabs/wazero | ^1.8.0 | Pure Go WebAssembly execution |
+| (Alternative) | malivvan/tree-sitter | latest | Higher-level tree-sitter+wazero wrapper |
+| Tree-sitter Grammars | Various tree-sitter repos | Latest WASM builds | Language-specific parsers |
+| JSON Parsing | encoding/json (stdlib) | Go stdlib | JSON config compression |
+| TOML Parsing | BurntSushi/toml | Latest | TOML config compression |
+| Concurrency | x/sync/errgroup | Latest | Parallel compression |
+| Embedding | embed (stdlib) | Go 1.16+ | Grammar WASM embedding |
 
 ## Research Findings
 
-### Claude Code Hooks (SessionStart)
-- Claude Code supports `SessionStart` hooks that run on every new or resumed session
-- Hook stdout is injected as conversation context automatically
-- Hook config goes in `.claude/hooks.json` (project) or `~/.claude/hooks.json` (global)
-- Performance is critical: hooks should complete in under 5 seconds
-- Reference: https://code.claude.com/docs/en/hooks
+### Key Technical Decisions
 
-### MCP Go SDK
-- The official Go SDK is `github.com/modelcontextprotocol/go-sdk` (maintained with Google)
-- Current specification version: 2025-11-25
-- Uses typed tool handlers with generic `mcp.AddTool()` function
-- Stdio transport is standard for local MCP servers
-- Community alternative `mark3labs/mcp-go` also implements the full spec
-- Reference: https://github.com/modelcontextprotocol/go-sdk
+1. **wazero vs. malivvan/tree-sitter**: The `malivvan/tree-sitter` library (published January 2025) wraps tree-sitter WASM with wazero and provides a higher-level Go API. It eliminates the need to write low-level WASM interop code. However, it is pre-release software. The implementation should evaluate both approaches and document the decision in an ADR.
 
-### Key Architecture Decision
-The PRD mandates designing the core pipeline as a Go library (not just CLI glue). This is the critical enabler for Phase 5: all workflow commands (brief, review-slice, slice, workspace) and the MCP server must invoke the same pipeline engine programmatically. T-066 establishes this architecture.
+2. **Grammar WASM file sizes**: Each grammar .wasm file embeds the full tree-sitter runtime (~250KB overhead). Total estimated embedding size for all languages: 3-8MB. This is within the PRD's 20MB binary target.
 
-## PRD Section Mapping
+3. **Lazy grammar loading**: Grammar modules are compiled on first use, not at startup. This means the WASM overhead is only incurred when `--compress` is active and only for languages actually encountered.
 
-| PRD Section | Tasks |
-|-------------|-------|
-| 5.10 Multi-Agent Pipeline Integration | T-066, T-067, T-068, T-069 |
-| 5.11.1 Review Pipelines | T-070, T-071 |
-| 5.11.2 Session Bootstrap | T-072, T-074, T-077 |
-| 5.11.3 Workspace Manifest | T-073 |
-| 5.11.4 Output Quality Evaluation | T-069, T-075, T-076, T-068 |
+4. **Regex fallback**: The PRD explicitly calls for a regex heuristic fallback if WASM proves inadequate. The implementation uses an `auto` engine mode that tries WASM first and falls back to regex per-file.
+
+5. **Config file compression**: JSON, YAML, and TOML compressors do NOT use tree-sitter WASM. They use native Go parsing for simplicity and reliability.
+
+### Deviations from PRD
+
+- None. All PRD requirements for Section 5.6 are covered across T-042 through T-050.
+
+### Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| malivvan/tree-sitter API instability | Medium | Medium | Pin to specific tag; maintain ability to switch to direct wazero |
+| WASM grammar parsing gaps | Medium | Low | Regex fallback (T-050) handles gaps; golden tests catch regressions |
+| Binary size exceeds 20MB target | Low | Low | Compress .wasm files before embedding; evaluate lazy-loading from companion archive |
+| TypeScript grammar complexity | Medium | Medium | TypeScript compressor (T-044) allocated the most effort; has comprehensive edge case coverage |
+| Parallel compression race conditions | Low | High | Stateless compressor design; atomic stat counters; comprehensive concurrency tests |
+
+## Pipeline Integration Notes
+
+The compression subsystem integrates into the Harvx processing pipeline between content loading/redaction and token counting. Key integration points with other phases:
+
+- **Phase 1 (Foundation)**: Depends on `FileDescriptor` type from `internal/pipeline/types.go`
+- **Phase 1 (Foundation)**: Depends on `errgroup` concurrency pattern from file discovery
+- **Phase 2 (Intelligence)**: Token counting runs on compressed content (not original)
+- **Phase 2 (Intelligence)**: Budget filtering happens BEFORE compression (lazy loading)
+- **Phase 3 (Security)**: Redaction runs BEFORE compression (compressed output is already redacted)
 
 ---
 
-_Generated: 2026-02-16_
+_Last updated: 2026-02-16_

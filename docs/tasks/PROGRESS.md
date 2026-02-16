@@ -134,7 +134,7 @@ _None currently_
 
 ## Not Started Tasks
 
-### Phase 2: Intelligence -- Profiles (T-016 to T-025)
+### Phase 2: Profiles (T-016 to T-025)
 
 - **Status:** Not Started
 - **Tasks:** 10 (8 Must Have, 2 Should Have)
@@ -160,7 +160,7 @@ _None currently_
 
 ---
 
-### Phase 2: Intelligence -- Relevance & Tokens (T-026 to T-033)
+### Phase 3: Relevance & Tokens (T-026 to T-033)
 
 - **Status:** Not Started
 - **Tasks:** 8 (6 Must Have, 2 Should Have)
@@ -181,7 +181,7 @@ _None currently_
 
 ---
 
-### Phase 3: Security (T-034 to T-041)
+### Phase 4: Security (T-034 to T-041)
 
 - **Status:** Not Started
 - **Tasks:** 8 (8 Must Have)
@@ -205,7 +205,7 @@ _None currently_
 
 ---
 
-### Phase 3: Compression (T-042 to T-050)
+### Phase 5: Compression (T-042 to T-050)
 
 - **Status:** Not Started
 - **Tasks:** 9 (8 Must Have, 1 Should Have)
@@ -227,7 +227,7 @@ _None currently_
 
 ---
 
-### Phase 4: Output & Rendering (T-051 to T-058)
+### Phase 6: Output & Rendering (T-051 to T-058)
 
 - **Status:** Not Started
 - **Tasks:** 8 (6 Must Have, 2 Should Have)
@@ -251,7 +251,7 @@ _None currently_
 
 ---
 
-### Phase 4: State & Diff (T-059 to T-065)
+### Phase 7: State & Diff (T-059 to T-065)
 
 - **Status:** Not Started
 - **Tasks:** 7 (all Should Have)
@@ -271,7 +271,7 @@ _None currently_
 
 ---
 
-### Phase 5: Workflows (T-066 to T-078)
+### Phase 8: Workflows (T-066 to T-078)
 
 - **Status:** Not Started
 - **Tasks:** 13 (11 Must Have, 1 Should Have, 1 Nice to Have)
@@ -300,7 +300,7 @@ _None currently_
 
 ---
 
-### Phase 5: Interactive TUI (T-079 to T-087)
+### Phase 9: Interactive TUI (T-079 to T-087)
 
 - **Status:** Not Started
 - **Tasks:** 9 (9 Must Have)
@@ -325,7 +325,7 @@ _None currently_
 
 ---
 
-### Phase 6: Polish & Distribution (T-088 to T-094)
+### Phase 10: Polish & Distribution (T-088 to T-095)
 
 - **Status:** Not Started
 - **Tasks:** 7 (7 Must Have)
@@ -363,9 +363,9 @@ _None currently_
 
 Detailed phase-level documentation with Mermaid dependency graphs, implementation order, and tech stack summaries:
 - [PHASE-2-INDEX.md](PHASE-2-INDEX.md) -- Profile System
-- [PHASE-3-SECURITY-INDEX.md](PHASE-3-SECURITY-INDEX.md) -- Secret Redaction
-- [PHASE-3-COMPRESSION-INDEX.md](PHASE-3-COMPRESSION-INDEX.md) -- Tree-Sitter Compression
-- [PHASE-5-INDEX.md](PHASE-5-INDEX.md) -- Workflows
+- [PHASE-4-INDEX.md](PHASE-4-INDEX.md) -- Secret Redaction
+- [PHASE-5-INDEX.md](PHASE-5-INDEX.md) -- Tree-Sitter Compression
+- [PHASE-8-INDEX.md](PHASE-8-INDEX.md) -- Workflows
 
 
 _Last updated: 2026-02-16 (Phase 1 complete)_
