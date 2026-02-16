@@ -21,6 +21,8 @@ go.work.sum
 
 # ─── Harvx State ────────────────────────────────────
 .harvx/
+.review-workspace/
+reports/review/
 
 # ─── OS ───────────────────────────────────────────────
 .DS_Store
