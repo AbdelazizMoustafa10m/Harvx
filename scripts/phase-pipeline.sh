@@ -5,6 +5,8 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+ALL_PHASE_IDS=(1 2a 2b 3a 3b 4a 4b 5a 5b 6)
+
 DEFAULT_IMPL_AGENT="codex"
 DEFAULT_REVIEW_MODE="all"
 DEFAULT_REVIEW_AGENT="codex"
@@ -14,6 +16,10 @@ DEFAULT_FIX_AGENT="codex"
 DEFAULT_BASE_BRANCH="main"
 
 PHASE_ID=""
+PHASE_MODE="single"   # single | all | from
+FROM_PHASE=""
+PHASES_TO_RUN=()
+CHAIN_BASE=""          # Tracks previous phase branch for multi-phase chaining
 IMPL_AGENT="$DEFAULT_IMPL_AGENT"
 REVIEW_MODE="$DEFAULT_REVIEW_MODE"
 REVIEW_AGENT="$DEFAULT_REVIEW_AGENT"
@@ -48,10 +54,14 @@ Harvx Phase Pipeline Orchestrator
 
 Usage:
   ./scripts/phase-pipeline.sh --phase <id> [options]
+  ./scripts/phase-pipeline.sh --phase all [options]
+  ./scripts/phase-pipeline.sh --from-phase <id> [options]
   ./scripts/phase-pipeline.sh --interactive
 
-Required:
-  --phase <id>                 Phase id (1, 2a, 2b, 3a, 3b, 4a, 4b, 5a, 5b, 6)
+Required (one of):
+  --phase <id>                 Single phase (1, 2a, 2b, 3a, 3b, 4a, 4b, 5a, 5b, 6)
+  --phase all                  Run all phases sequentially (1 → 6)
+  --from-phase <id>            Start from this phase, run sequentially through phase 6
                                If omitted in an interactive terminal, a wizard is shown.
 
 Options:
@@ -70,6 +80,13 @@ Options:
   --skip-pr                    Skip PR creation
   --dry-run                    Print planned commands without executing
   -h, --help                   Show help
+
+Examples:
+  ./scripts/phase-pipeline.sh --phase 1                  # Run phase 1 only
+  ./scripts/phase-pipeline.sh --phase all                # Run all phases (1 → 6)
+  ./scripts/phase-pipeline.sh --from-phase 3a            # Run phases 3a → 3b → ... → 6
+  ./scripts/phase-pipeline.sh --phase all --skip-pr      # All phases, no PRs
+  ./scripts/phase-pipeline.sh --from-phase 2a --dry-run  # Preview from phase 2a
 USAGE
 }
 
@@ -114,11 +131,45 @@ capture_cmd() {
     return $rc
 }
 
-validate_phase() {
-    case "$PHASE_ID" in
+validate_single_phase() {
+    local phase="$1"
+    case "$phase" in
         1|2a|2b|3a|3b|4a|4b|5a|5b|6) return 0 ;;
-        *) die "Invalid --phase '$PHASE_ID'. Expected one of: 1,2a,2b,3a,3b,4a,4b,5a,5b,6" ;;
+        *) return 1 ;;
     esac
+}
+
+resolve_phases_to_run() {
+    if [[ -n "$FROM_PHASE" && -n "$PHASE_ID" ]]; then
+        die "Cannot use both --phase and --from-phase"
+    fi
+
+    if [[ -n "$FROM_PHASE" ]]; then
+        if ! validate_single_phase "$FROM_PHASE"; then
+            die "Invalid --from-phase '$FROM_PHASE'. Expected one of: ${ALL_PHASE_IDS[*]}"
+        fi
+        PHASE_MODE="from"
+        local collecting=false
+        for p in "${ALL_PHASE_IDS[@]}"; do
+            if [[ "$p" == "$FROM_PHASE" ]]; then collecting=true; fi
+            if [[ "$collecting" == "true" ]]; then
+                PHASES_TO_RUN+=("$p")
+            fi
+        done
+    elif [[ "$PHASE_ID" == "all" ]]; then
+        PHASE_MODE="all"
+        PHASES_TO_RUN=("${ALL_PHASE_IDS[@]}")
+    else
+        if ! validate_single_phase "$PHASE_ID"; then
+            die "Invalid --phase '$PHASE_ID'. Expected one of: ${ALL_PHASE_IDS[*]}, all"
+        fi
+        PHASE_MODE="single"
+        PHASES_TO_RUN=("$PHASE_ID")
+    fi
+
+    if [[ ${#PHASES_TO_RUN[@]} -eq 0 ]]; then
+        die "No phases resolved to run"
+    fi
 }
 
 phase_slug() {
@@ -283,20 +334,22 @@ prompt_text() {
 prompt_phase_id() {
     local out_var="$1"
     local default_phase="${2:-1}"
-    local phase_ids=(1 2a 2b 3a 3b 4a 4b 5a 5b 6)
 
     while true; do
         echo ""
         echo "Choose phase:"
         local i
-        for i in "${!phase_ids[@]}"; do
-            local phase_id="${phase_ids[$i]}"
+        for i in "${!ALL_PHASE_IDS[@]}"; do
+            local phase_id="${ALL_PHASE_IDS[$i]}"
             local marker=""
             if [[ "$phase_id" == "$default_phase" ]]; then
                 marker=" (default)"
             fi
-            printf "  %d) %s - %s%s\n" "$((i + 1))" "$phase_id" "$(phase_title "$phase_id")" "$marker"
+            printf "  %2d) %-3s - %s%s\n" "$((i + 1))" "$phase_id" "$(phase_title "$phase_id")" "$marker"
         done
+        echo "  ──────────────────────────────────────────"
+        printf "  %2d) all  - Run all phases sequentially (1 → 6)\n" "$((${#ALL_PHASE_IDS[@]} + 1))"
+        printf "  %2d) from - Start from a specific phase through 6\n" "$((${#ALL_PHASE_IDS[@]} + 2))"
 
         local input
         input="$(read_required_input "Select phase [${default_phase}]: ")"
@@ -305,13 +358,77 @@ prompt_phase_id() {
             return 0
         fi
 
-        if [[ "$input" =~ ^[0-9]+$ ]] && (( input >= 1 && input <= ${#phase_ids[@]} )); then
-            printf -v "$out_var" '%s' "${phase_ids[$((input - 1))]}"
+        # "all" by name or number
+        if [[ "$input" == "all" || "$input" == "$((${#ALL_PHASE_IDS[@]} + 1))" ]]; then
+            printf -v "$out_var" '%s' "all"
+            return 0
+        fi
+
+        # "from" by name or number
+        if [[ "$input" == "from" || "$input" == "$((${#ALL_PHASE_IDS[@]} + 2))" ]]; then
+            printf -v "$out_var" '%s' "from"
+            return 0
+        fi
+
+        # Number selection for individual phase
+        if [[ "$input" =~ ^[0-9]+$ ]] && (( input >= 1 && input <= ${#ALL_PHASE_IDS[@]} )); then
+            printf -v "$out_var" '%s' "${ALL_PHASE_IDS[$((input - 1))]}"
+            return 0
+        fi
+
+        # Direct phase ID
+        local phase_id
+        for phase_id in "${ALL_PHASE_IDS[@]}"; do
+            if [[ "$input" == "$phase_id" ]]; then
+                printf -v "$out_var" '%s' "$phase_id"
+                return 0
+            fi
+        done
+
+        echo "Invalid phase: $input"
+    done
+}
+
+prompt_from_phase() {
+    local out_var="$1"
+    local default_phase="${2:-1}"
+
+    while true; do
+        echo ""
+        echo "Choose starting phase (will run sequentially through phase 6):"
+        local i
+        for i in "${!ALL_PHASE_IDS[@]}"; do
+            local phase_id="${ALL_PHASE_IDS[$i]}"
+            # Count remaining phases from this one
+            local count=0
+            local collecting=false
+            for p in "${ALL_PHASE_IDS[@]}"; do
+                if [[ "$p" == "$phase_id" ]]; then collecting=true; fi
+                if [[ "$collecting" == "true" ]]; then count=$((count + 1)); fi
+            done
+            local marker=""
+            if [[ "$phase_id" == "$default_phase" ]]; then
+                marker=" (default)"
+            fi
+            printf "  %2d) %-3s - %s (%d phase%s)%s\n" \
+                "$((i + 1))" "$phase_id" "$(phase_title "$phase_id")" \
+                "$count" "$(if [[ $count -gt 1 ]]; then echo "s"; fi)" "$marker"
+        done
+
+        local input
+        input="$(read_required_input "Select starting phase [${default_phase}]: ")"
+        if [[ -z "$input" ]]; then
+            printf -v "$out_var" '%s' "$default_phase"
+            return 0
+        fi
+
+        if [[ "$input" =~ ^[0-9]+$ ]] && (( input >= 1 && input <= ${#ALL_PHASE_IDS[@]} )); then
+            printf -v "$out_var" '%s' "${ALL_PHASE_IDS[$((input - 1))]}"
             return 0
         fi
 
         local phase_id
-        for phase_id in "${phase_ids[@]}"; do
+        for phase_id in "${ALL_PHASE_IDS[@]}"; do
             if [[ "$input" == "$phase_id" ]]; then
                 printf -v "$out_var" '%s' "$phase_id"
                 return 0
@@ -328,6 +445,13 @@ run_interactive_wizard() {
     echo "==========================="
 
     prompt_phase_id PHASE_ID "${PHASE_ID:-1}"
+
+    # Handle "from" selection: prompt for starting phase
+    if [[ "$PHASE_ID" == "from" ]]; then
+        prompt_from_phase FROM_PHASE "${FROM_PHASE:-1}"
+        PHASE_ID=""  # Clear so resolve_phases_to_run uses FROM_PHASE
+    fi
+
     prompt_choice IMPL_AGENT "Select implementation agent:" "$IMPL_AGENT" "codex" "claude"
     prompt_choice REVIEW_MODE "Select review mode:" "$REVIEW_MODE" "all" "agent" "none"
 
@@ -376,9 +500,19 @@ run_interactive_wizard() {
 
     prompt_yes_no DRY_RUN "Run in dry-run mode?" "$DRY_RUN"
 
+    # Resolve phases early so we can display them in the summary
+    resolve_phases_to_run
+
     echo ""
     echo "Selected configuration:"
-    echo "  phase=$PHASE_ID ($(phase_title "$PHASE_ID"))"
+    if [[ ${#PHASES_TO_RUN[@]} -gt 1 ]]; then
+        local phases_display
+        phases_display="$(printf '%s → ' "${PHASES_TO_RUN[@]}")"
+        phases_display="${phases_display% → }"
+        echo "  phases=$phases_display (${#PHASES_TO_RUN[@]} phases)"
+    else
+        echo "  phase=${PHASES_TO_RUN[0]} ($(phase_title "${PHASES_TO_RUN[0]}"))"
+    fi
     echo "  impl_agent=$IMPL_AGENT"
     echo "  review_mode=$REVIEW_MODE"
     echo "  review_agent=$REVIEW_AGENT"
@@ -489,7 +623,11 @@ ensure_clean_tree_before_bootstrap() {
 }
 
 preflight() {
-    validate_phase
+    for phase in "${PHASES_TO_RUN[@]}"; do
+        if ! validate_single_phase "$phase"; then
+            die "Invalid phase '$phase' in run list. Expected one of: ${ALL_PHASE_IDS[*]}"
+        fi
+    done
 
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         die "Must run inside a git repository"
@@ -564,8 +702,13 @@ bootstrap_branch() {
     local branch
     branch="phase/${PHASE_ID}-${slug}"
 
+    # In multi-phase mode, chain from the previous phase's branch
     local base_ref
-    base_ref="$(resolve_base_ref)"
+    if [[ -n "$CHAIN_BASE" ]]; then
+        base_ref="$CHAIN_BASE"
+    else
+        base_ref="$(resolve_base_ref)"
+    fi
 
     log "Bootstrapping branch '$branch' from '$base_ref'"
 
@@ -807,6 +950,10 @@ parse_args() {
                 PHASE_ID="$2"
                 shift 2
                 ;;
+            --from-phase)
+                FROM_PHASE="$2"
+                shift 2
+                ;;
             --impl-agent)
                 IMPL_AGENT="$2"
                 shift 2
@@ -881,37 +1028,93 @@ resolve_interactive_mode() {
         return 0
     fi
 
-    if [[ -z "$PHASE_ID" ]] && is_interactive_terminal; then
+    if [[ -z "$PHASE_ID" && -z "$FROM_PHASE" ]] && is_interactive_terminal; then
         INTERACTIVE="true"
         run_interactive_wizard
         return 0
     fi
 
-    if [[ -z "$PHASE_ID" ]]; then
-        die "--phase is required (or run with --interactive)"
+    if [[ -z "$PHASE_ID" && -z "$FROM_PHASE" ]]; then
+        die "--phase or --from-phase is required (or run with --interactive)"
     fi
+}
+
+run_single_phase() {
+    local phase="$1"
+
+    # Reset per-phase state
+    PHASE_ID="$phase"
+    IMPLEMENT_STATUS="not-run"
+    REVIEW_VERDICT="NOT_RUN"
+    REVIEW_CYCLES=0
+    FIX_CYCLES=0
+    PR_STATUS="not-run"
+    EXPECTED_BRANCH=""
+
+    init_artifacts
+
+    log "Starting phase $PHASE_ID: $(phase_title "$PHASE_ID")"
+
+    ensure_clean_tree_before_bootstrap
+    bootstrap_branch
+    run_implementation
+    run_review_and_fix_cycles
+    run_pr_creation
+
+    log "Phase $PHASE_ID complete: impl=$IMPLEMENT_STATUS review=$REVIEW_VERDICT pr=$PR_STATUS"
+
+    if is_blocking_verdict "$REVIEW_VERDICT"; then
+        log "WARNING: Phase $PHASE_ID ended with blocking review verdict: $REVIEW_VERDICT"
+    fi
+
+    # Update chain base so next phase branches from this phase's branch
+    CHAIN_BASE="$EXPECTED_BRANCH"
 }
 
 main() {
     parse_args "$@"
     resolve_interactive_mode
 
-    preflight
-    init_artifacts
+    # resolve_phases_to_run is called in the wizard for interactive mode;
+    # for non-interactive, call it here
+    if [[ "$INTERACTIVE" != "true" ]]; then
+        resolve_phases_to_run
+    fi
 
-    log "Starting phase pipeline: phase=$PHASE_ID base=$BASE_BRANCH dry_run=$DRY_RUN"
+    preflight
+
+    local total=${#PHASES_TO_RUN[@]}
+    if [[ $total -gt 1 ]]; then
+        local phases_display
+        phases_display="$(printf '%s → ' "${PHASES_TO_RUN[@]}")"
+        phases_display="${phases_display% → }"
+        log "Starting multi-phase pipeline: $phases_display ($total phases) base=$BASE_BRANCH dry_run=$DRY_RUN"
+    else
+        log "Starting phase pipeline: phase=${PHASES_TO_RUN[0]} base=$BASE_BRANCH dry_run=$DRY_RUN"
+    fi
 
     sync_base_branch
-    bootstrap_branch
-    run_implementation
-    run_review_and_fix_cycles
-    run_pr_creation
 
-    log "Pipeline complete. Metadata: $METADATA_FILE"
-    log "Artifacts: $RUN_DIR"
+    local idx=0
+    CHAIN_BASE=""
 
-    if is_blocking_verdict "$REVIEW_VERDICT"; then
-        log "Pipeline ended with blocking review verdict: $REVIEW_VERDICT"
+    for phase in "${PHASES_TO_RUN[@]}"; do
+        idx=$((idx + 1))
+
+        if [[ $total -gt 1 ]]; then
+            log "═══════════════════════════════════════════════════"
+            log "Phase $idx/$total: $phase - $(phase_title "$phase")"
+            log "═══════════════════════════════════════════════════"
+        fi
+
+        run_single_phase "$phase"
+    done
+
+    if [[ $total -gt 1 ]]; then
+        log "All $total phases complete."
+    else
+        log "Pipeline complete. Metadata: $METADATA_FILE"
+        log "Artifacts: $RUN_DIR"
     fi
 }
 

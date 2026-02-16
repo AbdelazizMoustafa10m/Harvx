@@ -89,10 +89,12 @@ agent_bin() {
   esac
 }
 
+# Agent model defaults. Override via env vars:
+#   CLAUDE_REVIEW_MODEL, CODEX_REVIEW_MODEL, GEMINI_REVIEW_MODEL
 agent_model() {
   local agent="$1"
   case "$agent" in
-    claude) echo "${CLAUDE_REVIEW_MODEL:-claude-opus-4-1}" ;;
+    claude) echo "${CLAUDE_REVIEW_MODEL:-claude-opus-4-6}" ;;
     codex) echo "${CODEX_REVIEW_MODEL:-gpt-5-codex}" ;;
     gemini) echo "${GEMINI_REVIEW_MODEL:-gemini-2.5-pro}" ;;
     *) return 1 ;;
@@ -107,6 +109,21 @@ assert_tool() {
   fi
   log_error "$tool not found"
   return 1
+}
+
+check_jq_version() {
+  local jq_version
+  jq_version="$(jq --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+  if [[ -z "$jq_version" ]]; then
+    log_warn "Could not determine jq version"
+    return 0
+  fi
+  local major minor
+  major="${jq_version%%.*}"
+  minor="${jq_version##*.}"
+  if (( major < 1 || (major == 1 && minor < 6) )); then
+    log_warn "jq $jq_version detected; consolidation requires jq >= 1.6 (todateiso8601)"
+  fi
 }
 
 resolve_base_ref() {
@@ -927,7 +944,7 @@ run_consolidation() {
     | ($sorted | map(select(.severity == "high")) | length) as $high_count
     | {
         schema_version: "1.0",
-        generated_at: (now | todateiso8601),
+        generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")),
         summary: (if ($sorted | length) == 0 then "No actionable findings across all executed agents and passes." else "Consolidated findings from Harvx multi-agent review." end),
         verdict: (
           if $critical_count > 0 or $high_count >= 3 then "REQUEST_CHANGES"

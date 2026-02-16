@@ -182,7 +182,7 @@ run_fixer_agent() {
 run_verification() {
   local verification_log="$1"
 
-  local commands=(
+  local -a commands=(
     "go build ./cmd/harvx/"
     "go vet ./..."
     "go test ./..."
@@ -192,7 +192,10 @@ run_verification() {
   local cmd
   for cmd in "${commands[@]}"; do
     log_info "Verify: $cmd"
-    if ! (cd "$PROJECT_ROOT" && eval "$cmd") >> "$verification_log" 2>&1; then
+    # Split command string into array for safe execution (no eval)
+    local -a cmd_parts
+    read -ra cmd_parts <<< "$cmd"
+    if ! (cd "$PROJECT_ROOT" && "${cmd_parts[@]}") >> "$verification_log" 2>&1; then
       echo "RALPH_ERROR: verification failed: $cmd"
       return 1
     fi

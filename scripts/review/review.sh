@@ -134,6 +134,8 @@ preflight() {
 
   if ! assert_tool jq; then
     errors=$((errors + 1))
+  else
+    check_jq_version
   fi
 
   if command -v node >/dev/null 2>&1; then

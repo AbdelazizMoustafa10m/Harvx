@@ -128,12 +128,14 @@ preflight() {
         HEAD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
     fi
 
-    if ! git show-ref --verify --quiet "refs/heads/$HEAD_BRANCH"; then
-        die "Head branch '$HEAD_BRANCH' not found locally"
-    fi
+    if [[ "$DRY_RUN" != "true" ]]; then
+        if ! git show-ref --verify --quiet "refs/heads/$HEAD_BRANCH"; then
+            die "Head branch '$HEAD_BRANCH' not found locally"
+        fi
 
-    if ! resolve_base_ref >/dev/null; then
-        die "Could not resolve base branch '$BASE_BRANCH' locally or at origin/$BASE_BRANCH"
+        if ! resolve_base_ref >/dev/null; then
+            die "Could not resolve base branch '$BASE_BRANCH' locally or at origin/$BASE_BRANCH"
+        fi
     fi
 
     if [[ "$DRY_RUN" != "true" ]]; then
@@ -240,6 +242,43 @@ create_pr() {
 main() {
     parse_args "$@"
     preflight
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        # In dry-run, branches may not exist (multi-phase dry-run).
+        # Use BASE_BRANCH as-is for rendering.
+        local base_ref="$BASE_BRANCH"
+        TEMP_BODY_FILE="$(mktemp "${TMPDIR:-/tmp}/harvx-pr-body-XXXXXX.md")"
+
+        local template="$PROJECT_ROOT/.github/PULL_REQUEST_TEMPLATE.md"
+        if [[ -f "$template" ]]; then
+            cp "$template" "$TEMP_BODY_FILE"
+        else
+            : > "$TEMP_BODY_FILE"
+        fi
+
+        cat >> "$TEMP_BODY_FILE" <<EOF_BODY
+
+## Automation Metadata
+
+- Phase ID: ${PHASE_ID}
+- Review Verdict: ${REVIEW_VERDICT}
+- Base Branch: ${BASE_BRANCH}
+- Base Ref Used: ${base_ref}
+- Head Branch: ${HEAD_BRANCH}
+- Generated At (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+## Verification Summary
+
+${VERIFICATION_SUMMARY}
+
+## Commits in Scope
+
+(dry-run: commit list unavailable)
+EOF_BODY
+        persist_artifact_metadata
+        create_pr
+        return 0
+    fi
 
     local base_ref
     base_ref="$(resolve_base_ref)"

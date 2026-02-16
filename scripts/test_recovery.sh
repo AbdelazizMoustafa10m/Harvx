@@ -142,9 +142,10 @@ log() {
     echo "[TEST] $msg" >> "$LOG_FILE"
 }
 
-# Source only the functions (not main) by extracting them
+# Source only the functions (not main) by extracting them.
+# Functions live in ralph-lib.sh (shared library), not in the per-agent scripts.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RALPH_SCRIPT="$SCRIPT_DIR/ralph_claude.sh"
+RALPH_SCRIPT="$SCRIPT_DIR/ralph-lib.sh"
 
 if [[ ! -f "$RALPH_SCRIPT" ]]; then
     echo "ERROR: Cannot find $RALPH_SCRIPT"
@@ -156,12 +157,25 @@ fi
 # But the script has set -euo pipefail and main "$@" at bottom.
 # Instead, we'll extract individual functions using sed.
 
-# Helper: extract a bash function by name from a file
+# Helper: extract a bash function by name from a file.
+# Uses brace-counting so nested { } pairs (if/for/awk blocks) are handled
+# correctly instead of relying on a bare "^}$" terminator.
 extract_function() {
     local file="$1"
     local func_name="$2"
-    # Extract from "^func_name() {" to the matching closing "^}"
-    awk "/^${func_name}\\(\\)/{found=1} found{print; if(/^}$/){found=0}}" "$file"
+    awk -v fname="$func_name" '
+        BEGIN { found=0; depth=0 }
+        !found && $0 ~ "^"fname"\\(\\)" { found=1 }
+        found {
+            for (i=1; i<=length($0); i++) {
+                c = substr($0,i,1)
+                if (c == "{") depth++
+                else if (c == "}") depth--
+            }
+            print
+            if (depth == 0 && found) { found=0 }
+        }
+    ' "$file"
 }
 
 # Extract and eval each function we need to test
@@ -328,7 +342,76 @@ else
     fail_test "Expected 1800-1830, got $result"
 fi
 
-# --- Test Group 4: is_tree_dirty ---
+# --- Test Group 4: Function Extraction ---
+echo ""
+echo "--- Function Extraction ---"
+
+begin_test "extract_function: handles nested braces correctly"
+temp_func_file=$(mktemp /tmp/ralph-test-func-XXXXXX.sh)
+cat > "$temp_func_file" <<'FUNC_EOF'
+simple_func() {
+    if [[ true ]]; then
+        echo "nested"
+    fi
+    local x=$(echo "y" | awk '{print $1}')
+}
+
+other_func() {
+    echo "other"
+}
+FUNC_EOF
+result=$(extract_function "$temp_func_file" "simple_func")
+rm -f "$temp_func_file"
+# Verify we got simple_func but not other_func
+if echo "$result" | grep -q "nested" && ! echo "$result" | grep -q "other"; then
+    pass_test
+else
+    fail_test "extract_function didn't correctly extract nested function"
+fi
+
+begin_test "extract_function: does not bleed into subsequent function"
+temp_func_file=$(mktemp /tmp/ralph-test-func2-XXXXXX.sh)
+cat > "$temp_func_file" <<'FUNC_EOF'
+first_func() {
+    for i in 1 2 3; do
+        if [[ $i -gt 1 ]]; then
+            echo "deep nesting with { braces }"
+        fi
+    done
+}
+
+second_func() {
+    echo "should not appear"
+}
+FUNC_EOF
+result=$(extract_function "$temp_func_file" "first_func")
+rm -f "$temp_func_file"
+if echo "$result" | grep -q "deep nesting" && ! echo "$result" | grep -q "should not appear"; then
+    pass_test
+else
+    fail_test "extract_function bled into second_func"
+fi
+
+begin_test "extract_function: extracts second function correctly"
+temp_func_file=$(mktemp /tmp/ralph-test-func3-XXXXXX.sh)
+cat > "$temp_func_file" <<'FUNC_EOF'
+alpha() {
+    echo "alpha body"
+}
+
+beta() {
+    echo "beta body"
+}
+FUNC_EOF
+result=$(extract_function "$temp_func_file" "beta")
+rm -f "$temp_func_file"
+if echo "$result" | grep -q "beta body" && ! echo "$result" | grep -q "alpha body"; then
+    pass_test
+else
+    fail_test "extract_function didn't isolate beta correctly"
+fi
+
+# --- Test Group 5: is_tree_dirty ---
 echo ""
 echo "--- Working Tree State Detection ---"
 
@@ -364,7 +447,7 @@ if assert_contains "$result" "new/untracked" "should mention untracked"; then
     pass_test
 fi
 
-# --- Test Group 5: Commit Recovery ---
+# --- Test Group 6: Commit Recovery ---
 echo ""
 echo "--- Commit Recovery (progress + no commit) ---"
 
@@ -400,7 +483,7 @@ if assert_eq "0" "$rc" "should return 0 on clean tree"; then
     pass_test
 fi
 
-# --- Test Group 6: Stash Recovery ---
+# --- Test Group 7: Stash Recovery ---
 echo ""
 echo "--- Stash Recovery (mid-task interrupt) ---"
 
@@ -446,7 +529,7 @@ else
     fail_test "partial.go not found after stash pop"
 fi
 
-# --- Test Group 7: Dirty Tree Recovery (pre-iteration) ---
+# --- Test Group 8: Dirty Tree Recovery (pre-iteration) ---
 echo ""
 echo "--- Pre-Iteration Dirty Tree Recovery ---"
 
@@ -506,7 +589,7 @@ else
     fail_test "Tree still dirty when last_task_id is empty"
 fi
 
-# --- Test Group 8: End-to-End Rate-Limit + Stash Scenario ---
+# --- Test Group 9: End-to-End Rate-Limit + Stash Scenario ---
 echo ""
 echo "--- End-to-End: Rate-Limit + Stash ---"
 
