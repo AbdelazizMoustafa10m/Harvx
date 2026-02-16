@@ -47,7 +47,7 @@ SLEEP_BETWEEN_ITERATIONS=5
 COOLDOWN_AFTER_ERROR=30
 
 # Rate-limit handling
-DEFAULT_MAX_LIMIT_WAITS=2
+DEFAULT_MAX_LIMIT_WAITS=3
 RATE_LIMIT_BUFFER_SECONDS=120  # 2 minute safety buffer after parsed reset time
 BACKOFF_SCHEDULE=(120 300 900 1800)  # 2m, 5m, 15m, 30m
 MAX_RATE_LIMIT_WAIT_SECONDS=21600  # 6 hours -- cap on parsed wait time
@@ -637,8 +637,13 @@ get_backoff_seconds() {
 # Outputs: capped wait_seconds
 cap_wait_seconds() {
     local wait_seconds="$1"
+    if [[ ! "$wait_seconds" =~ ^[0-9]+$ ]]; then
+        echo ""
+        return 1
+    fi
+
     if [[ "$wait_seconds" -gt "$MAX_RATE_LIMIT_WAIT_SECONDS" ]]; then
-        log "RATE_LIMIT: Parsed wait time ${wait_seconds}s exceeds cap of ${MAX_RATE_LIMIT_WAIT_SECONDS}s. Using cap."
+        log "RATE_LIMIT: Parsed wait time ${wait_seconds}s exceeds cap of ${MAX_RATE_LIMIT_WAIT_SECONDS}s. Using cap." >&2
         echo "$MAX_RATE_LIMIT_WAIT_SECONDS"
     else
         echo "$wait_seconds"
@@ -702,11 +707,16 @@ compute_rate_limit_wait() {
 
     if [[ -n "$wait_seconds" ]] && [[ "$wait_seconds" -gt 0 ]] 2>/dev/null; then
         wait_seconds=$((wait_seconds + RATE_LIMIT_BUFFER_SECONDS))
-        wait_seconds=$(cap_wait_seconds "$wait_seconds")
-        log "RATE_LIMIT: Parsed reset time. Will wait ${wait_seconds}s (includes ${RATE_LIMIT_BUFFER_SECONDS}s buffer)."
+        wait_seconds=$(cap_wait_seconds "$wait_seconds") || wait_seconds=""
+        if [[ -n "$wait_seconds" ]] && [[ "$wait_seconds" -gt 0 ]] 2>/dev/null; then
+            log "RATE_LIMIT: Parsed reset time. Will wait ${wait_seconds}s (includes ${RATE_LIMIT_BUFFER_SECONDS}s buffer)." >&2
+        else
+            wait_seconds=$(get_backoff_seconds "$rate_limit_waits")
+            log "RATE_LIMIT: Parsed reset time was invalid after normalization. Using backoff: ${wait_seconds}s." >&2
+        fi
     else
         wait_seconds=$(get_backoff_seconds "$rate_limit_waits")
-        log "RATE_LIMIT: Could not parse reset time. Using backoff: ${wait_seconds}s."
+        log "RATE_LIMIT: Could not parse reset time. Using backoff: ${wait_seconds}s." >&2
     fi
 
     echo "$wait_seconds"
@@ -1063,6 +1073,10 @@ run_ralph_loop() {
 
             local wait_seconds
             wait_seconds=$(compute_rate_limit_wait "$output" "$rate_limit_waits")
+            if [[ ! "$wait_seconds" =~ ^[0-9]+$ ]] || [[ "$wait_seconds" -le 0 ]]; then
+                wait_seconds=$(get_backoff_seconds "$rate_limit_waits")
+                log "WARNING: Invalid rate-limit wait duration; using fallback backoff of ${wait_seconds}s."
+            fi
 
             # Stash any partial work from the interrupted iteration so next attempt starts clean
             if is_tree_dirty; then

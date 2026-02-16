@@ -116,6 +116,7 @@ STATE
     # Backoff schedule for get_backoff_seconds
     BACKOFF_SCHEDULE=(120 300 900 1800)
     RATE_LIMIT_BUFFER_SECONDS=120
+    MAX_RATE_LIMIT_WAIT_SECONDS=21600
 }
 
 reset_sandbox() {
@@ -197,6 +198,8 @@ eval "$(extract_function "$RALPH_SCRIPT" is_rate_limited)"
 eval "$(extract_function "$RALPH_SCRIPT" parse_claude_reset_time)"
 eval "$(extract_function "$RALPH_SCRIPT" parse_codex_reset_time)"
 eval "$(extract_function "$RALPH_SCRIPT" get_backoff_seconds)"
+eval "$(extract_function "$RALPH_SCRIPT" cap_wait_seconds)"
+eval "$(extract_function "$RALPH_SCRIPT" compute_rate_limit_wait)"
 eval "$(extract_function "$RALPH_SCRIPT" is_tree_dirty)"
 eval "$(extract_function "$RALPH_SCRIPT" get_dirty_summary)"
 eval "$(extract_function "$RALPH_SCRIPT" run_commit_recovery)"
@@ -337,6 +340,21 @@ begin_test "parse_claude_reset_time: no match returns empty"
 result=$(parse_claude_reset_time "normal output" 2>/dev/null) || true
 if assert_eq "" "$result" "should return empty"; then
     pass_test
+fi
+
+begin_test "compute_rate_limit_wait: logger stdout does not corrupt numeric return"
+original_log_def="$(declare -f log)"
+log() {
+    local msg="$1"
+    echo "  23:01:42  [...] $msg"
+    echo "[TEST] $msg" >> "$LOG_FILE"
+}
+result=$(compute_rate_limit_wait "Rate limited, try again in 99 hours" 0)
+eval "$original_log_def"
+if [[ "$result" =~ ^[0-9]+$ ]] && [[ "$result" -eq 21600 ]]; then
+    pass_test
+else
+    fail_test "Expected numeric capped wait of 21600, got '$result'"
 fi
 
 # --- Test Group 3: Exponential Backoff ---
