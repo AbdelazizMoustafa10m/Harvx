@@ -1,82 +1,111 @@
-# Makefile for Harvx — Go CLI tool
-# Use: make help | make ci | make build | make run ARGS='generate .'
+# ─── Harvx Makefile ──────────────────────────────────────────────────────────
+# Primary developer interface for building, testing, and linting Harvx.
+# Use: make help | make all | make build | make run ARGS='generate .'
 
-BINARY_NAME := harvx
-MAIN_PKG    := ./cmd/harvx
-BIN_DIR     := bin
-DIST_DIR    := dist
+# ─── Build Metadata ──────────────────────────────────────────────────────────
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
+DATE       ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+GO_VERSION ?= $(shell go version)
 
-# Version metadata (injected via ldflags)
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
-DATE    := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+# ─── Paths ───────────────────────────────────────────────────────────────────
+BINARY     := harvx
+BIN_DIR    := bin
+DIST_DIR   := dist
+CMD_DIR    := ./cmd/harvx
+
+# ─── Linker Flags ────────────────────────────────────────────────────────────
+# Target package for ldflags injection. Will change to
+# github.com/harvx/harvx/internal/buildinfo once T-006 is done.
+LDFLAGS_PKG := main
 
 LDFLAGS := -s -w \
-	-X github.com/harvx/harvx/internal/cli.version=$(VERSION) \
-	-X github.com/harvx/harvx/internal/cli.commit=$(COMMIT) \
-	-X github.com/harvx/harvx/internal/cli.date=$(DATE)
+	-X '$(LDFLAGS_PKG).version=$(VERSION)' \
+	-X '$(LDFLAGS_PKG).commit=$(COMMIT)' \
+	-X '$(LDFLAGS_PKG).date=$(DATE)' \
+	-X '$(LDFLAGS_PKG).goVersion=$(GO_VERSION)'
+
+# ─── Phony Targets ───────────────────────────────────────────────────────────
+.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot help
 
 .DEFAULT_GOAL := help
 
-# ─── Help ─────────────────────────────────────────────
+# ─── Default ─────────────────────────────────────────────────────────────────
+all: fmt vet lint test build ## Run fmt, vet, lint, test, build in sequence
 
-.PHONY: help
-help: ## Show available targets
-	@echo "Harvx Makefile"
-	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
-	@echo ""
+# ─── Build ───────────────────────────────────────────────────────────────────
+build: ## Compile harvx into bin/harvx with version metadata
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(CMD_DIR)
+	@echo "Built $(BIN_DIR)/$(BINARY) ($(VERSION))"
 
-# ─── Quality ──────────────────────────────────────────
+run: build ## Build and run harvx (pass ARGS='...' for arguments)
+	@./$(BIN_DIR)/$(BINARY) $(ARGS)
 
-.PHONY: fmt
-fmt: ## Auto-format all Go files
+# ─── Test ────────────────────────────────────────────────────────────────────
+test: ## Run all tests with race detection
+	go test -race -count=1 ./...
+
+test-verbose: ## Run all tests with verbose output
+	go test -race -count=1 -v ./...
+
+test-cover: ## Run tests with coverage and generate HTML report
+	@mkdir -p $(BIN_DIR)
+	go test -race -count=1 -coverprofile=$(BIN_DIR)/coverage.out ./...
+	go tool cover -html=$(BIN_DIR)/coverage.out -o $(BIN_DIR)/coverage.html
+	@echo "Coverage report: $(BIN_DIR)/coverage.html"
+
+# ─── Lint ────────────────────────────────────────────────────────────────────
+lint: ## Run golangci-lint (install separately if not found)
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		echo "golangci-lint not found. Install it with:"; \
+		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+		echo "Or see: https://golangci-lint.run/welcome/install/"; \
+		exit 1; \
+	fi
+
+# ─── Format ──────────────────────────────────────────────────────────────────
+fmt: ## Format Go source files with gofmt and goimports
 	gofmt -w .
+	@if command -v goimports >/dev/null 2>&1; then \
+		goimports -w .; \
+	fi
 
-.PHONY: vet
+# ─── Vet ─────────────────────────────────────────────────────────────────────
 vet: ## Run go vet static analysis
 	go vet ./...
 
-.PHONY: test
-test: ## Run all tests with race detector
-	go test -race -count=1 ./...
-
-.PHONY: tidy
+# ─── Module ──────────────────────────────────────────────────────────────────
 tidy: ## Run go mod tidy
 	go mod tidy
 
-.PHONY: ci
-ci: ## Run full pipeline checks (fmt + vet + lint + tidy + test)
-	./run_pipeline_checks.sh --with-build
+# ─── Clean ───────────────────────────────────────────────────────────────────
+clean: ## Remove bin/ and dist/ directories and build artifacts
+	rm -rf $(BIN_DIR) $(DIST_DIR)
+	@echo "Cleaned build artifacts"
 
-# ─── Build ────────────────────────────────────────────
+# ─── Install ─────────────────────────────────────────────────────────────────
+install: ## Install harvx to $GOPATH/bin with version metadata
+	CGO_ENABLED=0 go install -ldflags "$(LDFLAGS)" $(CMD_DIR)
+	@echo "Installed harvx to $$(go env GOPATH)/bin/harvx"
 
-.PHONY: build
-build: ## Build binary to bin/harvx with version info
-	mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PKG)
-
-.PHONY: run
-run: ## Run the CLI (pass ARGS='...' for arguments)
-	go run -ldflags "$(LDFLAGS)" $(MAIN_PKG) $(ARGS)
-
-.PHONY: install
-install: ## Install harvx to $GOPATH/bin
-	CGO_ENABLED=0 go install -ldflags "$(LDFLAGS)" $(MAIN_PKG)
-
-# ─── Release ──────────────────────────────────────────
-
-.PHONY: snapshot
+# ─── Release ─────────────────────────────────────────────────────────────────
 snapshot: ## GoReleaser snapshot build (safe: no publish)
-	@if ! command -v goreleaser &>/dev/null; then \
+	@if ! command -v goreleaser >/dev/null 2>&1; then \
 		echo "goreleaser not installed. See: https://goreleaser.com/install/"; \
 		exit 1; \
 	fi
 	goreleaser release --snapshot --clean
 
-# ─── Cleanup ──────────────────────────────────────────
-
-.PHONY: clean
-clean: ## Remove build artifacts
-	rm -rf $(BIN_DIR) $(DIST_DIR)
+# ─── Help ────────────────────────────────────────────────────────────────────
+help: ## Show available targets with descriptions
+	@echo "Harvx Development Targets:"
+	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "Build metadata:"
+	@echo "  VERSION=$(VERSION)"
+	@echo "  COMMIT=$(COMMIT)"

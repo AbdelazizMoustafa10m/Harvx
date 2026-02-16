@@ -1,0 +1,31 @@
+# golangci-lint configuration for Harvx
+# See: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosimple
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  staticcheck:
+    checks:
+      - all
+
+issues:
+  exclude-dirs:
+    - testdata
+  max-issues-per-linter: 0
+  max-same-issues: 0

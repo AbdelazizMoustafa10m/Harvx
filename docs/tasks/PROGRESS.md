@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 1 |
+| Completed | 2 |
 | In Progress | 0 |
-| Not Started | 94 |
+| Not Started | 93 |
 
 ---
 
@@ -36,7 +36,7 @@
 | Task | Name | Priority | Effort | Status |
 |------|------|----------|--------|--------|
 | T-001 | Go Project Initialization & Directory Structure | Must Have | Small (2-4hrs) | Completed |
-| T-002 | Makefile Setup | Must Have | Small (2-4hrs) | Not Started |
+| T-002 | Makefile Setup | Must Have | Small (2-4hrs) | Completed |
 | T-003 | Central Data Types (FileDescriptor & Pipeline DTOs) | Must Have | Small (2-4hrs) | Not Started |
 | T-004 | Structured Logging with slog | Must Have | Small (2-4hrs) | Not Started |
 | T-005 | Cobra CLI Framework & Root Command | Must Have | Medium (6-8hrs) | Not Started |
@@ -311,6 +311,43 @@ _None currently_
 
 ---
 
+### T-002: Makefile Setup
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- Comprehensive Makefile with all standard targets: `build`, `run`, `test`, `test-verbose`, `test-cover`, `lint`, `fmt`, `vet`, `tidy`, `clean`, `install`, `snapshot`, `help`, `all`
+- Build-time metadata injection via `-ldflags` (version, commit, date, goVersion into `main` package)
+- `CGO_ENABLED=0` for pure Go cross-compilation
+- `golangci-lint` integration with helpful install message if not found
+- `.golangci.yml` configuration with sensible defaults (errcheck, staticcheck, unused, govet, ineffassign, gosimple)
+- Build metadata variables (`version`, `commit`, `date`, `goVersion`) added to `cmd/harvx/main.go`
+- Trivial test (`main_test.go`) verifying ldflags defaults are non-empty
+- `.PHONY` declarations for all non-file targets
+- `make help` lists all targets with descriptions and build metadata
+
+**Files created/modified:**
+
+- `Makefile` - Updated with all required targets and ldflags injection
+- `.golangci.yml` - New linter configuration
+- `cmd/harvx/main.go` - Added build-time ldflags variables
+- `cmd/harvx/main_test.go` - New test for build metadata defaults
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test -race ./...` - pass (1 test)
+- `go mod tidy` - pass (no drift)
+- `make build` - produces `bin/harvx` with ldflags embedded
+- `make test` - pass
+- `make help` - lists all 14 targets
+- `make clean` - removes bin/ directory
+
+---
+
 ## Notes
 
 ### Key Technical Decisions (from agent research)
@@ -332,4 +369,4 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
 
 ---
 
-_Last updated: 2026-02-16_
+_Last updated: 2026-02-16 (T-002)_
