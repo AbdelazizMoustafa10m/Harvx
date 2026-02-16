@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 0 |
+| Completed | 1 |
 | In Progress | 0 |
-| Not Started | 95 |
+| Not Started | 94 |
 
 ---
 
@@ -35,7 +35,7 @@
 
 | Task | Name | Priority | Effort | Status |
 |------|------|----------|--------|--------|
-| T-001 | Go Project Initialization & Directory Structure | Must Have | Small (2-4hrs) | Not Started |
+| T-001 | Go Project Initialization & Directory Structure | Must Have | Small (2-4hrs) | Completed |
 | T-002 | Makefile Setup | Must Have | Small (2-4hrs) | Not Started |
 | T-003 | Central Data Types (FileDescriptor & Pipeline DTOs) | Must Have | Small (2-4hrs) | Not Started |
 | T-004 | Structured Logging with slog | Must Have | Small (2-4hrs) | Not Started |
@@ -277,7 +277,37 @@ _None currently_
 
 ## Completed Tasks
 
-_None yet -- project starting fresh_
+### T-001: Go Project Initialization & Directory Structure
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- Go module initialized (`github.com/harvx/harvx`, Go 1.24)
+- Minimal entry point `cmd/harvx/main.go` that prints "harvx" and exits 0
+- Full directory structure with `.gitkeep` placeholders for all 13 `internal/` packages
+- Support directories: `grammars/`, `templates/`, 4 `testdata/` subdirectories
+- `.editorconfig` with tabs for Go, UTF-8, LF line endings
+- MIT `LICENSE` (2026 Harvx Contributors)
+- `README.md` with project description and "Under Development" badge
+
+**Files created/modified:**
+
+- `go.mod` - Module declaration
+- `cmd/harvx/main.go` - Entry point
+- `internal/{cli,config,discovery,relevance,tokenizer,security,compression,output,diff,workflows,tui,server,pipeline}/.gitkeep` - Package placeholders
+- `grammars/.gitkeep`, `templates/.gitkeep` - Support directories
+- `testdata/{sample-repo,secrets,monorepo,expected-output}/.gitkeep` - Test fixture directories
+- `.editorconfig` - Editor configuration
+- `LICENSE` - MIT license
+- `README.md` - Project readme
+- `.gitignore` - Added `*.wasm`, `.harvx/`, fixed `/harvx` path-rooted pattern
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
 
 ---
 

@@ -1,12 +1,12 @@
 # ─── Binaries ─────────────────────────────────────────
 bin/
 dist/
+/harvx
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-harvx
 
 # ─── Go ───────────────────────────────────────────────
 # Test binary, built with `go test -c`
@@ -15,6 +15,12 @@ harvx
 *.out
 # Go workspace file
 go.work.sum
+
+# ─── WASM Build Artifacts ────────────────────────────
+*.wasm
+
+# ─── Harvx State ────────────────────────────────────
+.harvx/
 
 # ─── OS ───────────────────────────────────────────────
 .DS_Store
