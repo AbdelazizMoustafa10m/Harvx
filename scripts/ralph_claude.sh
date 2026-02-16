@@ -38,6 +38,11 @@ DEFAULT_EFFORT="high"  # CLAUDE_CODE_EFFORT_LEVEL: low, medium, high
 SLEEP_BETWEEN_ITERATIONS=5
 COOLDOWN_AFTER_ERROR=30
 
+# Rate-limit handling
+DEFAULT_MAX_LIMIT_WAITS=2
+RATE_LIMIT_BUFFER_SECONDS=120  # 2 minute safety buffer after parsed reset time
+BACKOFF_SCHEDULE=(120 300 900 1800)  # 2m, 5m, 15m, 30m
+
 # =============================================================================
 # Phase Definitions
 # =============================================================================
@@ -261,6 +266,206 @@ print_model_banner() {
 }
 
 # =============================================================================
+# Rate-Limit Detection & Recovery
+# =============================================================================
+
+# Detect rate-limit messages in agent output.
+# Returns 0 (true) if rate limit detected, 1 (false) otherwise.
+is_rate_limited() {
+    local output="$1"
+    # Claude Code patterns
+    if echo "$output" | grep -qi "you've hit your limit"; then
+        return 0
+    fi
+    if echo "$output" | grep -qi "hit your usage limit"; then
+        return 0
+    fi
+    if echo "$output" | grep -qi "usage limit.*resets"; then
+        return 0
+    fi
+    if echo "$output" | grep -qi "rate limit"; then
+        return 0
+    fi
+    # Codex patterns (also check here for robustness)
+    if echo "$output" | grep -qiE "try again in.*(days|hours|minutes)"; then
+        return 0
+    fi
+    if echo "$output" | grep -qi "upgrade to pro"; then
+        return 0
+    fi
+    return 1
+}
+
+# Parse reset timestamp from Claude Code output.
+# Prints seconds until reset, or empty string if unparseable.
+# Matches patterns like "resets 7pm (Europe/Berlin)" or "resets 7pm".
+parse_claude_reset_time() {
+    local output="$1"
+
+    # Try "resets Xpm (Timezone)" first, then bare "resets Xpm"
+    local reset_match
+    reset_match=$(echo "$output" | grep -oiE 'resets [0-9]{1,2}(:[0-9]{2})?(am|pm) \([^)]+\)' | head -1)
+    if [[ -z "$reset_match" ]]; then
+        reset_match=$(echo "$output" | grep -oiE 'resets [0-9]{1,2}(:[0-9]{2})?(am|pm)' | head -1)
+    fi
+    if [[ -z "$reset_match" ]]; then
+        echo ""
+        return 1
+    fi
+
+    # Extract time portion and optional timezone
+    local time_str tz_str
+    time_str=$(echo "$reset_match" | grep -oiE '[0-9]{1,2}(:[0-9]{2})?(am|pm)')
+    tz_str=$(echo "$reset_match" | grep -oE '\([^)]+\)' | tr -d '()')
+
+    # Normalize time_str: ensure HH:MM format
+    local hour minute ampm
+    ampm=$(echo "$time_str" | grep -oiE '(am|pm)' | tr '[:upper:]' '[:lower:]')
+    local numeric_part
+    numeric_part=$(echo "$time_str" | sed -E 's/(am|pm)//i')
+
+    if echo "$numeric_part" | grep -q ':'; then
+        hour=$(echo "$numeric_part" | cut -d: -f1)
+        minute=$(echo "$numeric_part" | cut -d: -f2)
+    else
+        hour="$numeric_part"
+        minute="00"
+    fi
+
+    # Convert to 24-hour
+    hour=$((10#$hour))
+    if [[ "$ampm" == "pm" && $hour -ne 12 ]]; then
+        hour=$((hour + 12))
+    elif [[ "$ampm" == "am" && $hour -eq 12 ]]; then
+        hour=0
+    fi
+
+    # Build target time string for date command
+    local target_time
+    target_time=$(printf "%02d:%02d:00" "$hour" "$minute")
+
+    # Compute seconds until that time. Use TZ if available.
+    local now_epoch target_epoch
+    if [[ -n "$tz_str" ]]; then
+        now_epoch=$(TZ="$tz_str" date +%s 2>/dev/null || date +%s)
+        # macOS date: use -j -f
+        if date -j -f "%H:%M:%S" "$target_time" "+%s" &>/dev/null; then
+            target_epoch=$(TZ="$tz_str" date -j -f "%H:%M:%S" "$target_time" "+%s" 2>/dev/null || echo "")
+        else
+            # GNU date fallback
+            target_epoch=$(TZ="$tz_str" date -d "today $target_time" "+%s" 2>/dev/null || echo "")
+        fi
+    else
+        now_epoch=$(date +%s)
+        if date -j -f "%H:%M:%S" "$target_time" "+%s" &>/dev/null; then
+            target_epoch=$(date -j -f "%H:%M:%S" "$target_time" "+%s" 2>/dev/null || echo "")
+        else
+            target_epoch=$(date -d "today $target_time" "+%s" 2>/dev/null || echo "")
+        fi
+    fi
+
+    if [[ -z "$target_epoch" ]]; then
+        echo ""
+        return 1
+    fi
+
+    local diff=$((target_epoch - now_epoch))
+    # If diff is negative, the reset is tomorrow
+    if [[ $diff -lt 0 ]]; then
+        diff=$((diff + 86400))
+    fi
+
+    echo "$diff"
+    return 0
+}
+
+# Parse reset duration from Codex-style "try again in X days Y minutes" output.
+# Prints total seconds to wait, or empty string if unparseable.
+parse_codex_reset_time() {
+    local output="$1"
+    local total_seconds=0
+
+    local days_match
+    days_match=$(echo "$output" | grep -oE '[0-9]+ days?' | head -1 | grep -oE '[0-9]+')
+    if [[ -n "$days_match" ]]; then
+        total_seconds=$((total_seconds + days_match * 86400))
+    fi
+
+    local hours_match
+    hours_match=$(echo "$output" | grep -oE '[0-9]+ hours?' | head -1 | grep -oE '[0-9]+')
+    if [[ -n "$hours_match" ]]; then
+        total_seconds=$((total_seconds + hours_match * 3600))
+    fi
+
+    local minutes_match
+    minutes_match=$(echo "$output" | grep -oE '[0-9]+ minutes?' | head -1 | grep -oE '[0-9]+')
+    if [[ -n "$minutes_match" ]]; then
+        total_seconds=$((total_seconds + minutes_match * 60))
+    fi
+
+    if [[ $total_seconds -gt 0 ]]; then
+        echo "$total_seconds"
+        return 0
+    fi
+    echo ""
+    return 1
+}
+
+# Bounded exponential backoff with jitter.
+# Usage: get_backoff_seconds <attempt_index>
+# Schedule: 2m, 5m, 15m, 30m (capped), plus 0-30s random jitter.
+get_backoff_seconds() {
+    local attempt="$1"
+    local max_idx=$(( ${#BACKOFF_SCHEDULE[@]} - 1 ))
+    local idx=$attempt
+    if [[ $idx -gt $max_idx ]]; then
+        idx=$max_idx
+    fi
+    # Add jitter: random 0-30s
+    local jitter=$((RANDOM % 31))
+    echo $(( ${BACKOFF_SCHEDULE[$idx]} + jitter ))
+}
+
+# Wait for rate-limit reset with countdown display.
+# Arguments: wait_seconds, wait_cycle (0-based), max_cycles
+wait_for_rate_limit_reset() {
+    local wait_seconds="$1"
+    local wait_cycle="$2"
+    local max_cycles="$3"
+
+    if [[ $wait_cycle -ge $max_cycles ]]; then
+        log "ABORT: Hit rate limit $((wait_cycle + 1)) times (max: $max_cycles). Stopping."
+        exit 1
+    fi
+
+    local resume_time
+    # macOS date uses -v, GNU date uses -d
+    resume_time=$(date -v "+${wait_seconds}S" '+%H:%M:%S' 2>/dev/null \
+               || date -d "+${wait_seconds} seconds" '+%H:%M:%S' 2>/dev/null \
+               || echo "unknown")
+
+    log "RATE_LIMIT: Waiting ${wait_seconds}s (resuming ~${resume_time}). Wait cycle $((wait_cycle + 1))/$max_cycles"
+
+    # Countdown display every 60 seconds
+    local remaining=$wait_seconds
+    while [[ $remaining -gt 0 ]]; do
+        local display_mins=$((remaining / 60))
+        local display_secs=$((remaining % 60))
+        printf "\r  Rate limit cooldown: %dm %ds remaining...  " "$display_mins" "$display_secs"
+
+        local sleep_chunk=60
+        if [[ $remaining -lt 60 ]]; then
+            sleep_chunk=$remaining
+        fi
+        sleep "$sleep_chunk"
+        remaining=$((remaining - sleep_chunk))
+    done
+    printf "\r  Rate limit cooldown: complete!                    \n"
+
+    log "RATE_LIMIT: Cooldown finished. Resuming..."
+}
+
+# =============================================================================
 # Main Loop
 # =============================================================================
 
@@ -302,6 +507,8 @@ run_ralph_loop() {
     local iteration=0
     local tasks_completed=0
     local consecutive_errors=0
+    local rate_limit_waits=0
+    local max_limit_waits=${MAX_LIMIT_WAITS:-$DEFAULT_MAX_LIMIT_WAITS}
 
     while [[ $iteration -lt $max_iterations ]]; do
         iteration=$((iteration + 1))
@@ -369,6 +576,10 @@ run_ralph_loop() {
         fi
         claude_args+=" --allowedTools 'Edit,Write,Read,Glob,Grep,Task,WebSearch,WebFetch,Bash(go build*),Bash(go test*),Bash(go vet*),Bash(go mod*),Bash(go get*),Bash(go run*),Bash(go fmt*),Bash(go install*),Bash(go version*),Bash(go generate*),Bash(git add*),Bash(git commit*),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(mkdir*),Bash(ls*),Bash(make*),Bash(chmod*),Bash(curl *),Bash(wget *),Bash(golangci-lint*),Bash(./bin/*),Bash(./scripts/*)'"
 
+        # Record git HEAD before agent run (for commit-recovery detection)
+        local start_head
+        start_head=$(git rev-parse HEAD 2>/dev/null || echo "")
+
         # Run Claude Code with the prompt
         log "Spawning Claude Code (iteration $iteration)..."
         local start_time
@@ -389,6 +600,31 @@ run_ralph_loop() {
         echo "$output" >> "$LOG_FILE"
 
         log "Claude Code exited (code=$exit_code, duration=${duration}s)"
+
+        # --- Rate-limit detection (checked FIRST, before other signals) ---
+        if is_rate_limited "$output"; then
+            log "RATE_LIMIT: Rate limit detected in agent output."
+
+            local wait_seconds=""
+            # Try Claude-style reset time first, then Codex-style duration
+            wait_seconds=$(parse_claude_reset_time "$output" 2>/dev/null) || true
+            if [[ -z "$wait_seconds" ]]; then
+                wait_seconds=$(parse_codex_reset_time "$output" 2>/dev/null) || true
+            fi
+
+            if [[ -n "$wait_seconds" ]] && [[ "$wait_seconds" -gt 0 ]] 2>/dev/null; then
+                wait_seconds=$((wait_seconds + RATE_LIMIT_BUFFER_SECONDS))
+                log "RATE_LIMIT: Parsed reset time. Will wait ${wait_seconds}s (includes ${RATE_LIMIT_BUFFER_SECONDS}s buffer)."
+            else
+                wait_seconds=$(get_backoff_seconds "$rate_limit_waits")
+                log "RATE_LIMIT: Could not parse reset time. Using backoff: ${wait_seconds}s."
+            fi
+
+            wait_for_rate_limit_reset "$wait_seconds" "$rate_limit_waits" "$max_limit_waits"
+            rate_limit_waits=$((rate_limit_waits + 1))
+            # Do NOT increment consecutive_errors for rate limits
+            continue
+        fi
 
         # Check for completion signals
         if echo "$output" | grep -q "PHASE_COMPLETE"; then
@@ -421,14 +657,37 @@ run_ralph_loop() {
             break
         fi
 
-        # Check if a task was actually completed (look for PROGRESS.md update)
+        # Check if a task was actually completed (PROGRESS.md update + git commit)
+        local end_head
+        end_head=$(git rev-parse HEAD 2>/dev/null || echo "")
+
         local new_remaining
         new_remaining=$(count_remaining_tasks "$task_range")
+        local progress_made=false
+        local commit_made=false
+
         if [[ "$new_remaining" -lt "$remaining" ]]; then
+            progress_made=true
+        fi
+        if [[ -n "$start_head" && "$start_head" != "$end_head" ]]; then
+            commit_made=true
+        fi
+
+        if [[ "$progress_made" == "true" && "$commit_made" == "true" ]]; then
+            # Full completion: progress in PROGRESS.md and a git commit
             tasks_completed=$((tasks_completed + (remaining - new_remaining)))
             consecutive_errors=0
-            log "Task completed! (total completed this session: $tasks_completed)"
+            rate_limit_waits=0
+            log "Task completed with commit! (total completed this session: $tasks_completed)"
+        elif [[ "$progress_made" == "true" && "$commit_made" == "false" ]]; then
+            # Progress but no commit -- warn but count it
+            tasks_completed=$((tasks_completed + (remaining - new_remaining)))
+            consecutive_errors=0
+            rate_limit_waits=0
+            log "WARNING: Task marked complete in PROGRESS.md but no git commit was made."
+            log "  Consider committing manually or granting git commit permission."
         else
+            # No progress
             log "WARNING: No task completed in this iteration."
             consecutive_errors=$((consecutive_errors + 1))
 
@@ -592,20 +851,22 @@ Phases:
   all  Run all phases sequentially
 
 Options:
-  --phase <id>         Phase to run (required unless --task)
-  --task <T-XXX>       Run a single specific task
-  --max-iterations <n> Max loop iterations (default: 20)
-  --model <name>       Model to use (default: claude-opus-4-6)
-  --effort <level>     Thinking effort: low, medium, high (default: high)
-  --dry-run            Print generated prompt and model config without running
-  --status             Show task completion status and exit
-  -h, --help           Show this help
+  --phase <id>           Phase to run (required unless --task)
+  --task <T-XXX>         Run a single specific task
+  --max-iterations <n>   Max loop iterations (default: 20)
+  --max-limit-waits <n>  Max rate-limit wait cycles before abort (default: 2)
+  --model <name>         Model to use (default: claude-opus-4-6)
+  --effort <level>       Thinking effort: low, medium, high (default: high)
+  --dry-run              Print generated prompt and model config without running
+  --status               Show task completion status and exit
+  -h, --help             Show this help
 
 Examples:
   ./scripts/ralph_claude.sh --phase 1                        # Run all Phase 1 tasks
   ./scripts/ralph_claude.sh --phase 1 --model claude-sonnet-4-5-20250929  # Use Sonnet
   ./scripts/ralph_claude.sh --phase 1 --effort medium        # Lower thinking effort
   ./scripts/ralph_claude.sh --phase 1 --max-iterations 5     # Cap at 5 iterations
+  ./scripts/ralph_claude.sh --phase 1 --max-limit-waits 3    # Allow 3 rate-limit waits
   ./scripts/ralph_claude.sh --task T-003                      # Run single task T-003
   ./scripts/ralph_claude.sh --phase 1 --dry-run               # Preview the prompt
   ./scripts/ralph_claude.sh --phase all                       # Run all phases sequentially
@@ -698,6 +959,10 @@ main() {
                 ;;
             --max-iterations)
                 max_iterations="$2"
+                shift 2
+                ;;
+            --max-limit-waits)
+                export MAX_LIMIT_WAITS="$2"
                 shift 2
                 ;;
             --model)
