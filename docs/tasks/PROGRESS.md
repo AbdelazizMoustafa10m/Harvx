@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 14 |
+| Completed | 15 |
 | In Progress | 0 |
-| Not Started | 81 |
+| Not Started | 80 |
 
 ---
 
@@ -49,7 +49,7 @@
 | T-012 | Default Ignore Patterns & .harvxignore Support | Must Have | Medium (6-8hrs) | Completed |
 | T-013 | Binary File Detection & Large File Skipping | Must Have | Small (3-5hrs) | Completed |
 | T-014 | Extension/Pattern Filtering, --git-tracked-only & Symlinks | Must Have | Medium (8-12hrs) | Completed |
-| T-015 | Parallel File Discovery Engine (Walker with errgroup) | Must Have | Large (14-20hrs) | Not Started |
+| T-015 | Parallel File Discovery Engine (Walker with errgroup) | Must Have | Large (14-20hrs) | Completed |
 
 **Deliverable:** `harvx` produces correct Markdown output for any repository with default settings.
 
@@ -768,6 +768,47 @@ _None currently_
 - `go test ./...` - pass (all packages)
 - `go mod tidy` - pass (no drift)
 
+### T-015: Parallel File Discovery Engine (Walker with errgroup)
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `Walker` type in `internal/discovery/walker.go` with `Walk(ctx, WalkerConfig)` method implementing two-phase parallel file discovery
+- `WalkerConfig` struct accepting: Root, GitignoreMatcher, HarvxignoreMatcher, DefaultIgnorer, PatternFilter, GitTrackedOnly, SkipLargeFiles, Concurrency
+- Phase 1 (walking): `filepath.WalkDir` traverses the tree, applying composite ignore rules, binary detection, large file skipping, pattern filters, symlink handling, and git-tracked-only checks; skips directories early via `fs.SkipDir`
+- Phase 2 (content loading): `errgroup.WithContext()` with `SetLimit(cfg.Concurrency)` reads file contents in parallel with bounded concurrency; per-file read errors captured in `FileDescriptor.Error` (non-fatal)
+- Results sorted alphabetically by path for deterministic output
+- `context.Context` cancellation stops walk and all workers promptly
+- `readFile()` helper using `os.ReadFile` for simple, correct content loading
+- Representative `testdata/sample-repo/` fixture with: Go files, TypeScript files, `.gitignore` (ignores dist/, node_modules/), `.harvxignore` (ignores docs/internal/), build artifacts, and node_modules
+- Added `golang.org/x/sync v0.19.0` dependency for errgroup
+- 24 unit tests + 2 benchmarks covering: basic discovery, sorted output, content loading, .git skipping, .gitignore respect, .harvxignore respect, default ignorer, binary skipping, large file skipping, extension filter, include/exclude patterns, empty directory, non-existent directory, context cancellation/timeout, per-file read errors, discovery result stats, file descriptor fields, concurrency modes, sample-repo integration, multiple ignore sources, SkipLargeFiles=0 disabled
+
+**Files created/modified:**
+
+- `go.mod` / `go.sum` - Added `golang.org/x/sync v0.19.0`
+- `internal/discovery/walker.go` - Walker implementation with two-phase parallel discovery (new)
+- `internal/discovery/walker_test.go` - 24 test functions + 2 benchmarks (new)
+- `testdata/sample-repo/.gitignore` - Ignores dist/, node_modules/, *.log (new)
+- `testdata/sample-repo/.harvxignore` - Ignores docs/internal/ (new)
+- `testdata/sample-repo/main.go` - Sample Go file (new)
+- `testdata/sample-repo/README.md` - Sample markdown (new)
+- `testdata/sample-repo/src/app.ts` - Sample TypeScript (new)
+- `testdata/sample-repo/src/utils.ts` - Sample TypeScript (new)
+- `testdata/sample-repo/src/test.spec.ts` - Sample test file (new)
+- `testdata/sample-repo/dist/bundle.js` - Build artifact to be ignored (new)
+- `testdata/sample-repo/node_modules/pkg/index.js` - Dependency to be ignored (new)
+- `testdata/sample-repo/docs/internal/notes.md` - Doc to be harvxignored (new)
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (all packages, 24 walker tests)
+- `go mod tidy` - pass
+
 ---
 
 ## Notes
@@ -790,4 +831,4 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
 - [PHASE-5-INDEX.md](PHASE-5-INDEX.md) -- Workflows
 
 
-_Last updated: 2026-02-16 (T-014)_
+_Last updated: 2026-02-16 (T-015)_
