@@ -27,6 +27,7 @@ SKIP_REVIEW="false"
 SKIP_FIX="false"
 SKIP_PR="false"
 DRY_RUN="false"
+INTERACTIVE="false"
 
 EXPECTED_BRANCH=""
 RUN_ID=""
@@ -47,11 +48,14 @@ Harvx Phase Pipeline Orchestrator
 
 Usage:
   ./scripts/phase-pipeline.sh --phase <id> [options]
+  ./scripts/phase-pipeline.sh --interactive
 
 Required:
   --phase <id>                 Phase id (1, 2a, 2b, 3a, 3b, 4a, 4b, 5a, 5b, 6)
+                               If omitted in an interactive terminal, a wizard is shown.
 
 Options:
+  --interactive                Force interactive wizard prompts
   --impl-agent <claude|codex>
   --review <none|agent|all>
   --review-agent <claude|codex|gemini>
@@ -133,6 +137,269 @@ phase_slug() {
     esac
 }
 
+phase_title() {
+    case "$1" in
+        1) echo "Foundation" ;;
+        2a) echo "Intelligence: Config Profiles" ;;
+        2b) echo "Intelligence: Relevance + Tokenization" ;;
+        3a) echo "Security: Redaction + Entropy" ;;
+        3b) echo "Compression: Tree-sitter WASM" ;;
+        4a) echo "Output: Markdown/XML Rendering" ;;
+        4b) echo "State: Snapshots + Diffing" ;;
+        5a) echo "Workflows + MCP Server" ;;
+        5b) echo "TUI: Interactive Selector" ;;
+        6) echo "Polish + Distribution" ;;
+        *) echo "Unknown" ;;
+    esac
+}
+
+is_interactive_terminal() {
+    [[ -t 0 && -t 1 ]]
+}
+
+read_required_input() {
+    local prompt="$1"
+    local input=""
+    read -r -p "$prompt" input || die "Interactive input aborted"
+    printf '%s' "$input"
+}
+
+prompt_choice() {
+    local out_var="$1"
+    local prompt="$2"
+    local default_value="$3"
+    shift 3
+    local options=("$@")
+
+    while true; do
+        echo ""
+        echo "$prompt"
+        local i
+        for i in "${!options[@]}"; do
+            local value="${options[$i]}"
+            local marker=""
+            if [[ "$value" == "$default_value" ]]; then
+                marker=" (default)"
+            fi
+            printf "  %d) %s%s\n" "$((i + 1))" "$value" "$marker"
+        done
+
+        local input
+        input="$(read_required_input "Select option [${default_value}]: ")"
+        if [[ -z "$input" ]]; then
+            printf -v "$out_var" '%s' "$default_value"
+            return 0
+        fi
+
+        if [[ "$input" =~ ^[0-9]+$ ]] && (( input >= 1 && input <= ${#options[@]} )); then
+            printf -v "$out_var" '%s' "${options[$((input - 1))]}"
+            return 0
+        fi
+
+        local value
+        for value in "${options[@]}"; do
+            if [[ "$input" == "$value" ]]; then
+                printf -v "$out_var" '%s' "$value"
+                return 0
+            fi
+        done
+
+        echo "Invalid choice: $input"
+    done
+}
+
+prompt_yes_no() {
+    local out_var="$1"
+    local prompt="$2"
+    local default_bool="$3"
+    local default_hint="y/N"
+    if [[ "$default_bool" == "true" ]]; then
+        default_hint="Y/n"
+    fi
+
+    while true; do
+        local input
+        input="$(read_required_input "$prompt [$default_hint]: ")"
+
+        if [[ -z "$input" ]]; then
+            printf -v "$out_var" '%s' "$default_bool"
+            return 0
+        fi
+
+        local normalized
+        normalized="$(printf '%s' "$input" | tr '[:upper:]' '[:lower:]')"
+
+        case "$normalized" in
+            y|yes|true|1)
+                printf -v "$out_var" '%s' "true"
+                return 0
+                ;;
+            n|no|false|0)
+                printf -v "$out_var" '%s' "false"
+                return 0
+                ;;
+            *)
+                echo "Please answer yes or no."
+                ;;
+        esac
+    done
+}
+
+prompt_number() {
+    local out_var="$1"
+    local prompt="$2"
+    local default_number="$3"
+    local pattern="$4"
+
+    while true; do
+        local input
+        input="$(read_required_input "$prompt [$default_number]: ")"
+        if [[ -z "$input" ]]; then
+            input="$default_number"
+        fi
+
+        if [[ "$input" =~ $pattern ]]; then
+            printf -v "$out_var" '%s' "$input"
+            return 0
+        fi
+
+        echo "Invalid number: $input"
+    done
+}
+
+prompt_text() {
+    local out_var="$1"
+    local prompt="$2"
+    local default_value="$3"
+
+    local input
+    input="$(read_required_input "$prompt [$default_value]: ")"
+    if [[ -z "$input" ]]; then
+        input="$default_value"
+    fi
+    printf -v "$out_var" '%s' "$input"
+}
+
+prompt_phase_id() {
+    local out_var="$1"
+    local default_phase="${2:-1}"
+    local phase_ids=(1 2a 2b 3a 3b 4a 4b 5a 5b 6)
+
+    while true; do
+        echo ""
+        echo "Choose phase:"
+        local i
+        for i in "${!phase_ids[@]}"; do
+            local phase_id="${phase_ids[$i]}"
+            local marker=""
+            if [[ "$phase_id" == "$default_phase" ]]; then
+                marker=" (default)"
+            fi
+            printf "  %d) %s - %s%s\n" "$((i + 1))" "$phase_id" "$(phase_title "$phase_id")" "$marker"
+        done
+
+        local input
+        input="$(read_required_input "Select phase [${default_phase}]: ")"
+        if [[ -z "$input" ]]; then
+            printf -v "$out_var" '%s' "$default_phase"
+            return 0
+        fi
+
+        if [[ "$input" =~ ^[0-9]+$ ]] && (( input >= 1 && input <= ${#phase_ids[@]} )); then
+            printf -v "$out_var" '%s' "${phase_ids[$((input - 1))]}"
+            return 0
+        fi
+
+        local phase_id
+        for phase_id in "${phase_ids[@]}"; do
+            if [[ "$input" == "$phase_id" ]]; then
+                printf -v "$out_var" '%s' "$phase_id"
+                return 0
+            fi
+        done
+
+        echo "Invalid phase: $input"
+    done
+}
+
+run_interactive_wizard() {
+    echo ""
+    echo "Harvx Phase Pipeline Wizard"
+    echo "==========================="
+
+    prompt_phase_id PHASE_ID "${PHASE_ID:-1}"
+    prompt_choice IMPL_AGENT "Select implementation agent:" "$IMPL_AGENT" "codex" "claude"
+    prompt_choice REVIEW_MODE "Select review mode:" "$REVIEW_MODE" "all" "agent" "none"
+
+    if [[ "$REVIEW_MODE" == "agent" ]]; then
+        prompt_choice REVIEW_AGENT "Select review agent:" "$REVIEW_AGENT" "codex" "claude" "gemini"
+    fi
+
+    if [[ "$REVIEW_MODE" != "none" ]]; then
+        prompt_number REVIEW_CONCURRENCY "Set review concurrency:" "$REVIEW_CONCURRENCY" '^[1-9][0-9]*$'
+        prompt_number MAX_REVIEW_CYCLES "Set max review-fix cycles:" "$MAX_REVIEW_CYCLES" '^[0-9]+$'
+        prompt_choice FIX_AGENT "Select fix agent for blocking review findings:" "$FIX_AGENT" "codex" "claude" "gemini"
+    fi
+
+    prompt_text BASE_BRANCH "Base branch:" "$BASE_BRANCH"
+    prompt_yes_no SYNC_BASE "Sync base branch from origin before bootstrap?" "$SYNC_BASE"
+
+    local execution_profile="full"
+    prompt_choice execution_profile "Select execution profile:" "full" "full" "impl-only" "review-only" "custom"
+
+    case "$execution_profile" in
+        full)
+            SKIP_IMPLEMENT="false"
+            SKIP_REVIEW="false"
+            SKIP_FIX="false"
+            SKIP_PR="false"
+            ;;
+        impl-only)
+            SKIP_IMPLEMENT="false"
+            SKIP_REVIEW="true"
+            SKIP_FIX="true"
+            SKIP_PR="true"
+            ;;
+        review-only)
+            SKIP_IMPLEMENT="true"
+            SKIP_REVIEW="false"
+            SKIP_FIX="false"
+            SKIP_PR="false"
+            ;;
+        custom)
+            prompt_yes_no SKIP_IMPLEMENT "Skip implementation stage?" "$SKIP_IMPLEMENT"
+            prompt_yes_no SKIP_REVIEW "Skip review stage?" "$SKIP_REVIEW"
+            prompt_yes_no SKIP_FIX "Skip review-fix cycles?" "$SKIP_FIX"
+            prompt_yes_no SKIP_PR "Skip PR creation?" "$SKIP_PR"
+            ;;
+    esac
+
+    prompt_yes_no DRY_RUN "Run in dry-run mode?" "$DRY_RUN"
+
+    echo ""
+    echo "Selected configuration:"
+    echo "  phase=$PHASE_ID ($(phase_title "$PHASE_ID"))"
+    echo "  impl_agent=$IMPL_AGENT"
+    echo "  review_mode=$REVIEW_MODE"
+    echo "  review_agent=$REVIEW_AGENT"
+    echo "  review_concurrency=$REVIEW_CONCURRENCY"
+    echo "  max_review_cycles=$MAX_REVIEW_CYCLES"
+    echo "  fix_agent=$FIX_AGENT"
+    echo "  base=$BASE_BRANCH"
+    echo "  sync_base=$SYNC_BASE"
+    echo "  skip_implement=$SKIP_IMPLEMENT"
+    echo "  skip_review=$SKIP_REVIEW"
+    echo "  skip_fix=$SKIP_FIX"
+    echo "  skip_pr=$SKIP_PR"
+    echo "  dry_run=$DRY_RUN"
+
+    local proceed="false"
+    prompt_yes_no proceed "Proceed with this configuration?" "true"
+    if [[ "$proceed" != "true" ]]; then
+        die "Pipeline cancelled from interactive wizard"
+    fi
+}
+
 is_blocking_verdict() {
     local verdict="$1"
     [[ "$verdict" == "REQUEST_CHANGES" || "$verdict" == "NEEDS_FIXES" ]]
@@ -210,6 +477,10 @@ init_artifacts() {
 }
 
 ensure_clean_tree_before_bootstrap() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        return 0
+    fi
+
     local dirty
     dirty="$(git status --porcelain)"
     if [[ -n "$dirty" ]]; then
@@ -588,6 +859,10 @@ parse_args() {
                 DRY_RUN="true"
                 shift
                 ;;
+            --interactive)
+                INTERACTIVE="true"
+                shift
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -598,13 +873,28 @@ parse_args() {
         esac
     done
 
+}
+
+resolve_interactive_mode() {
+    if [[ "$INTERACTIVE" == "true" ]]; then
+        run_interactive_wizard
+        return 0
+    fi
+
+    if [[ -z "$PHASE_ID" ]] && is_interactive_terminal; then
+        INTERACTIVE="true"
+        run_interactive_wizard
+        return 0
+    fi
+
     if [[ -z "$PHASE_ID" ]]; then
-        die "--phase is required"
+        die "--phase is required (or run with --interactive)"
     fi
 }
 
 main() {
     parse_args "$@"
+    resolve_interactive_mode
 
     preflight
     init_artifacts
