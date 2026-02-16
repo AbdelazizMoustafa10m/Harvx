@@ -20,9 +20,10 @@ Implement the assigned task, verify it, update progress, and commit.
 ### Step 1: Read State + Task Specification
 
 1. Read `docs/tasks/PROGRESS.md`
-2. Read the task spec file for `{{TASK_ID}}`: `docs/tasks/{{TASK_ID}}-*.md`
-3. Understand acceptance criteria, dependencies, technical notes, files to create
-4. If the task references PRD sections, read `docs/prd/PRD-Harvx.md` for context
+2. Read `docs/tasks/task-state.conf`
+3. Read the task spec file for `{{TASK_ID}}`: `docs/tasks/{{TASK_ID}}-*.md`
+4. Understand acceptance criteria, dependencies, technical notes, files to create
+5. If the task references PRD sections, read `docs/prd/PRD-Harvx.md` for context
 
 ### Step 2: Implement
 
@@ -58,6 +59,16 @@ Update `docs/tasks/PROGRESS.md`:
    - Files created/modified
    - Verification status
 
+Update `docs/tasks/task-state.conf`:
+
+1. Set `{{TASK_ID}}` status to `completed`
+2. Stamp with today's date (`YYYY-MM-DD`)
+3. Use helper command for safe update:
+
+```bash
+./scripts/task-state.sh set {{TASK_ID}} completed
+```
+
 ### Step 5: Git Commit
 
 Stage and commit the changes.
@@ -81,8 +92,9 @@ Use conventional commit format. Scope should match the primary package (e.g., `d
 
 Before exiting, all of these must be true:
 1. `docs/tasks/PROGRESS.md` was updated for `{{TASK_ID}}`
-2. A commit was created that includes both task implementation changes and `PROGRESS.md`
-3. `git status --porcelain` is empty (clean working tree)
+2. `docs/tasks/task-state.conf` was updated for `{{TASK_ID}}`
+3. A commit was created that includes implementation changes, `PROGRESS.md`, and `task-state.conf`
+4. `git status --porcelain` is empty (clean working tree)
 
 After all checks pass, exit cleanly. The loop will restart with fresh context for the next task.
 
@@ -102,7 +114,8 @@ Do NOT try to implement multiple tasks in one iteration.
 2. Every task must have passing tests before committing.
 3. Never commit with failing `go build`, `go vet`, or `go test`.
 4. Always update PROGRESS.md before committing.
-5. A task is not complete until changes are committed.
-6. Use structured git commits with task references.
-7. Read AGENTS.md for project conventions.
-8. When in doubt, read the PRD at `docs/prd/PRD-Harvx.md`.
+5. Always update task-state.conf before committing.
+6. A task is not complete until changes are committed.
+7. Use structured git commits with task references.
+8. Read AGENTS.md for project conventions.
+9. When in doubt, read the PRD at `docs/prd/PRD-Harvx.md`.

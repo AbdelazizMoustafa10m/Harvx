@@ -32,6 +32,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROMPT_TEMPLATE="$SCRIPT_DIR/RALPH-PROMPT-CODEX.md"
 LOG_DIR="$PROJECT_ROOT/scripts/logs"
 PROGRESS_FILE="$PROJECT_ROOT/docs/tasks/PROGRESS.md"
+TASK_STATE_FILE="$PROJECT_ROOT/docs/tasks/task-state.conf"
 
 DEFAULT_MODEL="gpt-5.3-codex"
 DEFAULT_EFFORT="high"  # model_reasoning_effort: minimal, low, medium, high, xhigh

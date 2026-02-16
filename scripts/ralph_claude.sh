@@ -31,6 +31,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROMPT_TEMPLATE="$SCRIPT_DIR/RALPH-PROMPT.md"
 LOG_DIR="$PROJECT_ROOT/scripts/logs"
 PROGRESS_FILE="$PROJECT_ROOT/docs/tasks/PROGRESS.md"
+TASK_STATE_FILE="$PROJECT_ROOT/docs/tasks/task-state.conf"
 
 DEFAULT_MODEL="claude-opus-4-6"
 DEFAULT_EFFORT="high"  # CLAUDE_CODE_EFFORT_LEVEL: low, medium, high

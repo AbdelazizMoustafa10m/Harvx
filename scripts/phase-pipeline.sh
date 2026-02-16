@@ -76,6 +76,7 @@ PIPELINE_LOG=""
 METADATA_FILE=""
 
 IMPLEMENT_STATUS="not-run"
+IMPLEMENT_REASON=""
 REVIEW_VERDICT="NOT_RUN"
 REVIEW_CYCLES=0
 FIX_CYCLES=0
@@ -873,6 +874,34 @@ is_blocking_verdict() {
     [[ "$verdict" == "REQUEST_CHANGES" || "$verdict" == "NEEDS_FIXES" ]]
 }
 
+extract_implementation_block_reason() {
+    local log_file="$1"
+
+    if [[ ! -f "$log_file" ]]; then
+        return 1
+    fi
+
+    local blocked_line=""
+    blocked_line="$(grep -Eim1 'TASK_BLOCKED|blocked dependencies|No eligible tasks found' "$log_file" || true)"
+    if [[ -z "$blocked_line" ]]; then
+        return 1
+    fi
+
+    blocked_line="$(printf '%s' "$blocked_line" | sed -E 's/^\[[^]]+\][[:space:]]*//')"
+    if [[ "$blocked_line" == *"TASK_BLOCKED:"* ]]; then
+        blocked_line="${blocked_line#*TASK_BLOCKED: }"
+    elif [[ "$blocked_line" == *"BLOCKED:"* ]]; then
+        blocked_line="${blocked_line#*BLOCKED: }"
+    fi
+    blocked_line="$(printf '%s' "$blocked_line" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    if [[ -z "$blocked_line" ]]; then
+        blocked_line="implementation reported blocked dependencies"
+    fi
+
+    printf '%s\n' "$blocked_line"
+    return 0
+}
+
 assert_expected_branch() {
     if [[ "$DRY_RUN" == "true" ]]; then
         return 0
@@ -923,6 +952,7 @@ run_dir=$RUN_DIR
 report_dir=$REPORT_DIR
 pipeline_log=$PIPELINE_LOG
 implementation_status=$IMPLEMENT_STATUS
+implementation_reason=$IMPLEMENT_REASON
 review_verdict=$REVIEW_VERDICT
 review_cycles=$REVIEW_CYCLES
 fix_cycles=$FIX_CYCLES
@@ -1061,6 +1091,7 @@ bootstrap_branch() {
 run_implementation() {
     if [[ "$SKIP_IMPLEMENT" == "true" ]]; then
         IMPLEMENT_STATUS="skipped"
+        IMPLEMENT_REASON=""
         log_step "${_DIM}⊘${_RESET}" "${_DIM}Implementation skipped${_RESET}"
         persist_metadata
         return 0
@@ -1069,11 +1100,43 @@ run_implementation() {
     assert_expected_branch
 
     local impl_script="$PROJECT_ROOT/scripts/ralph_${IMPL_AGENT}.sh"
+    local impl_log="$RUN_DIR/implementation.log"
+    local impl_rc=0
+    local blocked_reason=""
     log_step "$_SYM_RUNNING" "Implementation starting ${_DIM}($IMPL_AGENT agent, phase $PHASE_ID)${_RESET}"
 
-    run_cmd "$impl_script" --phase "$PHASE_ID"
+    if capture_cmd "$impl_log" "$impl_script" --phase "$PHASE_ID"; then
+        impl_rc=0
+    else
+        impl_rc=$?
+    fi
+
+    if blocked_reason="$(extract_implementation_block_reason "$impl_log")"; then
+        IMPLEMENT_STATUS="blocked"
+        IMPLEMENT_REASON="$blocked_reason"
+        log_step "$_SYM_WARN" "${_YELLOW}Implementation blocked:${_RESET} $blocked_reason"
+        persist_metadata
+        return 1
+    fi
+
+    if [[ "$impl_rc" -eq 2 ]]; then
+        IMPLEMENT_STATUS="blocked"
+        IMPLEMENT_REASON="implementation exited with code 2 (blocked/partial outcome)"
+        log_step "$_SYM_WARN" "${_YELLOW}Implementation blocked:${_RESET} $IMPLEMENT_REASON"
+        persist_metadata
+        return 1
+    fi
+
+    if [[ "$impl_rc" -ne 0 ]]; then
+        IMPLEMENT_STATUS="failed"
+        IMPLEMENT_REASON="implementation exited with code $impl_rc (see $impl_log)"
+        log_step "$_SYM_CROSS" "Implementation ${_RED}failed${_RESET}: $IMPLEMENT_REASON"
+        persist_metadata
+        return 1
+    fi
 
     IMPLEMENT_STATUS="completed"
+    IMPLEMENT_REASON=""
     assert_expected_branch
     log_step "$_SYM_CHECK" "Implementation ${_GREEN}completed${_RESET}"
     persist_metadata
@@ -1399,6 +1462,7 @@ run_single_phase() {
     # Reset per-phase state
     PHASE_ID="$phase"
     IMPLEMENT_STATUS="not-run"
+    IMPLEMENT_REASON=""
     REVIEW_VERDICT="NOT_RUN"
     REVIEW_CYCLES=0
     FIX_CYCLES=0
@@ -1418,9 +1482,18 @@ run_single_phase() {
 
     ensure_clean_tree_before_bootstrap
     bootstrap_branch
-    run_implementation
-    run_review_and_fix_cycles
-    run_pr_creation
+    if run_implementation; then
+        run_review_and_fix_cycles
+        run_pr_creation
+    else
+        REVIEW_VERDICT="SKIPPED"
+        PR_STATUS="skipped"
+        log_step "$_SYM_WARN" "Skipping review/fix/PR because implementation status is ${_BOLD}${IMPLEMENT_STATUS}${_RESET}"
+        if [[ -n "$IMPLEMENT_REASON" ]]; then
+            log_step "$_SYM_WARN" "${_YELLOW}Reason:${_RESET} $IMPLEMENT_REASON"
+        fi
+        persist_metadata
+    fi
 
     # Phase completion summary
     echo ""
@@ -1430,6 +1503,7 @@ run_single_phase() {
     local impl_icon pr_icon
     case "$IMPLEMENT_STATUS" in
         completed) impl_icon="$_SYM_CHECK" ;;
+        blocked)   impl_icon="$_SYM_WARN" ;;
         skipped)   impl_icon="${_DIM}⊘${_RESET}" ;;
         *)         impl_icon="$_SYM_CROSS" ;;
     esac
@@ -1439,30 +1513,50 @@ run_single_phase() {
         *)         pr_icon="$_SYM_CROSS" ;;
     esac
 
+    local phase_summary_title="Phase $PHASE_ID Complete"
+    local phase_summary_color="46"
+    if [[ "$IMPLEMENT_STATUS" == "blocked" ]]; then
+        phase_summary_title="Phase $PHASE_ID Halted"
+        phase_summary_color="214"
+    elif [[ "$IMPLEMENT_STATUS" == "failed" ]]; then
+        phase_summary_title="Phase $PHASE_ID Halted"
+        phase_summary_color="196"
+    fi
+
     if [[ "$HAS_GUM" == "true" ]]; then
         local summary=""
         summary+="$(printf '  impl=%s  review=%s  pr=%s' "$IMPLEMENT_STATUS" "$REVIEW_VERDICT" "$PR_STATUS")"
         if [[ "$REVIEW_CYCLES" -gt 0 ]]; then
             summary+="$(printf '  cycles=%d' "$REVIEW_CYCLES")"
         fi
-        gum style --border rounded --border-foreground 46 \
+        gum style --border rounded --border-foreground "$phase_summary_color" \
             --padding "0 2" --margin "0 2" \
-            --bold --foreground 46 \
-            "Phase $PHASE_ID Complete" "" "$summary"
+            --bold --foreground "$phase_summary_color" \
+            "$phase_summary_title" "" "$summary"
     else
-        printf '  %b╭─ %b%bPhase %s Complete%b %b──────────────────────╮%b\n' \
-            "$_GREEN" "$_RESET" "$_BOLD$_GREEN" "$PHASE_ID" "$_RESET" "$_GREEN" "$_RESET"
+        local summary_color="$_GREEN"
+        if [[ "$IMPLEMENT_STATUS" == "blocked" ]]; then
+            summary_color="$_YELLOW"
+        elif [[ "$IMPLEMENT_STATUS" == "failed" ]]; then
+            summary_color="$_RED"
+        fi
+        printf '  %b╭─ %b%b%s%b %b──────────────────────╮%b\n' \
+            "$summary_color" "$_RESET" "$_BOLD$summary_color" "$phase_summary_title" "$_RESET" "$summary_color" "$_RESET"
         printf '  %b│%b  %b Implementation  %s\n' "$_GREEN" "$_RESET" "$impl_icon" "$IMPLEMENT_STATUS"
         printf '  %b│%b  %b Review          %b\n' "$_GREEN" "$_RESET" "$_SYM_CHECK" "$verdict_display"
         printf '  %b│%b  %b PR              %s\n' "$_GREEN" "$_RESET" "$pr_icon" "$PR_STATUS"
         if [[ "$REVIEW_CYCLES" -gt 0 ]]; then
             printf '  %b│%b    Review cycles: %d  Fix cycles: %d\n' "$_GREEN" "$_RESET" "$REVIEW_CYCLES" "$FIX_CYCLES"
         fi
-        printf '  %b╰──────────────────────────────────────────╯%b\n' "$_GREEN" "$_RESET"
+        printf '  %b╰──────────────────────────────────────────╯%b\n' "$summary_color" "$_RESET"
     fi
 
     if is_blocking_verdict "$REVIEW_VERDICT"; then
         log_step "$_SYM_WARN" "${_YELLOW}Phase $PHASE_ID ended with blocking verdict: $(_verdict_styled "$REVIEW_VERDICT")${_RESET}"
+    fi
+
+    if [[ "$IMPLEMENT_STATUS" == "blocked" || "$IMPLEMENT_STATUS" == "failed" ]]; then
+        return 1
     fi
 
     # Update chain base so next phase branches from this phase's branch
@@ -1527,7 +1621,13 @@ main() {
                 "$(phase_title "$phase")"
         fi
 
-        run_single_phase "$phase"
+        if ! run_single_phase "$phase"; then
+            local impl_reason_msg=""
+            if [[ -n "$IMPLEMENT_REASON" ]]; then
+                impl_reason_msg=" ($IMPLEMENT_REASON)"
+            fi
+            die "Phase $phase halted after implementation status '$IMPLEMENT_STATUS'${impl_reason_msg}"
+        fi
     done
 
     # Final completion banner

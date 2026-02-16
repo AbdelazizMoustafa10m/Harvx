@@ -85,7 +85,7 @@ create_sandbox() {
     git config user.email "test@test.com"
     git config user.name "Test"
 
-    # Create minimal project structure for PROGRESS_FILE
+    # Create minimal project structure for PROGRESS_FILE and TASK_STATE_FILE
     mkdir -p docs/tasks
     cat > docs/tasks/PROGRESS.md <<'PROGRESS'
 # Progress
@@ -97,10 +97,18 @@ create_sandbox() {
 | T-003 | Not Started |
 PROGRESS
 
+    cat > docs/tasks/task-state.conf <<'STATE'
+# Task State
+T-001|completed|2026-02-16
+T-002|not_started|2026-02-16
+T-003|not_started|2026-02-16
+STATE
+
     git add -A && git commit -q -m "initial"
 
     # Set globals that the sourced functions depend on
     PROGRESS_FILE="$SANDBOX/docs/tasks/PROGRESS.md"
+    TASK_STATE_FILE="$SANDBOX/docs/tasks/task-state.conf"
     # LOG_FILE must be OUTSIDE the sandbox to avoid dirtying the git tree
     LOG_FILE="/tmp/ralph-test-log-$$.log"
     touch "$LOG_FILE"
@@ -126,6 +134,12 @@ reset_sandbox() {
 | T-002 | Not Started |
 | T-003 | Not Started |
 PROGRESS
+    cat > docs/tasks/task-state.conf <<'STATE'
+# Task State
+T-001|completed|2026-02-16
+T-002|not_started|2026-02-16
+T-003|not_started|2026-02-16
+STATE
     git add -A && git commit -q -m "reset" --allow-empty 2>/dev/null || true
     > "$LOG_FILE"
 }
@@ -192,7 +206,18 @@ eval "$(extract_function "$RALPH_SCRIPT" recover_dirty_tree)"
 # We need is_task_completed from the script too
 is_task_completed() {
     local task_id="$1"
-    grep -q "${task_id}.*Completed" "$PROGRESS_FILE" 2>/dev/null
+    awk -F'|' -v task="$task_id" '
+        $0 !~ /^[[:space:]]*#/ && NF >= 2 {
+            id=$1
+            st=$2
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", id)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", st)
+            if (id == task && st == "completed") {
+                found=1
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$TASK_STATE_FILE" 2>/dev/null
 }
 
 # ============================================================================
@@ -631,9 +656,11 @@ fi
 reset_sandbox
 
 begin_test "E2E: progress+no-commit -> auto-commit -> next iteration clean"
-# Simulate: agent updated PROGRESS.md to mark T-002 complete, wrote code, but no commit
+# Simulate: agent updated PROGRESS.md + task-state.conf to mark T-002 complete, wrote code, but no commit
 sed -i.bak 's/T-002 | Not Started/T-002 | Completed/' "$SANDBOX/docs/tasks/PROGRESS.md"
 rm -f "$SANDBOX/docs/tasks/PROGRESS.md.bak"
+sed -i.bak 's/T-002|not_started|2026-02-16/T-002|completed|2026-02-16/' "$SANDBOX/docs/tasks/task-state.conf"
+rm -f "$SANDBOX/docs/tasks/task-state.conf.bak"
 echo "// T-002 implementation" > "$SANDBOX/t002.go"
 echo "package t002_test" > "$SANDBOX/t002_test.go"
 
