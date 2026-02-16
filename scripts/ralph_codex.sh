@@ -74,11 +74,8 @@ run_agent() {
         args+=(-c "model_reasoning_effort=\"$reasoning\"")
     fi
 
-    # Read prompt from file and pass as a positional argument.
-    local prompt_content
-    prompt_content=$(cat "$prompt_file")
-
-    codex "${args[@]}" "$prompt_content" 2>&1
+    # Pass '-' to force stdin prompt reading and avoid argv size/escaping issues.
+    codex "${args[@]}" - < "$prompt_file" 2>&1
 }
 
 # Check that the codex CLI is available.
@@ -102,7 +99,7 @@ pre_agent_setup() {
 get_dry_run_command() {
     local model="$1"
     local reasoning="$2"
-    echo "Codex command: codex exec --sandbox workspace-write -a never --ephemeral${model:+ -m $model} -c model_reasoning_effort=\"$reasoning\" \"<prompt>\""
+    echo "Codex command: codex exec --sandbox workspace-write -a never --ephemeral${model:+ -m $model} -c model_reasoning_effort=\"$reasoning\" - < <prompt-file>"
 }
 
 # Script-specific usage text.

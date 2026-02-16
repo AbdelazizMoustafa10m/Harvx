@@ -64,13 +64,16 @@ run_agent() {
     local model="$2"
     local effort="$3"
 
-    local claude_args="-p --permission-mode dontAsk"
+    local args=()
+    args+=(-p)
+    args+=(--permission-mode dontAsk)
     if [[ -n "$model" ]]; then
-        claude_args+=" --model $model"
+        args+=(--model "$model")
     fi
-    claude_args+=" --allowedTools '${CLAUDE_ALLOWED_TOOLS}'"
+    args+=(--allowedTools "$CLAUDE_ALLOWED_TOOLS")
 
-    eval "cat '$prompt_file' | claude $claude_args" 2>&1
+    # Pass prompt via stdin to preserve content exactly and avoid eval/string command construction.
+    claude "${args[@]}" < "$prompt_file" 2>&1
 }
 
 # Check that the claude CLI is available.

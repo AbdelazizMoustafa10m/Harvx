@@ -1235,10 +1235,16 @@ run_review_once() {
         persist_metadata
         return 0
     else
+        local review_rc=0
         if capture_cmd "$review_log" "$review_script" "${review_args[@]}"; then
-            :
+            review_rc=0
         else
-            log "Review command returned non-zero; evaluating verdict from output"
+            review_rc=$?
+        fi
+
+        if [[ "$review_rc" -ne 0 ]]; then
+            die "Review command failed in cycle $cycle with exit code $review_rc (see $review_log)"
+            return 1
         fi
     fi
 

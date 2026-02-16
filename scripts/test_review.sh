@@ -606,6 +606,59 @@ if assert_contains "$agents_for_deduped" "claude" "should include claude" && \
     pass_test
 fi
 
+begin_test "run_consolidation: parse_error prevents APPROVE verdict"
+cd "$SANDBOX"
+source_review_lib
+mkdir -p "$RAW_DIR"
+
+cat > "$RAW_DIR/full-review_claude.json" <<'PARSE1'
+{
+  "schema_version": "1.0",
+  "pass": "full-review",
+  "agent": "claude",
+  "verdict": "COMMENT",
+  "summary": "Agent output could not be parsed",
+  "highlights": [],
+  "findings": [],
+  "parse_error": true
+}
+PARSE1
+
+cat > "$RAW_DIR/full-review_codex.json" <<'PARSE2'
+{
+  "schema_version": "1.0",
+  "pass": "full-review",
+  "agent": "codex",
+  "verdict": "APPROVE",
+  "summary": "Only nits",
+  "highlights": [],
+  "findings": [
+    {
+      "severity": "suggestion",
+      "category": "docs",
+      "path": "README.md",
+      "line": 1,
+      "title": "Wording tweak",
+      "details": "Tiny wording suggestion.",
+      "suggested_fix": "Optional copy edit"
+    }
+  ],
+  "parse_error": false
+}
+PARSE2
+
+if run_consolidation "false" >/dev/null 2>&1; then
+    parse_consolidated="$RUN_DIR/consolidated.json"
+    parse_verdict=$(jq -r '.verdict' "$parse_consolidated" 2>/dev/null || true)
+    parse_error_runs=$(jq -r '.stats.parse_error_runs // 0' "$parse_consolidated" 2>/dev/null || true)
+    if assert_eq "COMMENT" "$parse_verdict" "parse_error should block APPROVE verdict" && \
+       assert_eq "1" "$parse_error_runs" "should count parse error runs"; then
+        pass_test
+    fi
+else
+    fail_test "run_consolidation failed for parse_error gating scenario"
+fi
+
 # Clean up consolidation workspace
 REVIEW_ARCHIVED=true
 rm -rf "$RUN_DIR"
@@ -822,6 +875,38 @@ fi
 rm -f "$tmp_error_out"
 
 fi  # end jq availability check for parse error payload tests
+
+# --- Test Group 11: run_single_review error handling ---
+echo ""
+echo "--- Single Review Execution ---"
+
+if ! command -v jq >/dev/null 2>&1; then
+    echo "  SKIP: jq not available; skipping run_single_review tests"
+else
+
+begin_test "run_single_review: captures non-zero agent exit code"
+cd "$SANDBOX"
+source_review_lib
+mkdir -p "$RAW_DIR"
+
+agent_bin() { echo "bash"; }
+agent_model() { echo "stub-model"; }
+build_review_prompt() { echo "stub prompt"; }
+run_agent_command() { return 7; }
+
+run_single_review "codex" "full-review" "false" >/dev/null 2>&1 || true
+
+single_review_json="$RAW_DIR/full-review_codex.json"
+if assert_file_exists "$single_review_json" "normalized output should exist on agent failure"; then
+    single_summary=$(jq -r '.summary // ""' "$single_review_json" 2>/dev/null || true)
+    single_parse_error=$(jq -r '.parse_error // false' "$single_review_json" 2>/dev/null || true)
+    if assert_contains "$single_summary" "exit=7" "should preserve real agent exit code" && \
+       assert_eq "true" "$single_parse_error" "agent failure should be marked parse_error"; then
+        pass_test
+    fi
+fi
+
+fi  # end jq availability check for run_single_review tests
 
 # ============================================================================
 # Summary

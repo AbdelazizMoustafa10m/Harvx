@@ -835,7 +835,9 @@ run_single_review() {
   start_time="$(date +%s)"
 
   local exit_code=0
-  if ! run_agent_command "$agent" "$prompt" "$raw_output_file" "$log_file"; then
+  if run_agent_command "$agent" "$prompt" "$raw_output_file" "$log_file"; then
+    exit_code=0
+  else
     exit_code=$?
   fi
 
@@ -942,12 +944,15 @@ run_consolidation() {
     | ($flat | length) as $total_raw
     | ($sorted | map(select(.severity == "critical")) | length) as $critical_count
     | ($sorted | map(select(.severity == "high")) | length) as $high_count
+    | ($runs | map(select((.parse_error // false) == true)) | length) as $parse_error_runs
+    | ($parse_error_runs > 0) as $has_parse_error
     | {
         schema_version: "1.0",
         generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")),
         summary: (if ($sorted | length) == 0 then "No actionable findings across all executed agents and passes." else "Consolidated findings from Harvx multi-agent review." end),
         verdict: (
           if $critical_count > 0 or $high_count >= 3 then "REQUEST_CHANGES"
+          elif $has_parse_error then "COMMENT"
           elif ($sorted | length) == 0 then "APPROVE"
           elif ($sorted | all(.severity == "suggestion")) then "APPROVE"
           else "COMMENT"
@@ -956,7 +961,8 @@ run_consolidation() {
         stats: {
           total_raw_findings: $total_raw,
           unique_findings: ($sorted | length),
-          duplicates_removed: ($total_raw - ($sorted | length))
+          duplicates_removed: ($total_raw - ($sorted | length)),
+          parse_error_runs: $parse_error_runs
         },
         findings: $sorted
       }

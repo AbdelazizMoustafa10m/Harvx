@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 #
-# test_phase_pipeline.sh -- Unit smoke tests for phase-pipeline blocked handling.
+# test_phase_pipeline.sh -- Unit smoke tests for phase-pipeline failure semantics.
 #
 # Validates that run_implementation() properly propagates blocked outcomes:
 # - TASK_BLOCKED text => IMPLEMENT_STATUS=blocked and non-zero return
 # - exit code 2 => IMPLEMENT_STATUS=blocked and non-zero return
 # - non-blocked non-zero => IMPLEMENT_STATUS=failed
 # - success => IMPLEMENT_STATUS=completed
+# Also validates:
+# - run_review_once fails hard on non-zero review command exit
 #
 # Usage: ./scripts/test_phase_pipeline.sh
 #
@@ -101,6 +103,7 @@ extract_function() {
 # Pull in the real implementation logic under test.
 eval "$(extract_function "$PHASE_PIPELINE_SCRIPT" extract_implementation_block_reason)"
 eval "$(extract_function "$PHASE_PIPELINE_SCRIPT" run_implementation)"
+eval "$(extract_function "$PHASE_PIPELINE_SCRIPT" run_review_once)"
 
 # Test harness globals used by run_implementation().
 _SYM_RUNNING=""
@@ -119,16 +122,39 @@ PROJECT_ROOT=""
 IMPL_AGENT="codex"
 PHASE_ID="1"
 RUN_DIR=""
+REPORT_DIR=""
 IMPLEMENT_STATUS="not-run"
 IMPLEMENT_REASON=""
+BASE_BRANCH="main"
+REVIEW_CONCURRENCY="2"
+REVIEW_MODE="all"
+REVIEW_AGENT="codex"
+DRY_RUN="false"
+REVIEW_VERDICT="NOT_RUN"
 
 # Stubs for run_implementation dependencies.
 CAPTURE_RC=0
 CAPTURE_OUTPUT=""
 LAST_LOG_STEP=""
 PERSIST_CALLS=0
+DIE_CALLS=0
+LAST_DIE_MSG=""
+EXTRACT_FROM_CONSOLIDATED_CALLS=0
+EXTRACT_FROM_LOG_CALLS=0
+EXTRACT_FROM_CONSOLIDATED_RESULT="APPROVED"
+EXTRACT_FROM_LOG_RESULT="UNKNOWN"
 
 assert_expected_branch() {
+    : # no-op for unit tests
+}
+
+die() {
+    LAST_DIE_MSG="$1"
+    DIE_CALLS=$((DIE_CALLS + 1))
+    return 1
+}
+
+log() {
     : # no-op for unit tests
 }
 
@@ -147,11 +173,27 @@ capture_cmd() {
     return "$CAPTURE_RC"
 }
 
+_verdict_styled() {
+    local verdict="$1"
+    printf "%s" "$verdict"
+}
+
+extract_verdict_from_consolidated() {
+    EXTRACT_FROM_CONSOLIDATED_CALLS=$((EXTRACT_FROM_CONSOLIDATED_CALLS + 1))
+    echo "$EXTRACT_FROM_CONSOLIDATED_RESULT"
+}
+
+extract_verdict() {
+    EXTRACT_FROM_LOG_CALLS=$((EXTRACT_FROM_LOG_CALLS + 1))
+    echo "$EXTRACT_FROM_LOG_RESULT"
+}
+
 setup_test_env() {
     TEST_TMP_DIR=$(mktemp -d /tmp/phase-pipeline-unit-XXXXXX)
     PROJECT_ROOT="$TEST_TMP_DIR/project"
     RUN_DIR="$TEST_TMP_DIR/run"
-    mkdir -p "$PROJECT_ROOT/scripts" "$RUN_DIR"
+    REPORT_DIR="$TEST_TMP_DIR/report"
+    mkdir -p "$PROJECT_ROOT/scripts" "$PROJECT_ROOT/scripts/review" "$RUN_DIR" "$REPORT_DIR"
 
     # Presence only; script is not executed because capture_cmd is stubbed.
     cat > "$PROJECT_ROOT/scripts/ralph_codex.sh" <<'EOF_IMPL'
@@ -160,10 +202,23 @@ echo "stub"
 EOF_IMPL
     chmod +x "$PROJECT_ROOT/scripts/ralph_codex.sh"
 
+    cat > "$PROJECT_ROOT/scripts/review/review.sh" <<'EOF_REVIEW'
+#!/usr/bin/env bash
+echo "stub review"
+EOF_REVIEW
+    chmod +x "$PROJECT_ROOT/scripts/review/review.sh"
+
     IMPLEMENT_STATUS="not-run"
     IMPLEMENT_REASON=""
+    REVIEW_VERDICT="NOT_RUN"
     LAST_LOG_STEP=""
     PERSIST_CALLS=0
+    DIE_CALLS=0
+    LAST_DIE_MSG=""
+    EXTRACT_FROM_CONSOLIDATED_CALLS=0
+    EXTRACT_FROM_LOG_CALLS=0
+    EXTRACT_FROM_CONSOLIDATED_RESULT="APPROVED"
+    EXTRACT_FROM_LOG_RESULT="UNKNOWN"
 }
 
 echo ""
@@ -245,6 +300,47 @@ if run_implementation; then
     fi
 else
     fail_test "Expected success path to return 0"
+fi
+
+echo ""
+echo "--- run_review_once ---"
+
+begin_test "Non-zero review command fails hard"
+CAPTURE_RC=9
+CAPTURE_OUTPUT='REQUEST_CHANGES'
+DIE_CALLS=0
+LAST_DIE_MSG=""
+EXTRACT_FROM_CONSOLIDATED_CALLS=0
+EXTRACT_FROM_LOG_CALLS=0
+EXTRACT_FROM_CONSOLIDATED_RESULT="COMMENT"
+EXTRACT_FROM_LOG_RESULT="REQUEST_CHANGES"
+REVIEW_VERDICT="NOT_RUN"
+if run_review_once 0; then
+    fail_test "Expected run_review_once to return non-zero when review command exits non-zero"
+else
+    if assert_eq "1" "$DIE_CALLS" "die should be called on review command failure" && \
+       assert_contains "$LAST_DIE_MSG" "exit code 9" "error should include review command exit code" && \
+       assert_eq "NOT_RUN" "$REVIEW_VERDICT" "should stop before deriving a verdict"; then
+        pass_test
+    fi
+fi
+
+begin_test "Fallback verdict extraction uses review log when consolidated is UNKNOWN"
+CAPTURE_RC=0
+CAPTURE_OUTPUT='review complete'
+DIE_CALLS=0
+LAST_DIE_MSG=""
+EXTRACT_FROM_CONSOLIDATED_CALLS=0
+EXTRACT_FROM_LOG_CALLS=0
+EXTRACT_FROM_CONSOLIDATED_RESULT="UNKNOWN"
+EXTRACT_FROM_LOG_RESULT="REQUEST_CHANGES"
+if run_review_once 1; then
+    if assert_eq "REQUEST_CHANGES" "$REVIEW_VERDICT" "should fall back to log verdict" && \
+       assert_eq "0" "$DIE_CALLS" "die should not be called"; then
+        pass_test
+    fi
+else
+    fail_test "Expected fallback verdict path to return 0"
 fi
 
 echo ""

@@ -357,6 +357,19 @@ else
     fail_test "Expected numeric capped wait of 21600, got '$result'"
 fi
 
+begin_test "compute_rate_limit_wait: invalid normalized wait falls back to backoff"
+original_cap_wait_def="$(declare -f cap_wait_seconds)"
+cap_wait_seconds() {
+    return 1
+}
+result=$(compute_rate_limit_wait "Rate limited, try again in 2 hours" 1)
+eval "$original_cap_wait_def"
+if [[ "$result" =~ ^[0-9]+$ ]] && [[ "$result" -ge 300 && "$result" -le 330 ]]; then
+    pass_test
+else
+    fail_test "Expected numeric backoff in [300,330], got '$result'"
+fi
+
 # --- Test Group 3: Exponential Backoff ---
 echo ""
 echo "--- Exponential Backoff ---"

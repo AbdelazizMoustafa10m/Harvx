@@ -1384,31 +1384,56 @@ main() {
     local effort="$DEFAULT_EFFORT"
     local dry_run="false"
     local show_status_flag="false"
+    local option_value=""
+
+    require_option_value() {
+        local option_name="$1"
+        local option_value="${2-}"
+
+        if [[ -z "$option_value" || "$option_value" == -* ]]; then
+            echo "ERROR: Option $option_name requires a value"
+            echo ""
+            usage
+            exit 1
+        fi
+    }
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --phase)
-                phase="$2"
+                option_value="${2-}"
+                require_option_value "$1" "$option_value"
+                phase="$option_value"
                 shift 2
                 ;;
             --task)
-                task="$2"
+                option_value="${2-}"
+                require_option_value "$1" "$option_value"
+                task="$option_value"
                 shift 2
                 ;;
             --max-iterations)
-                max_iterations="$2"
+                option_value="${2-}"
+                require_option_value "$1" "$option_value"
+                max_iterations="$option_value"
                 shift 2
                 ;;
             --max-limit-waits)
-                MAX_LIMIT_WAITS="$2"
+                option_value="${2-}"
+                require_option_value "$1" "$option_value"
+                MAX_LIMIT_WAITS="$option_value"
                 shift 2
                 ;;
             --model)
-                model="$2"
+                option_value="${2-}"
+                require_option_value "$1" "$option_value"
+                model="$option_value"
                 shift 2
                 ;;
             --effort|--reasoning)
-                effort="$2"
+                option_value="${2-}"
+                require_option_value "$1" "$option_value"
+                effort="$option_value"
                 shift 2
                 ;;
             --dry-run)
