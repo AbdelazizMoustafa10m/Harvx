@@ -37,6 +37,63 @@ func TestRootCommandHasQuietFlag(t *testing.T) {
 	assert.Equal(t, "q", flag.Shorthand)
 }
 
+func TestRootCommandHasDirFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("dir")
+	require.NotNil(t, flag, "root command must have --dir persistent flag")
+	assert.Equal(t, "d", flag.Shorthand)
+	assert.Equal(t, ".", flag.DefValue)
+}
+
+func TestRootCommandHasOutputFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("output")
+	require.NotNil(t, flag, "root command must have --output persistent flag")
+	assert.Equal(t, "o", flag.Shorthand)
+	assert.Equal(t, "harvx-output.md", flag.DefValue)
+}
+
+func TestRootCommandHasFormatFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("format")
+	require.NotNil(t, flag, "root command must have --format persistent flag")
+	assert.Equal(t, "markdown", flag.DefValue)
+}
+
+func TestRootCommandHasTargetFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("target")
+	require.NotNil(t, flag, "root command must have --target persistent flag")
+	assert.Equal(t, "generic", flag.DefValue)
+}
+
+func TestRootCommandHasFilterFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("filter")
+	require.NotNil(t, flag, "root command must have --filter persistent flag")
+	assert.Equal(t, "f", flag.Shorthand)
+}
+
+func TestRootCommandHasSkipLargeFilesFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("skip-large-files")
+	require.NotNil(t, flag, "root command must have --skip-large-files persistent flag")
+	assert.Equal(t, "1MB", flag.DefValue)
+}
+
+func TestRootCommandHasBooleanFlags(t *testing.T) {
+	boolFlags := []string{
+		"git-tracked-only",
+		"stdout",
+		"line-numbers",
+		"no-redact",
+		"fail-on-redaction",
+		"yes",
+		"clear-cache",
+	}
+	for _, name := range boolFlags {
+		t.Run(name, func(t *testing.T) {
+			flag := rootCmd.PersistentFlags().Lookup(name)
+			require.NotNil(t, flag, "root command must have --%s persistent flag", name)
+			assert.Equal(t, "false", flag.DefValue)
+		})
+	}
+}
+
 func TestExecuteWithHelp(t *testing.T) {
 	// Running with --help should succeed (exit 0).
 	rootCmd.SetArgs([]string{"--help"})
@@ -49,6 +106,29 @@ func TestExecuteWithHelp(t *testing.T) {
 	code := Execute()
 	assert.Equal(t, int(pipeline.ExitSuccess), code)
 	assert.Contains(t, buf.String(), "LLM-optimized context documents")
+}
+
+func TestExecuteHelpShowsAllFlags(t *testing.T) {
+	rootCmd.SetArgs([]string{"--help"})
+	defer rootCmd.SetArgs(nil)
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	defer rootCmd.SetOut(nil)
+
+	code := Execute()
+	assert.Equal(t, int(pipeline.ExitSuccess), code)
+
+	output := buf.String()
+	expectedFlags := []string{
+		"--dir", "--output", "--filter", "--include", "--exclude",
+		"--format", "--target", "--git-tracked-only", "--skip-large-files",
+		"--stdout", "--line-numbers", "--no-redact", "--fail-on-redaction",
+		"--verbose", "--quiet", "--yes", "--clear-cache",
+	}
+	for _, flag := range expectedFlags {
+		assert.Contains(t, output, flag, "help output should show %s flag", flag)
+	}
 }
 
 func TestExecuteWithNoArgs(t *testing.T) {
@@ -85,4 +165,9 @@ func TestRootCmdReturnsCommand(t *testing.T) {
 
 func TestRootCommandLongDescription(t *testing.T) {
 	assert.Contains(t, rootCmd.Long, "LLM-optimized context documents")
+}
+
+func TestGlobalFlagsReturnsValues(t *testing.T) {
+	fv := GlobalFlags()
+	require.NotNil(t, fv, "GlobalFlags() should return non-nil FlagValues")
 }

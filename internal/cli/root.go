@@ -11,6 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// flagValues holds the parsed global flag values, populated by config.BindFlags
+// during command initialization and validated in PersistentPreRunE.
+var flagValues *config.FlagValues
+
 var rootCmd = &cobra.Command{
 	Use:   "harvx",
 	Short: "Harvest your context.",
@@ -22,10 +26,13 @@ context file optimized for large language models like Claude, ChatGPT, and other
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		quiet, _ := cmd.Flags().GetBool("quiet")
+		// Validate all global flags.
+		if err := config.ValidateFlags(flagValues, cmd); err != nil {
+			return err
+		}
 
-		level := config.ResolveLogLevel(verbose, quiet)
+		// Initialize logging with validated flag values.
+		level := config.ResolveLogLevel(flagValues.Verbose, flagValues.Quiet)
 		format := config.ResolveLogFormat()
 		config.SetupLogging(level, format)
 
@@ -35,8 +42,7 @@ context file optimized for large language models like Claude, ChatGPT, and other
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable debug logging")
-	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress all output except errors")
+	flagValues = config.BindFlags(rootCmd)
 }
 
 // Execute runs the root command and returns an appropriate exit code.
@@ -51,4 +57,10 @@ func Execute() int {
 // RootCmd returns the root cobra.Command for use in testing and subcommand registration.
 func RootCmd() *cobra.Command {
 	return rootCmd
+}
+
+// GlobalFlags returns the parsed global flag values. This is available after
+// PersistentPreRunE has run. Subcommands use this to access shared configuration.
+func GlobalFlags() *config.FlagValues {
+	return flagValues
 }

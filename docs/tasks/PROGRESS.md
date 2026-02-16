@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 6 |
+| Completed | 7 |
 | In Progress | 0 |
-| Not Started | 89 |
+| Not Started | 88 |
 
 ---
 
@@ -41,7 +41,7 @@
 | T-004 | Structured Logging with slog | Must Have | Small (2-4hrs) | Completed |
 | T-005 | Cobra CLI Framework & Root Command | Must Have | Medium (6-8hrs) | Completed |
 | T-006 | Version Command & Build Info | Must Have | Small (2-4hrs) | Completed |
-| T-007 | Global Flags Implementation | Must Have | Medium (6-8hrs) | Not Started |
+| T-007 | Global Flags Implementation | Must Have | Medium (6-8hrs) | Completed |
 | T-008 | Generate Subcommand (harvx generate / harvx gen) | Must Have | Medium (6-10hrs) | Not Started |
 | T-009 | Shell Completions (harvx completion) | Should Have | Small (2-4hrs) | Not Started |
 | T-010 | Exit Code Handling | Must Have | Small (2-4hrs) | Not Started |
@@ -502,4 +502,42 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
 
 ---
 
-_Last updated: 2026-02-16 (T-006)_
+### T-007: Global Flags Implementation
+
+- **Status:** Completed
+- **Date:** 2026-02-16
+
+**What was built:**
+
+- `FlagValues` struct in `internal/config/flags.go` collecting all 17 global persistent flags
+- `BindFlags(cmd)` function that registers all flags as Cobra persistent flags on the root command
+- `ValidateFlags(fv, cmd)` function that validates all flag values:
+  - `--verbose` and `--quiet` mutual exclusion check
+  - `--dir` existence and is-directory validation
+  - `--format` allowed values validation (markdown, xml)
+  - `--target` allowed values validation (claude, chatgpt, generic)
+  - `--filter` leading-dot stripping normalization
+  - `--skip-large-files` human-readable size parsing
+- `ParseSize()` function handling KB, MB, GB suffixes (case-insensitive), plain byte values, and float values
+- Environment variable overrides for key flags (HARVX_DIR, HARVX_OUTPUT, HARVX_FORMAT, HARVX_TARGET, HARVX_VERBOSE, HARVX_QUIET) with explicit flag taking priority
+- Root command updated to use `config.BindFlags` for flag registration and `config.ValidateFlags` in `PersistentPreRunE`
+- `GlobalFlags()` accessor for subcommands to access shared configuration
+- 30+ unit tests covering: defaults, mutual exclusion, path validation, format/target validation, filter normalization, size parsing, env overrides, boolean flags, include/exclude patterns
+
+**Files created/modified:**
+
+- `internal/config/flags.go` - FlagValues struct, BindFlags, ValidateFlags, ParseSize (new)
+- `internal/config/flags_test.go` - Comprehensive unit tests (new)
+- `internal/cli/root.go` - Rewired to use config.BindFlags and config.ValidateFlags
+- `internal/cli/root_test.go` - Updated with tests for all new flags
+
+**Verification:**
+
+- `go build ./cmd/harvx/` - pass
+- `go vet ./...` - pass
+- `go test ./...` - pass (all packages)
+- `go mod tidy` - pass (no drift)
+
+---
+
+_Last updated: 2026-02-16 (T-007)_
