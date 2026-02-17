@@ -5,6 +5,29 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# ── UI: Detection & Colors ──────────────────────────────────────────
+
+HAS_GUM=false
+if command -v gum >/dev/null 2>&1; then
+    HAS_GUM=true
+fi
+
+if [[ -t 1 ]]; then
+    _BOLD=$'\033[1m'      _DIM=$'\033[2m'       _RESET=$'\033[0m'
+    _RED=$'\033[0;31m'    _GREEN=$'\033[0;32m'   _YELLOW=$'\033[1;33m'
+    _MAGENTA=$'\033[0;35m' _CYAN=$'\033[0;36m'
+    _WHITE=$'\033[1;37m'
+    _BG_RED=$'\033[41m'
+else
+    _BOLD='' _DIM='' _RESET=''
+    _RED='' _GREEN='' _YELLOW=''
+    _MAGENTA='' _CYAN=''
+    _WHITE=''
+    _BG_RED=''
+fi
+
+_SYM_ARROW="${_CYAN}▸${_RESET}"
+
 PHASE_ID=""
 BASE_BRANCH="main"
 HEAD_BRANCH=""
@@ -38,15 +61,28 @@ Options:
 USAGE
 }
 
-log() {
-    local msg="$1"
+log_step() {
+    local icon="$1"
+    local msg="$2"
     local ts
-    ts="$(date '+%Y-%m-%d %H:%M:%S')"
-    printf '[%s] %s\n' "$ts" "$msg"
+    ts="$(date '+%H:%M:%S')"
+    printf '  %b%s%b  %b %s\n' "$_DIM" "$ts" "$_RESET" "$icon" "$msg"
 }
 
 die() {
-    log "ERROR: $1"
+    local cols
+    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    local max_width=$(( cols - 6 ))
+    (( max_width < 40 )) && max_width=40
+    if [[ "$HAS_GUM" == "true" ]]; then
+        gum style --foreground 196 --bold --border rounded --border-foreground 196 \
+            --padding "0 2" --margin "0 2" --width "$max_width" "ERROR: $1"
+    else
+        echo ""
+        printf '%s' "$1" | fold -s -w "$max_width" | while IFS= read -r line; do
+            printf '  %b%b ERROR %b %b%s%b\n' "$_BG_RED" "$_WHITE" "$_RESET" "$_RED" "$line" "$_RESET"
+        done
+    fi
     exit 1
 }
 
@@ -226,9 +262,24 @@ create_pr() {
     fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "DRY-RUN: gh pr create --base $BASE_BRANCH --head $HEAD_BRANCH --title '$title' --body-file '$TEMP_BODY_FILE'"
-        log "DRY-RUN: rendered PR body file: $TEMP_BODY_FILE"
-        cat "$TEMP_BODY_FILE"
+        local body_basename
+        body_basename="$(basename "$TEMP_BODY_FILE")"
+        echo ""
+        if [[ "$HAS_GUM" == "true" ]]; then
+            gum style --bold --foreground 255 --border rounded --border-foreground 179 \
+                --padding "0 2" --margin "0 2" "PR Preview (dry-run)"
+        else
+            printf '  %b╭────────────────────────────────────╮%b\n' "$_YELLOW" "$_RESET"
+            printf '  %b│%b  %b%bPR Preview (dry-run)%b              %b│%b\n' \
+                "$_YELLOW" "$_RESET" "$_BOLD" "$_WHITE" "$_RESET" "$_YELLOW" "$_RESET"
+            printf '  %b╰────────────────────────────────────╯%b\n' "$_YELLOW" "$_RESET"
+        fi
+        echo ""
+        log_step "$_SYM_ARROW" "Title:  ${_BOLD}${title}${_RESET}"
+        log_step "$_SYM_ARROW" "Base:   ${BASE_BRANCH}"
+        log_step "$_SYM_ARROW" "Head:   ${HEAD_BRANCH}"
+        log_step "$_SYM_ARROW" "Body:   ${_DIM}${body_basename} (saved to ${TMPDIR:-/tmp})${_RESET}"
+        echo ""
         return 0
     fi
 

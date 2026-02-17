@@ -88,12 +88,12 @@ PR_STATUS="not-run"
 
 usage() {
     if [[ "$HAS_GUM" == "true" ]]; then
-        gum style --bold --foreground 212 --border double --border-foreground 57 \
+        gum style --bold --foreground 255 --border double --border-foreground 179 \
             --padding "0 2" --margin "1 0" \
             "Harvx Phase Pipeline Orchestrator"
     else
         echo ""
-        printf '%b%b  Harvx Phase Pipeline Orchestrator%b\n' "$_BOLD" "$_MAGENTA" "$_RESET"
+        printf '%b%b  Harvx Phase Pipeline Orchestrator%b\n' "$_BOLD" "$_YELLOW" "$_RESET"
     fi
     cat <<USAGE
 
@@ -168,7 +168,7 @@ log_header() {
     _log_raw "=== $msg ==="
     echo ""
     if [[ "$HAS_GUM" == "true" ]]; then
-        gum style --bold --foreground 255 --border rounded --border-foreground 57 \
+        gum style --bold --foreground 255 --border rounded --border-foreground 179 \
             --padding "0 2" --margin "0 2" "$msg"
     else
         local len=${#msg}
@@ -180,9 +180,9 @@ log_header() {
         (( border_len > max_border )) && border_len=$max_border
         local border
         border="$(printf '─%.0s' $(seq 1 "$border_len"))"
-        printf '  %b╭%s╮%b\n' "$_CYAN" "$border" "$_RESET"
-        printf '  %b│%b  %b%s%b  %b│%b\n' "$_CYAN" "$_RESET" "$_BOLD$_WHITE" "$msg" "$_RESET" "$_CYAN" "$_RESET"
-        printf '  %b╰%s╯%b\n' "$_CYAN" "$border" "$_RESET"
+        printf '  %b╭%s╮%b\n' "$_YELLOW" "$border" "$_RESET"
+        printf '  %b│%b  %b%s%b  %b│%b\n' "$_YELLOW" "$_RESET" "$_BOLD$_WHITE" "$msg" "$_RESET" "$_YELLOW" "$_RESET"
+        printf '  %b╰%s╯%b\n' "$_YELLOW" "$border" "$_RESET"
     fi
     echo ""
 }
@@ -269,9 +269,11 @@ _draw_stage_tracker() {
 
 # ── Core Helpers ─────────────────────────────────────────────────────
 
+_strip_root() { local s="$*" p="$PROJECT_ROOT/"; printf '%s' "${s//$p}"; }
+
 run_cmd() {
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_step "${_DIM}⊘${_RESET}" "${_DIM}DRY-RUN: $*${_RESET}"
+        log_step "${_DIM}⊘${_RESET}" "${_DIM}DRY-RUN: $(_strip_root "$@")${_RESET}"
         return 0
     fi
     "$@"
@@ -282,7 +284,9 @@ capture_cmd() {
     shift
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_step "${_DIM}⊘${_RESET}" "${_DIM}DRY-RUN: $* > $output_file${_RESET}"
+        local display_out
+        display_out="$(_strip_root "$output_file")"
+        log_step "${_DIM}⊘${_RESET}" "${_DIM}DRY-RUN: $(_strip_root "$@") > ${display_out}${_RESET}"
         : > "$output_file"
         return 0
     fi
@@ -422,7 +426,8 @@ prompt_yes_no() {
             --affirmative "Yes" --negative "No" \
             --prompt.foreground 255 \
             --prompt.bold \
-            --selected.background 57 \
+            --selected.background 179 \
+            --selected.foreground 236 \
             --unselected.foreground 240 \
             "${gum_args[@]}"; then
             printf -v "$out_var" '%s' "true"
@@ -481,7 +486,7 @@ prompt_number() {
             --header.bold \
             --cursor.foreground 212 \
             --prompt "> " \
-            --prompt.foreground 57 \
+            --prompt.foreground 179 \
             --value "$default_number")" || { printf -v "$out_var" '%s' "$default_number"; return 0; }
         if [[ -z "$result" ]]; then
             result="$default_number"
@@ -527,7 +532,7 @@ prompt_text() {
             --header.bold \
             --cursor.foreground 212 \
             --prompt "> " \
-            --prompt.foreground 57 \
+            --prompt.foreground 179 \
             --value "$default_value")" || { printf -v "$out_var" '%s' "$default_value"; return 0; }
         if [[ -z "$result" ]]; then
             result="$default_value"
@@ -765,25 +770,25 @@ _display_config_summary() {
         [[ "$DRY_RUN" == "true" ]] && body+="$(printf '\n  %-22s %s' "Dry run" "yes")"
 
         echo ""
-        gum style --border rounded --border-foreground 57 \
+        gum style --border rounded --border-foreground 179 \
             --padding "1 2" --margin "0 2" \
             --bold --foreground 255 "Configuration" "" "$body"
     else
         echo ""
         printf '  %b╭─ %b%bConfiguration%b %b─────────────────────────────╮%b\n' \
-            "$_CYAN" "$_RESET" "$_BOLD$_WHITE" "$_RESET" "$_CYAN" "$_RESET"
-        printf '  %b│%b\n' "$_CYAN" "$_RESET"
-        printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Phase(s)" "$_WHITE" "$phases_display" "$_RESET"
-        printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Impl agent" "$_MAGENTA" "$IMPL_AGENT" "$_RESET"
-        printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Review mode" "$REVIEW_MODE"
+            "$_YELLOW" "$_RESET" "$_BOLD$_WHITE" "$_RESET" "$_YELLOW" "$_RESET"
+        printf '  %b│%b\n' "$_YELLOW" "$_RESET"
+        printf '  %b│%b  %-20s  %b%s%b\n' "$_YELLOW" "$_RESET" "Phase(s)" "$_WHITE" "$phases_display" "$_RESET"
+        printf '  %b│%b  %-20s  %b%s%b\n' "$_YELLOW" "$_RESET" "Impl agent" "$_MAGENTA" "$IMPL_AGENT" "$_RESET"
+        printf '  %b│%b  %-20s  %s\n' "$_YELLOW" "$_RESET" "Review mode" "$REVIEW_MODE"
         if [[ "$REVIEW_MODE" != "none" ]]; then
-            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Review agent" "$REVIEW_AGENT"
-            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Concurrency" "$REVIEW_CONCURRENCY"
-            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Max review cycles" "$MAX_REVIEW_CYCLES"
-            printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Fix agent" "$FIX_AGENT"
+            printf '  %b│%b  %-20s  %s\n' "$_YELLOW" "$_RESET" "Review agent" "$REVIEW_AGENT"
+            printf '  %b│%b  %-20s  %s\n' "$_YELLOW" "$_RESET" "Concurrency" "$REVIEW_CONCURRENCY"
+            printf '  %b│%b  %-20s  %s\n' "$_YELLOW" "$_RESET" "Max review cycles" "$MAX_REVIEW_CYCLES"
+            printf '  %b│%b  %-20s  %s\n' "$_YELLOW" "$_RESET" "Fix agent" "$FIX_AGENT"
         fi
-        printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Base branch" "$BASE_BRANCH"
-        printf '  %b│%b  %-20s  %s\n' "$_CYAN" "$_RESET" "Sync base" "$SYNC_BASE"
+        printf '  %b│%b  %-20s  %s\n' "$_YELLOW" "$_RESET" "Base branch" "$BASE_BRANCH"
+        printf '  %b│%b  %-20s  %s\n' "$_YELLOW" "$_RESET" "Sync base" "$SYNC_BASE"
 
         local skips=""
         [[ "$SKIP_IMPLEMENT" == "true" ]] && skips+="impl "
@@ -791,13 +796,13 @@ _display_config_summary() {
         [[ "$SKIP_FIX" == "true" ]]       && skips+="fix "
         [[ "$SKIP_PR" == "true" ]]        && skips+="pr "
         if [[ -n "$skips" ]]; then
-            printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Skip" "$_YELLOW" "${skips% }" "$_RESET"
+            printf '  %b│%b  %-20s  %b%s%b\n' "$_YELLOW" "$_RESET" "Skip" "$_YELLOW" "${skips% }" "$_RESET"
         fi
         if [[ "$DRY_RUN" == "true" ]]; then
-            printf '  %b│%b  %-20s  %b%s%b\n' "$_CYAN" "$_RESET" "Dry run" "$_YELLOW" "yes" "$_RESET"
+            printf '  %b│%b  %-20s  %b%s%b\n' "$_YELLOW" "$_RESET" "Dry run" "$_YELLOW" "yes" "$_RESET"
         fi
-        printf '  %b│%b\n' "$_CYAN" "$_RESET"
-        printf '  %b╰──────────────────────────────────────────────╯%b\n' "$_CYAN" "$_RESET"
+        printf '  %b│%b\n' "$_YELLOW" "$_RESET"
+        printf '  %b╰──────────────────────────────────────────────╯%b\n' "$_YELLOW" "$_RESET"
     fi
 }
 
@@ -806,14 +811,14 @@ _display_config_summary() {
 run_interactive_wizard() {
     echo ""
     if [[ "$HAS_GUM" == "true" ]]; then
-        gum style --bold --foreground 212 --border double --border-foreground 57 \
+        gum style --bold --foreground 255 --border double --border-foreground 179 \
             --padding "0 3" --margin "0 2" \
             "🌾  Harvx Phase Pipeline Wizard"
     else
-        printf '  %b╔══════════════════════════════════════╗%b\n' "$_MAGENTA" "$_RESET"
+        printf '  %b╔══════════════════════════════════════╗%b\n' "$_YELLOW" "$_RESET"
         printf '  %b║%b  %b🌾  Harvx Phase Pipeline Wizard%b    %b║%b\n' \
-            "$_MAGENTA" "$_RESET" "$_BOLD$_WHITE" "$_RESET" "$_MAGENTA" "$_RESET"
-        printf '  %b╚══════════════════════════════════════╝%b\n' "$_MAGENTA" "$_RESET"
+            "$_YELLOW" "$_RESET" "$_BOLD$_WHITE" "$_RESET" "$_YELLOW" "$_RESET"
+        printf '  %b╚══════════════════════════════════════╝%b\n' "$_YELLOW" "$_RESET"
     fi
 
     prompt_phase_id PHASE_ID "${PHASE_ID:-1}"
@@ -1353,7 +1358,7 @@ run_pr_creation() {
     assert_expected_branch
 
     local verification_summary
-    verification_summary="implementation=${IMPLEMENT_STATUS}; review_verdict=${REVIEW_VERDICT}; review_cycles=${REVIEW_CYCLES}; fix_cycles=${FIX_CYCLES}; artifacts=${RUN_DIR}"
+    verification_summary="implementation=${IMPLEMENT_STATUS}; review_verdict=${REVIEW_VERDICT}; review_cycles=${REVIEW_CYCLES}; fix_cycles=${FIX_CYCLES}; artifacts=${RUN_DIR#"$PROJECT_ROOT"/}"
 
     local pr_script="$PROJECT_ROOT/scripts/review/create-pr.sh"
     if [[ ! -f "$pr_script" ]]; then
@@ -1537,13 +1542,16 @@ run_single_phase() {
     esac
 
     local phase_summary_title="Phase $PHASE_ID Complete"
-    local phase_summary_color="46"
+    local phase_summary_color="179"  # warm gold — matches framing
+    local phase_summary_fg="255"     # white text
     if [[ "$IMPLEMENT_STATUS" == "blocked" ]]; then
         phase_summary_title="Phase $PHASE_ID Halted"
         phase_summary_color="214"
+        phase_summary_fg="214"
     elif [[ "$IMPLEMENT_STATUS" == "failed" ]]; then
         phase_summary_title="Phase $PHASE_ID Halted"
         phase_summary_color="196"
+        phase_summary_fg="196"
     fi
 
     if [[ "$HAS_GUM" == "true" ]]; then
@@ -1554,22 +1562,22 @@ run_single_phase() {
         fi
         gum style --border rounded --border-foreground "$phase_summary_color" \
             --padding "0 2" --margin "0 2" \
-            --bold --foreground "$phase_summary_color" \
+            --bold --foreground "$phase_summary_fg" \
             "$phase_summary_title" "" "$summary"
     else
-        local summary_color="$_GREEN"
+        local summary_color="$_CYAN"
         if [[ "$IMPLEMENT_STATUS" == "blocked" ]]; then
             summary_color="$_YELLOW"
         elif [[ "$IMPLEMENT_STATUS" == "failed" ]]; then
             summary_color="$_RED"
         fi
         printf '  %b╭─ %b%b%s%b %b──────────────────────╮%b\n' \
-            "$summary_color" "$_RESET" "$_BOLD$summary_color" "$phase_summary_title" "$_RESET" "$summary_color" "$_RESET"
-        printf '  %b│%b  %b Implementation  %s\n' "$_GREEN" "$_RESET" "$impl_icon" "$IMPLEMENT_STATUS"
-        printf '  %b│%b  %b Review          %b\n' "$_GREEN" "$_RESET" "$_SYM_CHECK" "$verdict_display"
-        printf '  %b│%b  %b PR              %s\n' "$_GREEN" "$_RESET" "$pr_icon" "$PR_STATUS"
+            "$summary_color" "$_RESET" "$_BOLD$_WHITE" "$phase_summary_title" "$_RESET" "$summary_color" "$_RESET"
+        printf '  %b│%b  %b Implementation  %s\n' "$summary_color" "$_RESET" "$impl_icon" "$IMPLEMENT_STATUS"
+        printf '  %b│%b  %b Review          %b\n' "$summary_color" "$_RESET" "$_SYM_CHECK" "$verdict_display"
+        printf '  %b│%b  %b PR              %s\n' "$summary_color" "$_RESET" "$pr_icon" "$PR_STATUS"
         if [[ "$REVIEW_CYCLES" -gt 0 ]]; then
-            printf '  %b│%b    Review cycles: %d  Fix cycles: %d\n' "$_GREEN" "$_RESET" "$REVIEW_CYCLES" "$FIX_CYCLES"
+            printf '  %b│%b    Review cycles: %d  Fix cycles: %d\n' "$summary_color" "$_RESET" "$REVIEW_CYCLES" "$FIX_CYCLES"
         fi
         printf '  %b╰──────────────────────────────────────────╯%b\n' "$summary_color" "$_RESET"
     fi
@@ -1609,13 +1617,13 @@ main() {
         phases_display="${phases_display% → }"
 
         if [[ "$HAS_GUM" == "true" ]]; then
-            gum style --bold --foreground 212 --border thick --border-foreground 57 \
+            gum style --bold --foreground 255 --border thick --border-foreground 179 \
                 --padding "0 2" --margin "0 2" \
                 "Pipeline: $phases_display ($total phases)"
         else
-            printf '  %b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n' "$_MAGENTA" "$_RESET"
-            printf '  %b%b  Pipeline: %s (%d phases)%b\n' "$_BOLD" "$_MAGENTA" "$phases_display" "$total" "$_RESET"
-            printf '  %b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n' "$_MAGENTA" "$_RESET"
+            printf '  %b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n' "$_YELLOW" "$_RESET"
+            printf '  %b%b  Pipeline: %s (%d phases)%b\n' "$_BOLD" "$_YELLOW" "$phases_display" "$total" "$_RESET"
+            printf '  %b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n' "$_YELLOW" "$_RESET"
         fi
         echo ""
         _draw_phase_progress 0 "$total"
@@ -1662,30 +1670,30 @@ main() {
 
     if [[ "$HAS_GUM" == "true" ]]; then
         if [[ $total -gt 1 ]]; then
-            gum style --bold --foreground 46 --border double --border-foreground 46 \
+            gum style --bold --foreground 255 --border double --border-foreground 179 \
                 --padding "0 3" --margin "0 2" \
                 "All $total phases complete!"
         else
-            gum style --bold --foreground 46 --border double --border-foreground 46 \
+            gum style --bold --foreground 255 --border double --border-foreground 179 \
                 --padding "0 3" --margin "0 2" \
                 "Pipeline complete!" "" \
-                "  Metadata:  $METADATA_FILE" \
-                "  Artifacts: $RUN_DIR"
+                "  Metadata:  ${METADATA_FILE#"$PROJECT_ROOT"/}" \
+                "  Artifacts: ${RUN_DIR#"$PROJECT_ROOT"/}"
         fi
     else
         if [[ $total -gt 1 ]]; then
-            printf '  %b╔══════════════════════════════════════╗%b\n' "$_GREEN" "$_RESET"
+            printf '  %b╔══════════════════════════════════════╗%b\n' "$_CYAN" "$_RESET"
             printf '  %b║%b  %b%b All %d phases complete! %b           %b║%b\n' \
-                "$_GREEN" "$_RESET" "$_BOLD" "$_GREEN" "$total" "$_RESET" "$_GREEN" "$_RESET"
-            printf '  %b╚══════════════════════════════════════╝%b\n' "$_GREEN" "$_RESET"
+                "$_CYAN" "$_RESET" "$_BOLD" "$_WHITE" "$total" "$_RESET" "$_CYAN" "$_RESET"
+            printf '  %b╚══════════════════════════════════════╝%b\n' "$_CYAN" "$_RESET"
         else
-            printf '  %b╔══════════════════════════════════════╗%b\n' "$_GREEN" "$_RESET"
+            printf '  %b╔══════════════════════════════════════╗%b\n' "$_CYAN" "$_RESET"
             printf '  %b║%b  %b%b Pipeline complete! %b               %b║%b\n' \
-                "$_GREEN" "$_RESET" "$_BOLD" "$_GREEN" "$_RESET" "$_GREEN" "$_RESET"
-            printf '  %b╚══════════════════════════════════════╝%b\n' "$_GREEN" "$_RESET"
+                "$_CYAN" "$_RESET" "$_BOLD" "$_WHITE" "$_RESET" "$_CYAN" "$_RESET"
+            printf '  %b╚══════════════════════════════════════╝%b\n' "$_CYAN" "$_RESET"
             echo ""
-            printf '  %bMetadata:%b  %s\n' "$_DIM" "$_RESET" "$METADATA_FILE"
-            printf '  %bArtifacts:%b %s\n' "$_DIM" "$_RESET" "$RUN_DIR"
+            printf '  %bMetadata:%b  %s\n' "$_DIM" "$_RESET" "${METADATA_FILE#"$PROJECT_ROOT"/}"
+            printf '  %bArtifacts:%b %s\n' "$_DIM" "$_RESET" "${RUN_DIR#"$PROJECT_ROOT"/}"
         fi
     fi
     echo ""
