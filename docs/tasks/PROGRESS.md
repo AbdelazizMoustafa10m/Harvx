@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 22 |
+| Completed | 24 |
 | In Progress | 0 |
-| Not Started | 73 |
+| Not Started | 71 |
 
 ---
 
@@ -328,6 +328,27 @@
   - `internal/config/show_test.go` -- 15 tests for serialization and source annotations
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-023: Profile CLI Subcommands -- lint and explain
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `profiles lint` Cobra subcommand: runs `config.Lint()`, groups by severity (errors/warnings/info), prints icons (X/!/i), exits 1 on errors; `--profile` flag filters to one profile
+  - `profiles explain <filepath>` Cobra subcommand: resolves profile via full 5-layer pipeline, explains file through simulated discovery pipeline steps, prints rule trace; supports glob expansion via `doublestar.Glob`; `--profile` flag; `ValidArgsFunction` for file completion
+  - `ExplainFile(filePath, profileName string, p *Profile) ExplainResult` in `internal/config/explain.go`: simulates 11 ordered pipeline steps (default ignores, profile ignores, .gitignore stub, include filter, priority files, tier 0-5), records `TraceStep` per step, computes `Tier`, `RedactionOn`, `Compression` language
+  - `TraceStep` struct: StepNum, Rule, Matched, Outcome
+  - `ExplainResult` struct: FilePath, ProfileName, Extends, Included, ExcludedBy, Tier, TierPattern, IsPriority, RedactionOn, Compression, Trace
+  - `compressionLanguage(filePath)` helper: 16-extension map for Tree-sitter language detection
+  - 47 new tests across 3 test files covering all acceptance criteria
+- **Files created/modified:**
+  - `internal/config/explain.go` -- ExplainFile engine, TraceStep, ExplainResult, compressionLanguage
+  - `internal/config/explain_test.go` -- 22 tests for explain engine
+  - `internal/cli/profiles_lint.go` -- lint subcommand implementation
+  - `internal/cli/profiles_lint_test.go` -- 11 tests for lint command
+  - `internal/cli/profiles_explain.go` -- explain subcommand implementation
+  - `internal/cli/profiles_explain_test.go` -- 14 tests for explain command
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ---
 
 ## In Progress Tasks
@@ -356,7 +377,7 @@ _None currently_
 | T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Completed |
 | T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Completed |
 | T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Completed |
-| T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Not Started |
+| T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Completed |
 | T-024 | Config Debug Command | Should Have | Small (4-6hrs) | Not Started |
 | T-025 | Profile Integration Tests and Golden Tests | Must Have | Medium (8-12hrs) | Not Started |
 
@@ -651,4 +672,26 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
   - `docs/tasks/PROGRESS.md` -- updated summary
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
-_Last updated: 2026-02-22 (T-022 complete)_
+### T-023: Profile CLI Subcommands -- lint and explain
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `ExplainFile(filePath, profileName string, p *Profile) ExplainResult` in `internal/config/explain.go` -- pure logic explain engine with no I/O
+  - `TraceStep` struct: 1-based StepNum, Rule string, Matched bool, Outcome string
+  - `ExplainResult` struct: FilePath, ProfileName, Extends, Included, ExcludedBy, Tier (-1 if untiered), TierPattern, IsPriority, RedactionOn, Compression, Trace
+  - Pipeline simulation in order: (1) default ignore patterns, (2) profile ignore patterns, (3) .gitignore stub (not simulated), (4) include filter, (5) priority files check, (6–11) relevance tiers 0–5 with first-match-wins and early stop
+  - `compressionLanguage(filePath string) string` -- 16-entry extension → language name map (.go, .ts, .tsx, .js, .jsx, .py, .rs, .c, .cpp, .h, .java, .rb, .php, .swift, .kt, .cs)
+  - `matchesAny(path string, patterns []string) bool` -- doublestar.Match helper used for redaction ExcludePaths and include filter
+  - `matchesGlob(pattern, filePath string) bool` -- error-silenced doublestar.Match wrapper
+  - `profilesLintCmd` (`harvx profiles lint`): loads repo config, runs `config.Lint()`, partitions results by severity (errors/warnings/info), prints grouped output with icons (X/!/i), summary line `N error(s), M warning(s), K info`; exits 1 if any errors found; `--profile` flag to lint single profile
+  - `profilesExplainCmd` (`harvx profiles explain <filepath>`): resolves profile via `config.Resolve`, detects glob patterns (`*?[{`) and expands via `doublestar.Glob(os.DirFS("."), ...)`, calls `ExplainFile` per matched path, renders formatted output with status, tier, matched-by, redaction, compression, priority, and full rule trace
+  - Both subcommands registered via separate `init()` functions (not modifying existing profiles.go init)
+  - `ValidArgsFunction` on explain command for shell file completion
+- **Files created:**
+  - `internal/config/explain.go` -- ExplainFile engine: TraceStep, ExplainResult, pipeline simulation, compression detection, matchesAny, matchesGlob helpers
+  - `internal/cli/profiles_lint.go` -- profilesLintCmd with runProfilesLint, grouped severity output, exit-1 on errors
+  - `internal/cli/profiles_explain.go` -- profilesExplainCmd with runProfilesExplain, glob expansion, printTo formatter, formatTier/formatRedaction/formatCompression/formatPriority helpers
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+_Last updated: 2026-02-22 (T-023 complete)_
