@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 29 |
+| Completed | 30 |
 | In Progress | 0 |
-| Not Started | 66 |
+| Not Started | 65 |
 
 ---
 
@@ -272,6 +272,36 @@
   - `internal/relevance/matcher.go` -- TierMatcher, NewTierMatcher, Match, ClassifyFiles, normalisePath
   - `internal/relevance/matcher_test.go` -- Comprehensive unit tests and benchmarks
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go mod tidy` ✓  `go test -race` ✓
+
+---
+
+### T-029: Tokenizer Interface and Implementations (cl100k, o200k, none)
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `Tokenizer` interface with `Count(text string) int` and `Name() string` methods
+  - `tiktokenTokenizer` struct for `cl100k_base` and `o200k_base` using `pkoukk/tiktoken-go`; encoding loaded once on construction, goroutine-safe via tiktoken-go's immutable encode state
+  - `estimatorTokenizer` struct for `"none"` mode: returns `len(text) / 4`; zero-allocation, no I/O
+  - `NewTokenizer(name string) (Tokenizer, error)` factory; empty string defaults to `cl100k_base`; returns `ErrUnknownTokenizer` (sentinel) for unrecognised names
+  - Exported name constants: `NameCL100K`, `NameO200K`, `NameNone`
+  - `TIKTOKEN_CACHE_DIR` env var respected via tiktoken-go's built-in support
+  - 3 benchmark sets (1KB/10KB/100KB) × 3 implementations = 9 benchmarks total
+  - Concurrent safety test: 10 goroutines × 50 iterations for all three implementations
+- **Files created/modified:**
+  - `internal/tokenizer/tokenizer.go` -- Tokenizer interface, name constants, ErrUnknownTokenizer sentinel, NewTokenizer factory
+  - `internal/tokenizer/tiktoken.go` -- tiktokenTokenizer (cl100k_base and o200k_base)
+  - `internal/tokenizer/estimator.go` -- estimatorTokenizer (none/len-div-4)
+  - `internal/tokenizer/tokenizer_test.go` -- factory tests, interface compliance, concurrent safety, name constants
+  - `internal/tokenizer/tiktoken_test.go` -- cl100k/o200k correctness, Unicode, large text, benchmarks
+  - `internal/tokenizer/estimator_test.go` -- len/4 formula table tests, large text, consistency, benchmarks
+  - `go.mod` / `go.sum` -- added `github.com/pkoukk/tiktoken-go v0.1.8` (upgraded from v0.1.7 via mod tidy)
+- **Key decisions:**
+  - Encoding initialised once in constructor (not per `Count` call) per spec
+  - `errors.Is`-compatible sentinel `ErrUnknownTokenizer` using `fmt.Errorf` (not `errors.New`) to allow wrapping with additional context
+  - `estimatorTokenizer` holds no state so goroutine safety is trivially guaranteed
+  - `tiktokenTokenizer.Count` short-circuits on empty string to avoid BPE call overhead
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go mod tidy` ✓
 
 ---
 
