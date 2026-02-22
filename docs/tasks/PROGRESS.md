@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 17 |
+| Completed | 18 |
 | In Progress | 0 |
-| Not Started | 78 |
+| Not Started | 77 |
 
 ---
 
@@ -225,6 +225,23 @@
   - `go.mod` -- promoted koanf/v2 and koanf/providers/confmap to direct dependencies
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-018: Configuration File Auto-Detection and Discovery
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `DiscoverRepoConfig(startDir string) (string, error)` — walks up the directory tree from `startDir` resolving symlinks first, checking for `harvx.toml` at each level, stopping at `.git` boundary or after 20 levels (max depth), returning the first config found or empty string
+  - `DiscoverGlobalConfig() (string, error)` — returns XDG-compatible global config path: `$XDG_CONFIG_HOME/harvx/config.toml`, `~/.config/harvx/config.toml` (Linux/macOS), or `%APPDATA%\harvx\config.toml` (Windows); returns empty string (no error) when file absent
+  - `globalConfigDir()` unexported helper isolating platform-specific path logic
+  - Resolver Layer 2 updated to use `DiscoverGlobalConfig()` instead of hard-coded `os.UserHomeDir()` + `filepath.Join`
+  - Resolver Layer 3 updated to use `DiscoverRepoConfig(targetDir)` instead of direct `filepath.Join(targetDir, "harvx.toml")`
+  - 29 tests covering all acceptance criteria, edge cases, and resolver integration
+- **Files created/modified:**
+  - `internal/config/discover.go` -- `DiscoverRepoConfig`, `DiscoverGlobalConfig`, `globalConfigDir`
+  - `internal/config/discover_test.go` -- 29 tests: start dir, parent dir, two levels up, max depth, .git boundary, symlink resolution, permission-denied, XDG env, table-driven, resolver integration
+  - `internal/config/resolver.go` -- Layer 2 and Layer 3 replaced to call discovery functions
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ---
 
 ## In Progress Tasks
@@ -248,7 +265,7 @@ _None currently_
 |------|------|----------|--------|--------|
 | T-016 | Configuration Types, Defaults, and TOML Loading | Must Have | Medium (8-12hrs) | Completed |
 | T-017 | Multi-Source Configuration Merging and Resolution | Must Have | Large (14-20hrs) | Completed |
-| T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Not Started |
+| T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Completed |
 | T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Not Started |
 | T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Not Started |
 | T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Not Started |

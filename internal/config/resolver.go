@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -90,9 +89,11 @@ func Resolve(opts ResolveOptions) (*ResolvedConfig, error) {
 	// ── Layer 2: global config ─────────────────────────────────────────────
 	globalPath := opts.GlobalConfigPath
 	if globalPath == "" {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			globalPath = filepath.Join(home, ".config", "harvx", "config.toml")
+		discovered, err := DiscoverGlobalConfig()
+		if err != nil {
+			slog.Debug("global config discovery error", "err", err)
+		} else {
+			globalPath = discovered
 		}
 	}
 
@@ -121,13 +122,18 @@ func Resolve(opts ResolveOptions) (*ResolvedConfig, error) {
 		if targetDir == "" {
 			targetDir = "."
 		}
-		repoConfigPath := filepath.Join(targetDir, "harvx.toml")
-		found, err := loadFileLayer(k, repoConfigPath, profileName, sources, SourceRepo)
-		if err != nil {
-			return nil, err
+		repoConfigPath, discErr := DiscoverRepoConfig(targetDir)
+		if discErr != nil {
+			slog.Debug("repo config discovery error", "err", discErr)
 		}
-		if found {
-			profileFound = true
+		if repoConfigPath != "" {
+			found, err := loadFileLayer(k, repoConfigPath, profileName, sources, SourceRepo)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				profileFound = true
+			}
 		}
 	}
 
