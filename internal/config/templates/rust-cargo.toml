@@ -1,0 +1,63 @@
+# Harvx profile template — Rust Cargo project.
+# Run `harvx profiles init --template rust-cargo` to use this template.
+# Customize each section to match your project layout.
+#
+# Project: {{project_name}}
+
+[profile.default]
+format     = "markdown"
+max_tokens = 128000
+tokenizer  = "cl100k_base"
+output     = "{{project_name}}-context.md"
+
+# Exact file paths always included first, before tier-based sorting.
+# No glob patterns (*, ?, [, {) allowed here.
+priority_files = [
+  "Cargo.toml",
+  "build.rs",
+  "src/main.rs",
+  "src/lib.rs",
+]
+
+# Glob patterns for paths to exclude from context generation.
+ignore = [
+  "target/",
+]
+
+[profile.default.relevance]
+# Tier 0 – highest priority: Cargo workspace and toolchain configuration.
+tier_0 = [
+  "Cargo.toml",
+  "Cargo.lock",
+  "rust-toolchain.toml",
+  "build.rs",
+]
+
+# Tier 1 – primary source: all Rust source files.
+tier_1 = [
+  "src/**/*.rs",
+]
+
+# Tier 2 – secondary source: benchmarks and examples.
+tier_2 = [
+  "benches/**/*.rs",
+  "examples/**/*.rs",
+]
+
+# Tier 3 – integration tests.
+tier_3 = [
+  "tests/**/*.rs",
+]
+
+# Tier 4 – documentation.
+tier_4 = [
+  "docs/**/*.md",
+  "**/*.md",
+]
+
+# Tier 5 – infrastructure: CI/CD workflows and Cargo configuration.
+tier_5 = [
+  ".github/**/*.yml",
+  ".github/**/*.yaml",
+  ".cargo/**/*.toml",
+]

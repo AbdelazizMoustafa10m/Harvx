@@ -1,0 +1,27 @@
+# contradictory.toml -- profile with priority_files that also appear in ignore,
+# and priority_files entries that look like glob patterns.
+# Used by TestValidate_Contradictory tests in internal/config/validate_test.go.
+
+[profile.contradictory]
+format     = "markdown"
+tokenizer  = "cl100k_base"
+max_tokens = 128000
+
+# CLAUDE.md is listed as a priority file but also excluded via ignore.
+priority_files = [
+  "CLAUDE.md",
+  "prisma/schema.prisma",
+  "**/*.important",
+]
+
+ignore = [
+  "CLAUDE.md",
+  "node_modules",
+  ".git",
+]
+
+[profile.contradictory.redaction_config]
+enabled              = true
+confidence_threshold = "high"
+# node_modules is already in ignore; listing it here is redundant.
+exclude_paths = ["node_modules", "**/*test*/**"]

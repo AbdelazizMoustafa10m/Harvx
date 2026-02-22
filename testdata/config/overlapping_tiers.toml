@@ -1,0 +1,16 @@
+# overlapping_tiers.toml -- profile with the same glob patterns in multiple
+# relevance tiers, triggering "overlapping tiers" warnings.
+# Used by TestValidate_OverlappingTiers tests in internal/config/validate_test.go.
+
+[profile.overlapping]
+format    = "markdown"
+tokenizer = "cl100k_base"
+max_tokens = 128000
+
+[profile.overlapping.relevance]
+tier_0 = ["go.mod", "Makefile", "**/*.config.*"]
+tier_1 = ["src/**", "internal/**", "go.mod"]
+tier_2 = ["components/**", "internal/**", "utils/**"]
+tier_3 = ["**/*_test.go", "components/**"]
+tier_4 = ["**/*.md", "docs/**"]
+tier_5 = [".github/**", "**/*.lock", "**/*.md"]

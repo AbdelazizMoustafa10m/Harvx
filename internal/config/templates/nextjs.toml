@@ -1,0 +1,85 @@
+# Harvx profile template — Next.js / React application.
+# Run `harvx profiles init --template nextjs` to use this template.
+# Customize each section to match your project layout.
+#
+# Project: {{project_name}}
+
+[profile.default]
+format     = "markdown"
+max_tokens = 128000
+tokenizer  = "cl100k_base"
+output     = "{{project_name}}-context.md"
+
+# Exact file paths always included first, before tier-based sorting.
+# No glob patterns (*, ?, [, {) allowed here.
+priority_files = [
+  "package.json",
+  "tsconfig.json",
+  "next.config.js",
+]
+
+# Glob patterns for paths to exclude from context generation.
+ignore = [
+  ".next/",
+  "node_modules/",
+  "out/",
+  "coverage/",
+  ".vercel/",
+]
+
+[profile.default.relevance]
+# Tier 0 – highest priority: Next.js configuration and environment files.
+tier_0 = [
+  "next.config.mjs",
+  "next.config.ts",
+  "tsconfig.json",
+  ".env.example",
+  ".env.local.example",
+]
+
+# Tier 1 – primary source: app router, pages, and core library code.
+tier_1 = [
+  "app/**/*.ts",
+  "app/**/*.tsx",
+  "pages/**/*.ts",
+  "pages/**/*.tsx",
+  "lib/**/*.ts",
+  "lib/**/*.tsx",
+  "middleware.ts",
+]
+
+# Tier 2 – secondary source: components, hooks, utilities, and styles.
+tier_2 = [
+  "components/**/*.tsx",
+  "components/**/*.ts",
+  "hooks/**/*.ts",
+  "utils/**/*.ts",
+  "styles/**/*.css",
+  "styles/**/*.scss",
+]
+
+# Tier 3 – tests: unit, integration, and end-to-end test files.
+tier_3 = [
+  "__tests__/**/*.ts",
+  "__tests__/**/*.tsx",
+  "**/*.test.tsx",
+  "**/*.test.ts",
+  "**/*.spec.ts",
+  "cypress/**/*.ts",
+]
+
+# Tier 4 – documentation.
+tier_4 = [
+  "docs/**/*.md",
+  "**/*.md",
+]
+
+# Tier 5 – infrastructure: CI/CD workflows and linter/formatter configs.
+tier_5 = [
+  ".github/**/*.yml",
+  ".github/**/*.yaml",
+  ".eslintrc.json",
+  ".eslintrc.js",
+  ".prettierrc.json",
+  ".prettierrc.js",
+]
