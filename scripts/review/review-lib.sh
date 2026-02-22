@@ -38,16 +38,7 @@ DIFF_LINES=0
 REVIEW_ARCHIVED=false
 REVIEW_USING_ARCHIVE=false
 
-PROJECT_BRIEF="Harvx is a Go CLI for generating deterministic, LLM-ready repository context.\
-Core stack: Go 1.24+, Cobra, koanf/toml config loading, slog logging, RE2 regex,\
-errgroup parallelism, tiktoken token counting, and secure redaction/compression pipelines.\
-\
-Review priorities for Harvx:\
-- Cobra CLI contract correctness (flags, defaults, error paths, stdout/stderr behavior).\
-- Determinism and reproducibility (stable sorting, stable output formats, stable hashes).\
-- Config correctness (profile merges, unknown key detection, safe defaults).\
-- Security and safety (secret redaction integrity, no panic paths, no unsafe shell behavior).\
-- Testing rigor (table-driven tests, golden tests, fixture coverage, regression prevention)."
+PROJECT_BRIEF="Harvx is a Go CLI tool that packages codebases into LLM-optimized context documents. Single binary, zero runtime dependencies, cross-platform (macOS/Linux/Windows). It walks a repository, applies filtering/relevance/security/compression, and renders Markdown or XML context suitable for large language models."
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -24,8 +24,11 @@ Implement the assigned task, verify it, update progress, and commit.
 3. Read the task spec file for `{{TASK_ID}}`: `docs/tasks/{{TASK_ID}}-*.md`
 4. Understand acceptance criteria, dependencies, technical notes, files to create
 5. If the task references PRD sections, read `docs/prd/PRD-Harvx.md` for context
+6. **Check for partial progress**: Run `git status` and check if any files listed in the task spec already exist with implementation code. If you find uncommitted changes or partially-implemented files for `{{TASK_ID}}`, a previous session was interrupted (rate limit, crash, etc.) and partial work was preserved. Read the existing changes, understand what is already done vs. what remains, and plan to continue from there.
 
 ### Step 2: Implement
+
+> **Resume hint:** If Step 1.6 found partial progress, do NOT re-implement from scratch. Read the existing partial code, compare it against the acceptance criteria, identify what is missing or incomplete, and continue from where the previous session left off. Only create files that don't exist yet and only modify sections that are incomplete.
 
 Use `/implement-task {{TASK_ID}}` to orchestrate the implementation.
 
@@ -36,9 +39,14 @@ This will:
 
 If `/implement-task` is not available, implement directly:
 1. Read the task spec carefully
-2. Create/modify files per the spec
-3. Write tests alongside implementation
-4. Follow Go conventions from CLAUDE.md
+2. Read skills/*.md for GO, Cobra, and CLI conventions, and best practices.
+3. Create/modify files per the spec
+   - Spawn a Go engineer subagent for implementation
+   - check if implementation tasks are independent and can be paralleized without affecting each other
+   - if they can be paralleized, spawn multiple Go engineer subagents for implementation
+4. Write tests alongside implementation
+   - Spawn a testing engineer subagent for tests
+5. Run final verification
 
 ### Step 3: Verify
 
@@ -59,12 +67,24 @@ Update `docs/tasks/PROGRESS.md`:
 
 1. **Summary table**: Increment "Completed", decrement "Not Started"
 2. **Phase task table**: Change task status from "Not Started" to "Completed"
-3. **Completed Tasks section**: Add entry with:
-   - Task ID and title
-   - Date (today)
-   - What was built (bullet points)
-   - Files created/modified
-   - Verification status
+3. **Completed Tasks section**: Add a new individual task entry using **exactly** this format,
+   directly inside `## Completed Tasks` — do NOT append to any existing consolidated phase block:
+
+```markdown
+### T-XXX: Task Name
+
+- **Status:** Completed
+- **Date:** YYYY-MM-DD
+- **What was built:**
+  - <bullet describing key component or feature>
+  - <bullet describing key component or feature>
+- **Files created/modified:**
+  - `path/to/file.go` -- one-line description
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+```
+
+The `### T-XXX:` header is required — it is how the consolidation script identifies
+per-task entries. Never add completions as rows inside an existing phase table.
 
 Update `docs/tasks/task-state.conf`:
 
@@ -80,7 +100,8 @@ Update `docs/tasks/task-state.conf`:
 
 Stage and commit the changes.
 
-This is critical: do not exit after updating code/`PROGRESS.md` unless a commit was created for `{{TASK_ID}}`.
+- **This is critical:** do not exit after updating code/`PROGRESS.md` unless a commit was created for `{{TASK_ID}}`.
+- **If you find that you are denied the permission to commit**, leave the commit message in your logs and the auto commit recovery of the pipeline will commit it for you and exit. 
 
 ```bash
 git add <specific-files>
