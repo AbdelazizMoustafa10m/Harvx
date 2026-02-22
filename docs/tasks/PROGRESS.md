@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 26 |
+| Completed | 27 |
 | In Progress | 0 |
-| Not Started | 69 |
+| Not Started | 68 |
 
 ---
 
@@ -234,6 +234,24 @@
 - `go build ./cmd/harvx/` pass
 - `go vet ./...` pass
 - `go test ./...` pass
+
+---
+
+### T-026: Tier Definitions and Default Tier Assignments
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `Tier` type (`int`) with 6 named constants: `Tier0Critical` through `Tier5Low`
+  - `DefaultUnmatchedTier = Tier2Secondary` — fallback for files matching no pattern
+  - `String()` method on `Tier` with lowercase labels and numeric fallback
+  - `TierDefinition` struct with `toml` struct tags for TOML serialization
+  - `DefaultTierDefinitions()` returning all 6 built-in tiers per PRD Section 5.3
+  - 10 table-driven test functions with 30+ sub-cases achieving 95%+ coverage
+- **Files created/modified:**
+  - `internal/relevance/tiers.go` -- Tier type, constants, TierDefinition struct, DefaultTierDefinitions()
+  - `internal/relevance/tiers_test.go` -- Unit tests for all tier definitions and defaults
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
 ---
 
