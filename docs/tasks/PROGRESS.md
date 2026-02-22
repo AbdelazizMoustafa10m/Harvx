@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 19 |
+| Completed | 20 |
 | In Progress | 0 |
-| Not Started | 76 |
+| Not Started | 75 |
 
 ---
 
@@ -264,6 +264,26 @@
   - `internal/config/resolver.go` -- Layer 2 and Layer 3 replaced to call discovery functions
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-020: Configuration Validation and Lint Engine
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `ValidationError` struct implementing the `error` interface with severity, field path, message, and suggestion fields
+  - `LintResult` struct embedding `ValidationError` plus a stable machine-readable `Code` for programmatic filtering
+  - `Validate(cfg *Config) []ValidationError` — accumulates all hard errors (invalid format/tokenizer/target/confidence_threshold, negative or out-of-range max_tokens, invalid glob syntax, circular/missing inheritance) and warnings (overlapping tier patterns, empty tiers, contradictory priority_files, redundant redaction exclude_paths, deep inheritance, oversized max_tokens, out-of-tree output path) across all profiles without stopping at the first error
+  - `Lint(cfg *Config) []LintResult` — runs all Validate checks plus three deeper analyses: unreachable tier detection ("unreachable-tier"), no-extension tier pattern detection ("no-ext-match"), and complexity score reporting ("complexity")
+  - 3 test fixture TOML files: invalid_format.toml, overlapping_tiers.toml, contradictory.toml
+  - 52+ table-driven tests with testify assertions covering all 16 spec test cases plus edge cases
+- **Files created/modified:**
+  - `internal/config/errors.go` -- ValidationError and LintResult types
+  - `internal/config/validate.go` -- Validate(), Lint(), and 12 unexported helper functions
+  - `internal/config/validate_test.go` -- 52+ tests covering all acceptance criteria and edge cases
+  - `testdata/config/invalid_format.toml` -- invalid format, tokenizer, target, max_tokens, confidence_threshold
+  - `testdata/config/overlapping_tiers.toml` -- overlapping glob patterns across tiers
+  - `testdata/config/contradictory.toml` -- priority_files in ignore, glob in priority_files, redundant redaction excludes
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ---
 
 ## In Progress Tasks
@@ -289,7 +309,7 @@ _None currently_
 | T-017 | Multi-Source Configuration Merging and Resolution | Must Have | Large (14-20hrs) | Completed |
 | T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Completed |
 | T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Completed |
-| T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Not Started |
+| T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Completed |
 | T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Not Started |
 | T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Not Started |
 | T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Not Started |
@@ -508,4 +528,28 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
 - [PHASE-8-INDEX.md](PHASE-8-INDEX.md) -- Workflows
 
 
-_Last updated: 2026-02-16 (Phase 1 complete)_
+### T-020: Configuration Validation and Lint Engine
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `ValidationError` struct implementing `error` interface with Severity, Field, Message, Suggest fields
+  - `LintResult` struct embedding `ValidationError` plus a `Code` string for machine-readable lint rule IDs
+  - `Validate(cfg *Config) []ValidationError` — collects all hard errors and warnings across every profile; never stops at first issue
+  - Hard error checks: invalid format (not markdown/xml/plain), invalid tokenizer (not cl100k_base/o200k_base/none), invalid target (not claude/chatgpt/generic/empty), invalid confidence_threshold (not high/medium/low/empty), negative max_tokens, max_tokens > 2,000,000, invalid glob patterns via `doublestar.ValidatePattern`, circular inheritance (via ResolveProfile), missing parent profile
+  - Soft warning checks: overlapping glob patterns across tiers (same exact string in multiple tiers), empty relevance tiers (non-nil but zero-length slice), priority_files in ignore list (contradictory), priority_files containing glob metacharacters (*?[{), redaction exclude_paths overlapping with ignore (redundant), deep inheritance chain (> 3 levels), max_tokens > 500,000 (unusually large), output path starting with "../" or absolute (outside project directory)
+  - `Lint(cfg *Config) []LintResult` — runs all Validate checks plus three deeper analyses:
+    - `unreachable-tier` (Code): tier whose entire pattern set is already present in higher-priority tiers
+    - `no-ext-match` (Code): tier pattern with no file-extension suffix (matches any file type)
+    - `complexity` (Code): profile with > 8 non-empty fields (encourages splitting via extends)
+  - `patternHasExtension(pattern string) bool` — heuristic for detecting extension-free glob patterns
+  - `profileComplexityScore(p *Profile) int` — counts non-empty/non-zero fields across all 19 profile settings
+- **Files created/modified:**
+  - `internal/config/errors.go` -- ValidationError struct + error interface + LintResult struct
+  - `internal/config/validate.go` -- Validate(), Lint(), and all check helpers
+  - `testdata/config/invalid_format.toml` -- profile with invalid format, tokenizer, target, and negative max_tokens
+  - `testdata/config/overlapping_tiers.toml` -- profile with same patterns in multiple tiers
+  - `testdata/config/contradictory.toml` -- profile with priority_files in ignore, glob patterns in priority_files, and redundant redaction excludes
+  - `docs/tasks/PROGRESS.md` -- updated summary
+
+_Last updated: 2026-02-22 (T-020 complete)_
