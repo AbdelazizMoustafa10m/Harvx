@@ -237,201 +237,59 @@
 
 ---
 
-### T-026: Tier Definitions and Default Tier Assignments
+### Phase 3: Relevance & Tokens (T-026 to T-033)
 
 - **Status:** Completed
 - **Date:** 2026-02-22
-- **What was built:**
-  - `Tier` type (`int`) with 6 named constants: `Tier0Critical` through `Tier5Low`
-  - `DefaultUnmatchedTier = Tier2Secondary` — fallback for files matching no pattern
-  - `String()` method on `Tier` with lowercase labels and numeric fallback
-  - `TierDefinition` struct with `toml` struct tags for TOML serialization
-  - `DefaultTierDefinitions()` returning all 6 built-in tiers per PRD Section 5.3
-  - 10 table-driven test functions with 30+ sub-cases achieving 95%+ coverage
-- **Files created/modified:**
-  - `internal/relevance/tiers.go` -- Tier type, constants, TierDefinition struct, DefaultTierDefinitions()
-  - `internal/relevance/tiers_test.go` -- Unit tests for all tier definitions and defaults
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- **Tasks Completed:** 8 tasks
 
----
+#### Features Implemented
 
-### T-027: Glob-Based File-to-Tier Matching
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Tier type system | T-026 | `Tier` int type with 6 named constants, `TierDefinition` struct with TOML tags, `DefaultTierDefinitions()` |
+| Glob-based tier matching | T-027 | `TierMatcher` with allocation-free `Match` and bulk `ClassifyFiles`; first-match-wins on sorted tiers |
+| Relevance sorting & grouping | T-028 | `SortByRelevance`, `GroupByTier`, `TierSummary`, `ClassifyAndSort` integrating matcher into pipeline |
+| Tokenizer interface & implementations | T-029 | `Tokenizer` interface; cl100k and o200k via `pkoukk/tiktoken-go`; `none` len/4 estimator; `NewTokenizer` factory |
+| Parallel token counting | T-030 | `TokenCounter.CountFiles` with `errgroup` bounded by `runtime.NumCPU()`; `EstimateOverhead` formula |
+| Budget enforcement | T-031 | `BudgetEnforcer.Enforce` with skip and truncate strategies; binary-search line truncation with 20-token marker reserve |
+| Relevance explain & inclusion summary | T-032 | `Explain`, `FormatExplain`, `GenerateInclusionSummary`; all-matches collection with deterministic ordering |
+| Token reporting CLI | T-033 | 5 new root flags; `TokenReport`, `TopFilesReport`, `HeatmapReport`; `harvx preview --heatmap` subcommand |
 
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `TierMatcher` struct with private `tierEntry` slice sorted by ascending tier number
-  - `NewTierMatcher(defs []TierDefinition) *TierMatcher` -- constructs matcher, sorts tiers, discards invalid patterns via `doublestar.ValidatePattern` at construction time
-  - `Match(filePath string) Tier` -- allocation-free per-file matching; evaluates tiers lowest-to-highest, first-match-wins; normalises paths (backslash -> forward slash, strips `./` prefix)
-  - `ClassifyFiles(files []string, tiers []TierDefinition) map[string]Tier` -- bulk classification returning original path keys
-  - `sortTierDefinitions` (insertion sort on short lists) and `normalisePath` internal helpers
-  - Input slice immutability: `NewTierMatcher` copies before sorting so callers' slices are never mutated
-  - 28+ table-driven test functions covering all T-027 spec cases, edge cases, and invariants; 97.7% statement coverage
-  - 2 benchmarks: `BenchmarkClassifyFiles10K` (~5ms for 10K files), `BenchmarkMatchSingle` (~367ns, 0 allocs)
-- **Files created/modified:**
-  - `internal/relevance/matcher.go` -- TierMatcher, NewTierMatcher, Match, ClassifyFiles, normalisePath
-  - `internal/relevance/matcher_test.go` -- Comprehensive unit tests and benchmarks
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go mod tidy` ✓  `go test -race` ✓
+#### Key Technical Decisions
 
----
+1. **Tokenizer constructed once** -- tiktoken encoding loaded in constructor, not per `Count` call; goroutine-safe and avoids repeated I/O
+2. **Truncation uses binary search** -- `enforceWithTruncate` bisects content lines with the actual `Tokenizer` for accurate fit; fixed 20-token reservation guarantees room for the truncation marker
+3. **`BudgetRemaining` may be negative** -- when overhead exceeds `maxTokens`, the field reflects the deficit rather than clamping to zero, matching spec behaviour
+4. **Input immutability in `TierMatcher`** -- `NewTierMatcher` copies the caller's slice before sorting; caller order is never disturbed
+5. **`ErrUnknownTokenizer` via `fmt.Errorf`** -- sentinel supports `errors.Is` unwrapping when callers wrap it with additional context
+6. **`previewHeatmap` as package-level var** -- bound after cobra parses flags, not in `init()`, to avoid nil-pointer dereference before `flagValues` is populated
+7. **No lipgloss in reports** -- `TokenReport`/`HeatmapReport` use plain text with Unicode `─` box-drawing characters; zero additional binary weight
 
-### T-029: Tokenizer Interface and Implementations (cl100k, o200k, none)
+#### Key Files Reference
 
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `Tokenizer` interface with `Count(text string) int` and `Name() string` methods
-  - `tiktokenTokenizer` struct for `cl100k_base` and `o200k_base` using `pkoukk/tiktoken-go`; encoding loaded once on construction, goroutine-safe via tiktoken-go's immutable encode state
-  - `estimatorTokenizer` struct for `"none"` mode: returns `len(text) / 4`; zero-allocation, no I/O
-  - `NewTokenizer(name string) (Tokenizer, error)` factory; empty string defaults to `cl100k_base`; returns `ErrUnknownTokenizer` (sentinel) for unrecognised names
-  - Exported name constants: `NameCL100K`, `NameO200K`, `NameNone`
-  - `TIKTOKEN_CACHE_DIR` env var respected via tiktoken-go's built-in support
-  - 3 benchmark sets (1KB/10KB/100KB) × 3 implementations = 9 benchmarks total
-  - Concurrent safety test: 10 goroutines × 50 iterations for all three implementations
-- **Files created/modified:**
-  - `internal/tokenizer/tokenizer.go` -- Tokenizer interface, name constants, ErrUnknownTokenizer sentinel, NewTokenizer factory
-  - `internal/tokenizer/tiktoken.go` -- tiktokenTokenizer (cl100k_base and o200k_base)
-  - `internal/tokenizer/estimator.go` -- estimatorTokenizer (none/len-div-4)
-  - `internal/tokenizer/tokenizer_test.go` -- factory tests, interface compliance, concurrent safety, name constants
-  - `internal/tokenizer/tiktoken_test.go` -- cl100k/o200k correctness, Unicode, large text, benchmarks
-  - `internal/tokenizer/estimator_test.go` -- len/4 formula table tests, large text, consistency, benchmarks
-  - `go.mod` / `go.sum` -- added `github.com/pkoukk/tiktoken-go v0.1.8` (upgraded from v0.1.7 via mod tidy)
-- **Key decisions:**
-  - Encoding initialised once in constructor (not per `Count` call) per spec
-  - `errors.Is`-compatible sentinel `ErrUnknownTokenizer` using `fmt.Errorf` (not `errors.New`) to allow wrapping with additional context
-  - `estimatorTokenizer` holds no state so goroutine safety is trivially guaranteed
-  - `tiktokenTokenizer.Count` short-circuits on empty string to avoid BPE call overhead
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go mod tidy` ✓
+| Purpose | Location |
+| ------- | -------- |
+| Tier type, constants, `DefaultTierDefinitions` | `internal/relevance/tiers.go` |
+| `TierMatcher`, `Match`, `ClassifyFiles`, `normalisePath` | `internal/relevance/matcher.go` |
+| `SortByRelevance`, `GroupByTier`, `TierStat`, `TierSummary`, `ClassifyAndSort` | `internal/relevance/sorter.go` |
+| `Explain`, `FormatExplain`, `GenerateInclusionSummary`, `TierLabel` | `internal/relevance/explain.go` |
+| `Tokenizer` interface, `ErrUnknownTokenizer`, `NewTokenizer` factory, name constants | `internal/tokenizer/tokenizer.go` |
+| `tiktokenTokenizer` (cl100k, o200k) | `internal/tokenizer/tiktoken.go` |
+| `estimatorTokenizer` (none / len÷4) | `internal/tokenizer/estimator.go` |
+| `TokenCounter`, `CountFile`, `CountFiles`, `EstimateOverhead` | `internal/tokenizer/counter.go` |
+| `BudgetEnforcer`, `Enforce`, skip/truncate algorithms, `BudgetResult`, `BudgetSummary` | `internal/tokenizer/budget.go` |
+| `TokenReport`, `TopFilesReport`, `HeatmapReport`, `FormatInt`, `TierLabel` map | `internal/tokenizer/report.go` |
+| `PrintTokenReport`, `PrintTopFiles` CLI helpers | `internal/cli/token_report.go` |
+| `harvx preview` subcommand with `--heatmap` flag | `internal/cli/preview.go` |
+| 5 new persistent flags; `--tokenizer`/`--truncation-strategy` validation | `internal/config/flags.go` |
+| Shell completion for `--tokenizer` and `--truncation-strategy` | `internal/cli/root.go`, `internal/cli/generate.go` |
 
----
+#### Verification
 
-### T-028: Relevance Sorter -- Sort Files by Tier and Path
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `SortByRelevance(files []*pipeline.FileDescriptor) []*pipeline.FileDescriptor` -- returns a new sorted slice (input never mutated); primary sort by ascending `Tier`, secondary sort alphabetically by `Path`; uses `slices.SortStableFunc` + `cmp.Compare` (Go 1.22+)
-  - `GroupByTier(files []*pipeline.FileDescriptor) map[int][]*pipeline.FileDescriptor` -- partitions files into a map keyed by tier number; preserves insertion order within each bucket
-  - `TierStat` struct -- `Tier int`, `FileCount int`, `TotalTokens int`, `FilePaths []string`
-  - `TierSummary(files []*pipeline.FileDescriptor) []TierStat` -- per-tier counts and total token sums; only populated tiers included; result sorted by ascending Tier; `FilePaths` sorted alphabetically within each stat
-  - `ClassifyAndSort(files []*pipeline.FileDescriptor, tiers []TierDefinition) []*pipeline.FileDescriptor` -- integrates with `TierMatcher` from T-027: assigns `Tier` field on each descriptor then returns `SortByRelevance` output
-  - 25 table-driven test functions covering all spec cases, golden 20-file order test, stability, determinism, mutation safety, and edge cases (empty, single, nil tiers)
-  - 1 benchmark: `BenchmarkSortByRelevance10K` (10 000 files, realistic tier distribution)
-- **Files created/modified:**
-  - `internal/relevance/sorter.go` -- SortByRelevance, GroupByTier, TierStat, TierSummary, ClassifyAndSort
-  - `internal/relevance/sorter_test.go` -- comprehensive unit tests and benchmark
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
----
-
-### T-030: Parallel Per-File Token Counting
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `TokenCounter` struct wrapping a `Tokenizer` for parallel per-file token counting
-  - `CountFile(fd *pipeline.FileDescriptor)` -- populates `fd.TokenCount` from `fd.Content`, goroutine-safe
-  - `CountFiles(ctx context.Context, files []*pipeline.FileDescriptor) (int, error)` -- parallel counting via `errgroup` with `SetLimit(runtime.NumCPU())` bounded concurrency, returns total token count, supports context cancellation
-  - `EstimateOverhead(fileCount int, treeSize int) int` -- estimates output structure overhead using formula `200 + (fileCount * 35)`
-  - 15 unit tests + 2 benchmarks covering all acceptance criteria, edge cases (empty, zero files, cancellation, processed content, field mutation safety)
-- **Files created/modified:**
-  - `internal/tokenizer/counter.go` -- TokenCounter, NewTokenCounter, CountFile, CountFiles, EstimateOverhead
-  - `internal/tokenizer/counter_test.go` -- comprehensive unit tests and benchmarks
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
----
-
-### T-031: Token Budget Enforcement with Truncation Strategies
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `TruncationStrategy` string type with `SkipStrategy` ("skip") and `TruncateStrategy` ("truncate") constants
-  - `TierStat` struct: `FilesIncluded`, `FilesExcluded`, `TokensUsed` per tier
-  - `BudgetSummary` struct: `TierStats map[int]TierStat` + `SortedTierKeys()` convenience helper
-  - `BudgetResult` struct: `IncludedFiles`, `ExcludedFiles`, `TruncatedFiles`, `TotalTokens`, `BudgetUsed`, `BudgetRemaining`, `Summary`
-  - `BudgetEnforcer` struct with `maxTokens`, `strategy`, and `tok Tokenizer` fields
-  - `NewBudgetEnforcer(maxTokens int, strategy TruncationStrategy, tok Tokenizer) *BudgetEnforcer` constructor; nil tok falls back to character estimator
-  - `Enforce(files []*pipeline.FileDescriptor, overhead int) *BudgetResult` main method
-  - Skip algorithm: iterates all files; smaller files after a large excluded file are still considered
-  - Truncate algorithm: binary search over lines using the Tokenizer to find max lines fitting in budget; reserves 20 tokens for marker; appends `<!-- Content truncated: X of Y tokens shown -->` marker; all subsequent files excluded
-  - Original `FileDescriptor` is never mutated; truncation returns a shallow copy with updated `Content` and `TokenCount`
-  - `maxTokens <= 0` disables enforcement entirely (pass-through mode)
-  - 25+ table-driven tests + 2 benchmarks covering all strategies, edge cases (empty, no budget, zero remaining, overhead exceeds max, skip-continues-after-skip, original-not-mutated), invariants (included+excluded==total, truncated⊆included, TotalTokens==sum), and per-tier summary accuracy
-- **Files created:**
-  - `internal/tokenizer/budget.go` -- TruncationStrategy, TierStat, BudgetSummary, BudgetResult, BudgetEnforcer, NewBudgetEnforcer, Enforce, enforceWithSkip, enforceWithTruncate, truncateToFit, SortedTierKeys
-  - `internal/tokenizer/budget_test.go` -- comprehensive unit tests and benchmarks
-- **Key decisions:**
-  - Accepted `Tokenizer` in constructor for accurate binary search during truncation (not just char-based heuristic)
-  - Fixed 20-token marker reservation to always leave room for the truncation comment
-  - `TruncatedFiles` is a subset of `IncludedFiles` (same pointer), not a separate copy
-  - `BudgetRemaining` can be negative when overhead > maxTokens (spec requirement)
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
----
-
-### T-033: Token Reporting CLI Flags and Heatmap
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - Added 6 new fields to `FlagValues`: `Tokenizer`, `MaxTokens`, `TruncationStrategy`, `TokenCountOnly`, `TopFiles`, `Heatmap`
-  - Registered 5 new persistent flags on root: `--tokenizer` (default: `cl100k_base`), `--max-tokens` (default: 0), `--truncation-strategy` (default: `skip`), `--token-count`, `--top-files`
-  - Added validation in `ValidateFlags()` for `--tokenizer` and `--truncation-strategy` with allowlist checks
-  - `TokenReport` struct with `NewTokenReport()` constructor and `Format()` renderer (unicode box-drawing separator)
-  - `TierReportStat` for per-tier file and token count aggregation
-  - `TopFilesReport` / `TopFilesEntry` with `NewTopFilesReport()` (sorts by TokenCount descending, limits to N) and `Format()` renderer
-  - `HeatmapReport` / `HeatmapEntry` with `NewHeatmapReport()` (density = tokens/lines, guards zero-division) and `Format()` renderer
-  - `FormatInt(n int) string` exported helper for comma-separated thousands (e.g., 89420 → "89,420")
-  - `TierLabel` map (tiers 0–5) exported for reuse
-  - `PrintTokenReport()` and `PrintTopFiles()` functions in `internal/cli/token_report.go`
-  - `harvx preview` subcommand with `--heatmap` flag
-  - Shell completion registered for `--tokenizer` and `--truncation-strategy` on both root and generate commands
-- **Files created/modified:**
-  - `internal/config/flags.go` -- Added 6 new fields and 5 persistent flags; validation for tokenizer and truncation-strategy
-  - `internal/config/flags_test.go` -- 13 new tests for T-033 flags
-  - `internal/tokenizer/report.go` -- New: TokenReport, TopFilesReport, HeatmapReport, FormatInt, TierLabel
-  - `internal/tokenizer/report_test.go` -- New: 22 table-driven test functions covering all report types
-  - `internal/cli/token_report.go` -- New: PrintTokenReport, PrintTopFiles helper functions
-  - `internal/cli/token_report_test.go` -- New: 5 tests for CLI report helpers
-  - `internal/cli/preview.go` -- New: harvx preview command with --heatmap flag
-  - `internal/cli/preview_test.go` -- New: 5 tests for preview command
-  - `internal/cli/root.go` -- Added completeTokenizer and completeTruncationStrategy completion functions
-  - `internal/cli/root_test.go` -- 5 new tests for T-033 persistent flags
-  - `internal/cli/generate.go` -- Added completion functions for inherited tokenizer/truncation-strategy flags
-- **Key decisions:**
-  - `previewHeatmap` is a package-level variable (not bound to `flagValues.Heatmap` in `init()`) to avoid nil-pointer dereference before root.go's `init()` populates `flagValues`
-  - `FormatInt` uses byte-slice building rather than strconv/strings to avoid unnecessary allocations
-  - `HeatmapReport` gracefully handles nil `files` and nil `lineCounts` inputs (returns empty report with header)
-  - No lipgloss dependency; all formatting uses plain text with unicode `─` box-drawing characters
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
----
-
-### T-032: Relevance Explain and Inclusion Summary
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `PatternMatch` struct: `Tier int`, `Pattern string` — records a single tier/pattern match for a file
-  - `ExplainResult` struct with all 9 fields: `FilePath`, `AssignedTier`, `MatchedPattern`, `MatchedTierDef`, `IsDefault`, `AllMatches`, `WouldBeIncluded`, `ExclusionReason`, `TokenCount`
-  - `Explain(filePath string, tiers []TierDefinition) *ExplainResult` — iterates ALL tiers and ALL patterns to collect every overlapping match; assigned tier is first-match-wins (lowest tier number, then pattern order); uses same `normalisePath`/`doublestar.ValidatePattern`/`doublestar.Match` as TierMatcher; caller enriches `WouldBeIncluded`/`ExclusionReason` after budget enforcement
-  - `TierLabel(tier int) string` — maps 0→"Config", 1→"Source", 2→"Secondary", 3→"Tests", 4→"Docs", 5→"CI/Lock", unknown→"Tier<n>"
-  - `tierDisplayLabel(tier int) string` — internal helper; returns "Source Code" for tier 1 to match spec example, `TierLabel` for all others
-  - `FormatExplain(result *ExplainResult) string` — human-readable terminal output with File, Tier, Matched Pattern, optional Budget Status (only when WouldBeIncluded set or ExclusionReason non-empty), and All matching patterns section including default fallback entry
-  - `GenerateInclusionSummary(result *tokenizer.BudgetResult) string` — per-tier table with file counts, token counts, exclusion annotations; budget Total line shown only when `BudgetUsed > 0 || len(ExcludedFiles) > 0`; column-aligned labels; comma-formatted integers
-  - `formatInt(n int) string` — internal helper for comma thousands separators (e.g. 1,234,567)
-  - 30+ table-driven unit tests covering all spec acceptance criteria
-- **Files created:**
-  - `internal/relevance/explain.go` — PatternMatch, ExplainResult, Explain, TierLabel, tierDisplayLabel, FormatExplain, GenerateInclusionSummary, formatInt
-  - `internal/relevance/explain_test.go` — comprehensive unit tests
-- **Key decisions:**
-  - `MatchedTierDef` uses the index within the sorted (internal) copy; sentinel value -1 indicates no match
-  - `AllMatches` is sorted by ascending tier then lexicographic pattern for fully deterministic output regardless of tier definition input order
-  - `formatInt` uses a simple string-slicing loop (no external dependency) to insert comma separators
-  - Budget line uses `BudgetUsed + BudgetRemaining` to recover the original `maxTokens` from the BudgetResult fields
-  - `FormatExplain` emits the default fallback entry in AllMatches when the file was unmatched (`IsDefault`) or had no pattern matches at all
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
 
 ---
 
