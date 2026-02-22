@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 31 |
+| Completed | 32 |
 | In Progress | 0 |
-| Not Started | 64 |
+| Not Started | 63 |
 
 ---
 
@@ -337,6 +337,35 @@
 - **Files created/modified:**
   - `internal/tokenizer/counter.go` -- TokenCounter, NewTokenCounter, CountFile, CountFiles, EstimateOverhead
   - `internal/tokenizer/counter_test.go` -- comprehensive unit tests and benchmarks
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+---
+
+### T-031: Token Budget Enforcement with Truncation Strategies
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `TruncationStrategy` string type with `SkipStrategy` ("skip") and `TruncateStrategy` ("truncate") constants
+  - `TierStat` struct: `FilesIncluded`, `FilesExcluded`, `TokensUsed` per tier
+  - `BudgetSummary` struct: `TierStats map[int]TierStat` + `SortedTierKeys()` convenience helper
+  - `BudgetResult` struct: `IncludedFiles`, `ExcludedFiles`, `TruncatedFiles`, `TotalTokens`, `BudgetUsed`, `BudgetRemaining`, `Summary`
+  - `BudgetEnforcer` struct with `maxTokens`, `strategy`, and `tok Tokenizer` fields
+  - `NewBudgetEnforcer(maxTokens int, strategy TruncationStrategy, tok Tokenizer) *BudgetEnforcer` constructor; nil tok falls back to character estimator
+  - `Enforce(files []*pipeline.FileDescriptor, overhead int) *BudgetResult` main method
+  - Skip algorithm: iterates all files; smaller files after a large excluded file are still considered
+  - Truncate algorithm: binary search over lines using the Tokenizer to find max lines fitting in budget; reserves 20 tokens for marker; appends `<!-- Content truncated: X of Y tokens shown -->` marker; all subsequent files excluded
+  - Original `FileDescriptor` is never mutated; truncation returns a shallow copy with updated `Content` and `TokenCount`
+  - `maxTokens <= 0` disables enforcement entirely (pass-through mode)
+  - 25+ table-driven tests + 2 benchmarks covering all strategies, edge cases (empty, no budget, zero remaining, overhead exceeds max, skip-continues-after-skip, original-not-mutated), invariants (included+excluded==total, truncated⊆included, TotalTokens==sum), and per-tier summary accuracy
+- **Files created:**
+  - `internal/tokenizer/budget.go` -- TruncationStrategy, TierStat, BudgetSummary, BudgetResult, BudgetEnforcer, NewBudgetEnforcer, Enforce, enforceWithSkip, enforceWithTruncate, truncateToFit, SortedTierKeys
+  - `internal/tokenizer/budget_test.go` -- comprehensive unit tests and benchmarks
+- **Key decisions:**
+  - Accepted `Tokenizer` in constructor for accurate binary search during truncation (not just char-based heuristic)
+  - Fixed 20-token marker reservation to always leave room for the truncation comment
+  - `TruncatedFiles` is a subset of `IncludedFiles` (same pointer), not a separate copy
+  - `BudgetRemaining` can be negative when overhead > maxTokens (spec requirement)
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
 ---
