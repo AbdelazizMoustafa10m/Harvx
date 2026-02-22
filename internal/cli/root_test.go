@@ -96,6 +96,38 @@ func TestRootCommandHasBooleanFlags(t *testing.T) {
 	}
 }
 
+// --- T-033: Token counting persistent flags ---
+
+func TestRootCommandHasTokenizerFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("tokenizer")
+	require.NotNil(t, flag, "root command must have --tokenizer persistent flag")
+	assert.Equal(t, "cl100k_base", flag.DefValue)
+}
+
+func TestRootCommandHasMaxTokensFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("max-tokens")
+	require.NotNil(t, flag, "root command must have --max-tokens persistent flag")
+	assert.Equal(t, "0", flag.DefValue)
+}
+
+func TestRootCommandHasTruncationStrategyFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("truncation-strategy")
+	require.NotNil(t, flag, "root command must have --truncation-strategy persistent flag")
+	assert.Equal(t, "skip", flag.DefValue)
+}
+
+func TestRootCommandHasTokenCountFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("token-count")
+	require.NotNil(t, flag, "root command must have --token-count persistent flag")
+	assert.Equal(t, "false", flag.DefValue)
+}
+
+func TestRootCommandHasTopFilesFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("top-files")
+	require.NotNil(t, flag, "root command must have --top-files persistent flag")
+	assert.Equal(t, "0", flag.DefValue)
+}
+
 func TestExecuteWithHelp(t *testing.T) {
 	// Running with --help should succeed (exit 0).
 	rootCmd.SetArgs([]string{"--help"})
@@ -127,6 +159,8 @@ func TestExecuteHelpShowsAllFlags(t *testing.T) {
 		"--format", "--target", "--git-tracked-only", "--skip-large-files",
 		"--stdout", "--line-numbers", "--no-redact", "--fail-on-redaction",
 		"--verbose", "--quiet", "--yes", "--clear-cache",
+		"--tokenizer", "--max-tokens", "--truncation-strategy",
+		"--token-count", "--top-files",
 	}
 	for _, flag := range expectedFlags {
 		assert.Contains(t, output, flag, "help output should show %s flag", flag)

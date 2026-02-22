@@ -1,0 +1,11 @@
+# invalid_format.toml -- profile with invalid field values for validation tests.
+# Used by TestValidate_InvalidFormat tests in internal/config/validate_test.go.
+
+[profile.badformat]
+format    = "html"
+tokenizer = "gpt2"
+target    = "gemini"
+max_tokens = -100
+
+[profile.badformat.redaction_config]
+confidence_threshold = "critical"

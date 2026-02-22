@@ -1,0 +1,73 @@
+# Harvx profile template — Python Django web application.
+# Run `harvx profiles init --template python-django` to use this template.
+# Customize each section to match your project layout.
+#
+# Project: {{project_name}}
+
+[profile.default]
+format     = "markdown"
+max_tokens = 128000
+tokenizer  = "cl100k_base"
+output     = "{{project_name}}-context.md"
+
+# Exact file paths always included first, before tier-based sorting.
+# No glob patterns (*, ?, [, {) allowed here.
+priority_files = [
+  "manage.py",
+  "pyproject.toml",
+  "settings.py",
+]
+
+# Glob patterns for paths to exclude from context generation.
+ignore = [
+  "__pycache__/",
+  ".venv/",
+  "venv/",
+  "media/",
+  "staticfiles/",
+]
+
+[profile.default.relevance]
+# Tier 0 – highest priority: project entry points and configuration.
+tier_0 = [
+  "manage.py",
+  "pyproject.toml",
+  "setup.py",
+  "requirements.txt",
+]
+
+# Tier 1 – primary source: views, models, serializers, and URL definitions.
+tier_1 = [
+  "**/views.py",
+  "**/models.py",
+  "**/serializers.py",
+  "**/urls.py",
+]
+
+# Tier 2 – secondary source: forms, admin, signals, middleware, and templates.
+tier_2 = [
+  "**/forms.py",
+  "**/admin.py",
+  "**/signals.py",
+  "**/middleware.py",
+  "templates/**/*.html",
+]
+
+# Tier 3 – tests and fixtures.
+tier_3 = [
+  "**/tests/**/*.py",
+  "tests/**/*.py",
+  "conftest.py",
+]
+
+# Tier 4 – documentation.
+tier_4 = [
+  "docs/**/*.md",
+  "**/*.md",
+]
+
+# Tier 5 – infrastructure: CI/CD workflows.
+tier_5 = [
+  ".github/**/*.yml",
+  ".github/**/*.yaml",
+]
