@@ -1,0 +1,14 @@
+[profile.default]
+format = "markdown"
+max_tokens = 128000
+tokenizer = "cl100k_base"
+
+[profile.base]
+extends = "default"
+max_tokens = 80000
+compression = false
+
+[profile.child]
+extends = "base"
+format = "xml"
+max_tokens = 60000

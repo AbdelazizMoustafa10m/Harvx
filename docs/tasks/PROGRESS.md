@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 25 |
+| Completed | 26 |
 | In Progress | 0 |
-| Not Started | 70 |
+| Not Started | 69 |
 
 ---
 
@@ -374,9 +374,36 @@
 
 ---
 
-## In Progress Tasks
+## Completed Tasks (continued)
 
-_None currently_
+### T-025: Profile System Integration Tests and Golden Tests
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `internal/testutil/golden.go` -- `Golden(t, name, actual)` helper with package-level `-update` flag for golden file regeneration; uses `t.Helper()` for correct caller reporting
+  - 8 integration scenario fixture directories under `testdata/integration/profiles/` with TOML config files matching the 8 test scenarios from the PRD
+  - `internal/config/integration_test.go` -- 8 scenario integration tests exercising the full 5-layer `Resolve` pipeline end-to-end (defaults, repo config, global+repo merge, 3-level inheritance, env overrides, CLI flag overrides, template init roundtrip, complex finvault profile)
+  - `internal/config/fuzz_test.go` -- `FuzzConfigParse` (feeds arbitrary bytes to `LoadFromString`, verifies no panic, checks cfg!=nil when err==nil, calls `Validate`); `FuzzValidate` (parses TOML then calls `Validate`+`Lint`, verifies neither panics); seeded with valid configs and pathological inputs
+  - `internal/config/benchmark_test.go` -- 6 benchmarks: `BenchmarkConfigResolve/{defaults-only,single-file,multi-source,ten-profiles}`, `BenchmarkConfigValidate/{clean-config,complex-config}`; setup outside `b.ResetTimer()`, no assertions
+  - `internal/cli/profiles_integration_test.go` -- 13 CLI integration tests covering `profiles list`, `profiles show`, `profiles lint` (clean+broken+no-config), `profiles explain` (included+excluded), `config debug`, full init→list→show→lint sequence; uses `newTestProfilesFull()` for isolated command trees and `changeDirForTest()` for CWD isolation
+  - All integration tests guarded with `testing.Short()` so `go test -short` skips them; full runs via `go test -run TestIntegration`/`TestCLI`
+- **Files created:**
+  - `internal/testutil/golden.go` -- golden test helper with `-update` flag support
+  - `internal/config/integration_test.go` -- 8 scenario integration tests + `fixturePath`/`nonexistentGlobal` helpers
+  - `internal/config/fuzz_test.go` -- `FuzzConfigParse` and `FuzzValidate` fuzz tests
+  - `internal/config/benchmark_test.go` -- 6 benchmarks for resolve and validate performance
+  - `internal/cli/profiles_integration_test.go` -- 13 CLI integration tests + `newTestProfilesFull`/`runCmd` helpers
+  - `testdata/integration/profiles/scenario-1-defaults-only/.gitkeep`
+  - `testdata/integration/profiles/scenario-2-repo-config/harvx.toml`
+  - `testdata/integration/profiles/scenario-3-global-plus-repo/global.toml`
+  - `testdata/integration/profiles/scenario-3-global-plus-repo/harvx.toml`
+  - `testdata/integration/profiles/scenario-4-inheritance/harvx.toml`
+  - `testdata/integration/profiles/scenario-5-env-overrides/harvx.toml`
+  - `testdata/integration/profiles/scenario-6-cli-flags/harvx.toml`
+  - `testdata/integration/profiles/scenario-7-template-init/.gitkeep`
+  - `testdata/integration/profiles/scenario-8-complex-finvault/harvx.toml`
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
 ---
 
@@ -384,7 +411,7 @@ _None currently_
 
 ### Phase 2: Profiles (T-016 to T-025)
 
-- **Status:** In Progress
+- **Status:** Completed
 - **Tasks:** 10 (8 Must Have, 2 Should Have)
 - **Estimated Effort:** 75-105 hours
 - **PRD Roadmap:** Weeks 4-6
@@ -402,7 +429,7 @@ _None currently_
 | T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Completed |
 | T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Completed |
 | T-024 | Config Debug Command | Should Have | Small (4-6hrs) | Completed |
-| T-025 | Profile Integration Tests and Golden Tests | Must Have | Medium (8-12hrs) | Not Started |
+| T-025 | Profile Integration Tests and Golden Tests | Must Have | Medium (8-12hrs) | Completed |
 
 **Deliverable:** `harvx --profile finvault --target claude` produces architecture-aware, token-budgeted output.
 
@@ -717,4 +744,4 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
   - `internal/cli/profiles_explain.go` -- profilesExplainCmd with runProfilesExplain, glob expansion, printTo formatter, formatTier/formatRedaction/formatCompression/formatPriority helpers
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
-_Last updated: 2026-02-22 (T-023 complete)_
+_Last updated: 2026-02-22 (T-025 complete, Phase 2 all done)_
