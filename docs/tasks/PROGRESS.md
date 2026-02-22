@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 21 |
+| Completed | 22 |
 | In Progress | 0 |
-| Not Started | 74 |
+| Not Started | 73 |
 
 ---
 
@@ -307,6 +307,27 @@
   - `internal/config/templates/monorepo.toml` -- Monorepo (5 tiers, packages/*/src/, apps/*/src/, shared/)
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-022: Profile CLI Subcommands -- init, list, show
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `profilesCmd` parent Cobra command registered under `rootCmd` with `list`, `init`, `show` subcommands
+  - `profiles list`: `text/tabwriter` aligned table showing NAME/SOURCE/EXTENDS/DESCRIPTION columns; always includes built-in `default`; loads profiles from global (`~/.config/harvx/config.toml`) and repo (`harvx.toml`) configs; appends template names section
+  - `profiles init`: writes `harvx.toml` from embedded template via `config.RenderTemplate`; `--template` (default `base`), `--output`, `--yes` flags; existence guard (returns error unless `--yes`); success message with 3 next-step suggestions
+  - `profiles show <name>`: resolves profile via `config.Resolve` (full 5-layer pipeline); outputs annotated TOML with `# source` inline comments and inheritance chain header; `--json` flag switches to `encoding/json` output; lists available profiles in error for unknown profile
+  - `ShowOptions` struct and `ShowProfile(opts ShowOptions) string` in `internal/config/show.go`: manually-rendered TOML with per-field source annotations, `[relevance]` and `[redaction_config]` sections, header comment block
+  - `ShowProfileJSON(p *Profile) (string, error)` for JSON serialization
+  - Shell completion for profile names (`ValidArgsFunction`) and template names (`completeTemplateNames`)
+  - 37+ tests in `profiles_test.go` including integration test (init → list → show sequence)
+  - 15 tests in `show_test.go` for TOML annotation correctness, JSON validity, edge cases
+- **Files created/modified:**
+  - `internal/cli/profiles.go` -- profilesCmd parent + list/init/show subcommands with completions
+  - `internal/cli/profiles_test.go` -- 37+ tests covering all acceptance criteria
+  - `internal/config/show.go` -- ShowOptions, ShowProfile, ShowProfileJSON, TOML annotation helpers
+  - `internal/config/show_test.go` -- 15 tests for serialization and source annotations
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ---
 
 ## In Progress Tasks
@@ -334,7 +355,7 @@ _None currently_
 | T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Completed |
 | T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Completed |
 | T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Completed |
-| T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Not Started |
+| T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Completed |
 | T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Not Started |
 | T-024 | Config Debug Command | Should Have | Small (4-6hrs) | Not Started |
 | T-025 | Profile Integration Tests and Golden Tests | Must Have | Medium (8-12hrs) | Not Started |
@@ -606,4 +627,28 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
   - `docs/tasks/PROGRESS.md` — updated summary
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
-_Last updated: 2026-02-22 (T-021 complete)_
+### T-022: Profile CLI Subcommands -- init, list, show
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `profilesCmd` parent Cobra command (`harvx profiles`) with help text listing all subcommands; no RunE so it prints help when called without a subcommand
+  - `profilesListCmd` (`harvx profiles list`): tabular output via `text/tabwriter` showing NAME/SOURCE/EXTENDS/DESCRIPTION columns, always includes the built-in `default` entry, loads profiles from global and repo `harvx.toml` files, appends template listing at the bottom
+  - `profilesInitCmd` (`harvx profiles init`): creates `harvx.toml` using `config.RenderTemplate`; `--template` (default: `base`), `--output` (default: `harvx.toml`), `--yes` (overwrite); returns error if file exists without `--yes`; shows success message with next-steps
+  - `profilesShowCmd` (`harvx profiles show [profile]`): resolves through 5-layer `config.Resolve`; annotated TOML output (default) or `--json`; lists available profiles in error when profile not found; shell completion via `ValidArgsFunction`
+  - `ShowOptions` struct and `ShowProfile(opts ShowOptions) string` in `internal/config/show.go` -- renders annotated TOML with inline `# source` comments, inheritance chain header, relevance section, redaction_config section
+  - `ShowProfileJSON(p *Profile) (string, error)` -- marshals profile to indented JSON
+  - `resolveChainForShow(profileName string)` -- builds chain from repo+global profiles for inheritance header
+  - `collectProfileEntries()` / `loadAllConfigProfiles()` -- loads profiles from all config sources for the list table
+  - `displayPath(path string)` -- displays config file paths as relative or `~/`-prefixed
+  - `completeProfileNames` / `completeTemplateNames` -- Cobra `ValidArgsFunction` and flag completion with prefix filtering
+  - 37+ test functions across `profiles_test.go` and `show_test.go` covering all acceptance criteria
+- **Files created/modified:**
+  - `internal/cli/profiles.go` -- `profilesCmd`, `profilesListCmd`, `profilesInitCmd`, `profilesShowCmd`, all run functions, helpers, completions
+  - `internal/cli/profiles_test.go` -- 37+ tests: list output, init file creation, show TOML/JSON, completion functions, integration init+list+show sequence
+  - `internal/config/show.go` -- `ShowOptions`, `ShowProfile`, `ShowProfileJSON`, all field-writing helpers
+  - `internal/config/show_test.go` -- 15 tests: header comments, inheritance chain, source annotations, field presence, JSON validity, section rendering
+  - `docs/tasks/PROGRESS.md` -- updated summary
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+_Last updated: 2026-02-22 (T-022 complete)_
