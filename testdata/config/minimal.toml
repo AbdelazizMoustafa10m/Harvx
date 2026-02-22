@@ -1,0 +1,4 @@
+# Minimal valid configuration -- only declares the default profile table.
+# All fields are omitted and will use zero values from the loader.
+
+[profile.default]

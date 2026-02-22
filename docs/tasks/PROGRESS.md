@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 15 |
+| Completed | 16 |
 | In Progress | 0 |
-| Not Started | 80 |
+| Not Started | 79 |
 
 ---
 
@@ -126,6 +126,65 @@
 
 ---
 
+### Phase 2: Profiles (T-016)
+
+- **Status:** Partially Complete (T-016 done)
+- **Date:** 2026-02-22
+- **Tasks:** 1
+
+#### Features Implemented
+
+| Feature | Task | Description |
+|---------|------|-------------|
+| Config Types | T-016 | `Config`, `Profile`, `RelevanceConfig`, `RedactionConfig` structs with `toml` tags |
+| Default Profile | T-016 | `DefaultProfile()` with PRD Section 5.2 values; `defaultRelevanceTiers()` with PRD Section 5.3 glob patterns |
+| TOML Loader | T-016 | `LoadFromFile()` and `LoadFromString()` via `BurntSushi/toml` v1.5.0; unknown-key warnings via `MetaData.Undecoded()` |
+
+#### Key Files Added
+
+| Purpose | Location |
+|---------|----------|
+| Config struct types | `internal/config/types.go` |
+| Default profile | `internal/config/defaults.go` |
+| TOML loader | `internal/config/loader.go` |
+| Loader tests | `internal/config/loader_test.go` |
+| Types tests | `internal/config/types_test.go` |
+| Test fixtures | `testdata/config/{valid,minimal,invalid_syntax,unknown_keys}.toml` |
+
+#### New Dependency
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `github.com/BurntSushi/toml` | v1.5.0 | TOML v1.0 parsing with `MetaData.Undecoded()` |
+
+### T-016: Configuration Types, Defaults, and TOML Loading
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `Config`, `Profile`, `RelevanceConfig`, `RedactionConfig` structs with `toml` struct tags
+  - `DefaultProfile()` constructor with all PRD Section 5.2 defaults (output, format, max_tokens, tokenizer, compression, redaction, ignore)
+  - `defaultRelevanceTiers()` with 6-tier glob patterns per PRD Section 5.3
+  - `LoadFromFile(path string) (*Config, error)` and `LoadFromString(data, name string) (*Config, error)` using `BurntSushi/toml` v1.5.0
+  - Unknown-key warning via `MetaData.Undecoded()` logged through slog (no error returned)
+  - 4 test fixture TOML files (valid, minimal, invalid_syntax, unknown_keys)
+  - 32+ new test functions across types_test.go, loader_test.go, and defaults_test.go
+- **Files created/modified:**
+  - `internal/config/types.go` -- Config, Profile, RelevanceConfig, RedactionConfig struct definitions
+  - `internal/config/defaults.go` -- DefaultProfile() and defaultRelevanceTiers() constructors
+  - `internal/config/loader.go` -- LoadFromFile, LoadFromString, warnUndecodedKeys
+  - `internal/config/types_test.go` -- struct defaults and field validation tests
+  - `internal/config/loader_test.go` -- TOML loading tests (all acceptance criteria)
+  - `internal/config/defaults_test.go` -- exhaustive default value and tier pattern tests
+  - `testdata/config/valid.toml` -- PRD example with default + finvault profiles
+  - `testdata/config/minimal.toml` -- minimal [profile.default] fixture
+  - `testdata/config/invalid_syntax.toml` -- malformed TOML for error testing
+  - `testdata/config/unknown_keys.toml` -- extra keys for warning testing
+  - `go.mod` / `go.sum` -- added github.com/BurntSushi/toml v1.5.0
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+---
+
 ## In Progress Tasks
 
 _None currently_
@@ -136,7 +195,7 @@ _None currently_
 
 ### Phase 2: Profiles (T-016 to T-025)
 
-- **Status:** Not Started
+- **Status:** In Progress
 - **Tasks:** 10 (8 Must Have, 2 Should Have)
 - **Estimated Effort:** 75-105 hours
 - **PRD Roadmap:** Weeks 4-6
@@ -145,7 +204,7 @@ _None currently_
 
 | Task | Name | Priority | Effort | Status |
 |------|------|----------|--------|--------|
-| T-016 | Configuration Types, Defaults, and TOML Loading | Must Have | Medium (8-12hrs) | Not Started |
+| T-016 | Configuration Types, Defaults, and TOML Loading | Must Have | Medium (8-12hrs) | Completed |
 | T-017 | Multi-Source Configuration Merging and Resolution | Must Have | Large (14-20hrs) | Not Started |
 | T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Not Started |
 | T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Not Started |
