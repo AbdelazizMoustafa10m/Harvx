@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 34 |
+| Completed | 35 |
 | In Progress | 0 |
-| Not Started | 62 |
+| Not Started | 61 |
 
 ---
 
@@ -366,6 +366,44 @@
   - Fixed 20-token marker reservation to always leave room for the truncation comment
   - `TruncatedFiles` is a subset of `IncludedFiles` (same pointer), not a separate copy
   - `BudgetRemaining` can be negative when overhead > maxTokens (spec requirement)
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+---
+
+### T-033: Token Reporting CLI Flags and Heatmap
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - Added 6 new fields to `FlagValues`: `Tokenizer`, `MaxTokens`, `TruncationStrategy`, `TokenCountOnly`, `TopFiles`, `Heatmap`
+  - Registered 5 new persistent flags on root: `--tokenizer` (default: `cl100k_base`), `--max-tokens` (default: 0), `--truncation-strategy` (default: `skip`), `--token-count`, `--top-files`
+  - Added validation in `ValidateFlags()` for `--tokenizer` and `--truncation-strategy` with allowlist checks
+  - `TokenReport` struct with `NewTokenReport()` constructor and `Format()` renderer (unicode box-drawing separator)
+  - `TierReportStat` for per-tier file and token count aggregation
+  - `TopFilesReport` / `TopFilesEntry` with `NewTopFilesReport()` (sorts by TokenCount descending, limits to N) and `Format()` renderer
+  - `HeatmapReport` / `HeatmapEntry` with `NewHeatmapReport()` (density = tokens/lines, guards zero-division) and `Format()` renderer
+  - `FormatInt(n int) string` exported helper for comma-separated thousands (e.g., 89420 → "89,420")
+  - `TierLabel` map (tiers 0–5) exported for reuse
+  - `PrintTokenReport()` and `PrintTopFiles()` functions in `internal/cli/token_report.go`
+  - `harvx preview` subcommand with `--heatmap` flag
+  - Shell completion registered for `--tokenizer` and `--truncation-strategy` on both root and generate commands
+- **Files created/modified:**
+  - `internal/config/flags.go` -- Added 6 new fields and 5 persistent flags; validation for tokenizer and truncation-strategy
+  - `internal/config/flags_test.go` -- 13 new tests for T-033 flags
+  - `internal/tokenizer/report.go` -- New: TokenReport, TopFilesReport, HeatmapReport, FormatInt, TierLabel
+  - `internal/tokenizer/report_test.go` -- New: 22 table-driven test functions covering all report types
+  - `internal/cli/token_report.go` -- New: PrintTokenReport, PrintTopFiles helper functions
+  - `internal/cli/token_report_test.go` -- New: 5 tests for CLI report helpers
+  - `internal/cli/preview.go` -- New: harvx preview command with --heatmap flag
+  - `internal/cli/preview_test.go` -- New: 5 tests for preview command
+  - `internal/cli/root.go` -- Added completeTokenizer and completeTruncationStrategy completion functions
+  - `internal/cli/root_test.go` -- 5 new tests for T-033 persistent flags
+  - `internal/cli/generate.go` -- Added completion functions for inherited tokenizer/truncation-strategy flags
+- **Key decisions:**
+  - `previewHeatmap` is a package-level variable (not bound to `flagValues.Heatmap` in `init()`) to avoid nil-pointer dereference before root.go's `init()` populates `flagValues`
+  - `FormatInt` uses byte-slice building rather than strconv/strings to avoid unnecessary allocations
+  - `HeatmapReport` gracefully handles nil `files` and nil `lineCounts` inputs (returns empty report with header)
+  - No lipgloss dependency; all formatting uses plain text with unicode `─` box-drawing characters
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
 ---

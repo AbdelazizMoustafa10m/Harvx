@@ -278,6 +278,9 @@ func GenerateInclusionSummary(result *tokenizer.BudgetResult) string {
 		extraTiers[tier] = struct{}{}
 	}
 	for _, fd := range result.ExcludedFiles {
+		if fd == nil {
+			continue
+		}
 		if _, ok := extraTiers[fd.Tier]; !ok {
 			extraTiers[fd.Tier] = struct{}{}
 			tierKeys = append(tierKeys, fd.Tier)
