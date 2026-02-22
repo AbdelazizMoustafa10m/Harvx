@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 28 |
+| Completed | 29 |
 | In Progress | 0 |
-| Not Started | 67 |
+| Not Started | 66 |
 
 ---
 
@@ -272,6 +272,25 @@
   - `internal/relevance/matcher.go` -- TierMatcher, NewTierMatcher, Match, ClassifyFiles, normalisePath
   - `internal/relevance/matcher_test.go` -- Comprehensive unit tests and benchmarks
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go mod tidy` ✓  `go test -race` ✓
+
+---
+
+### T-028: Relevance Sorter -- Sort Files by Tier and Path
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `SortByRelevance(files []*pipeline.FileDescriptor) []*pipeline.FileDescriptor` -- returns a new sorted slice (input never mutated); primary sort by ascending `Tier`, secondary sort alphabetically by `Path`; uses `slices.SortStableFunc` + `cmp.Compare` (Go 1.22+)
+  - `GroupByTier(files []*pipeline.FileDescriptor) map[int][]*pipeline.FileDescriptor` -- partitions files into a map keyed by tier number; preserves insertion order within each bucket
+  - `TierStat` struct -- `Tier int`, `FileCount int`, `TotalTokens int`, `FilePaths []string`
+  - `TierSummary(files []*pipeline.FileDescriptor) []TierStat` -- per-tier counts and total token sums; only populated tiers included; result sorted by ascending Tier; `FilePaths` sorted alphabetically within each stat
+  - `ClassifyAndSort(files []*pipeline.FileDescriptor, tiers []TierDefinition) []*pipeline.FileDescriptor` -- integrates with `TierMatcher` from T-027: assigns `Tier` field on each descriptor then returns `SortByRelevance` output
+  - 25 table-driven test functions covering all spec cases, golden 20-file order test, stability, determinism, mutation safety, and edge cases (empty, single, nil tiers)
+  - 1 benchmark: `BenchmarkSortByRelevance10K` (10 000 files, realistic tier distribution)
+- **Files created/modified:**
+  - `internal/relevance/sorter.go` -- SortByRelevance, GroupByTier, TierStat, TierSummary, ClassifyAndSort
+  - `internal/relevance/sorter_test.go` -- comprehensive unit tests and benchmark
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
 ---
 
