@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 24 |
+| Completed | 25 |
 | In Progress | 0 |
-| Not Started | 71 |
+| Not Started | 70 |
 
 ---
 
@@ -349,6 +349,29 @@
   - `internal/cli/profiles_explain_test.go` -- 14 tests for explain command
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-024: Config Debug Command
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `harvx config debug` Cobra subcommand showing fully resolved configuration with per-field source annotations
+  - `configCmd` parent command and `configDebugCmd` child registered under root
+  - `--json` flag for structured JSON output; `--profile <name>` flag to debug a specific profile
+  - `DebugOutput` struct with `ConfigFiles`, `ActiveProfile`, `InheritChain`, `EnvVars`, and `Config` fields
+  - `DebugOptions` struct with `ProfileName`, `TargetDir`, `GlobalConfigPath`, and `CLIFlags` fields
+  - `BuildDebugOutput(opts DebugOptions) (*DebugOutput, error)` — runs full 5-layer resolution, discovers config files, checks all HARVX_* env vars, builds ordered config entries with abbreviated slice display
+  - `FormatDebugOutput(out *DebugOutput, w io.Writer) error` — human-readable tabwriter-aligned report with "Config Files:", "Active Profile:", "Environment Variables:", and "Resolved Configuration:" sections
+  - `FormatDebugOutputJSON(out *DebugOutput, w io.Writer) error` — indented JSON via `encoding/json`
+  - `sourceDetailLabel(key, src)` — generates "env (HARVX_MAX_TOKENS)" or "flag (--output)" labels
+  - `abbreviateSlice(items)` — compact `[a, b, c ...N more]` format for slices longer than 3 items
+  - 60+ tests across 4 test files covering all 10 acceptance criteria
+- **Files created/modified:**
+  - `internal/config/debug.go` -- DebugOutput, DebugOptions, BuildDebugOutput, FormatDebugOutput, FormatDebugOutputJSON, helpers
+  - `internal/config/debug_test.go` -- 40 tests for core debug logic, abbreviation, env vars, inheritance
+  - `internal/cli/config_debug.go` -- configCmd parent + configDebugCmd with --json and --profile flags
+  - `internal/cli/config_debug_test.go` -- 20 tests for CLI command text/JSON output and flag registration
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ---
 
 ## In Progress Tasks
@@ -378,7 +401,7 @@ _None currently_
 | T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Completed |
 | T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Completed |
 | T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Completed |
-| T-024 | Config Debug Command | Should Have | Small (4-6hrs) | Not Started |
+| T-024 | Config Debug Command | Should Have | Small (4-6hrs) | Completed |
 | T-025 | Profile Integration Tests and Golden Tests | Must Have | Medium (8-12hrs) | Not Started |
 
 **Deliverable:** `harvx --profile finvault --target claude` produces architecture-aware, token-budgeted output.
