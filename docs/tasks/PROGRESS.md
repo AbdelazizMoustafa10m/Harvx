@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 27 |
+| Completed | 28 |
 | In Progress | 0 |
-| Not Started | 68 |
+| Not Started | 67 |
 
 ---
 
@@ -252,6 +252,26 @@
   - `internal/relevance/tiers.go` -- Tier type, constants, TierDefinition struct, DefaultTierDefinitions()
   - `internal/relevance/tiers_test.go` -- Unit tests for all tier definitions and defaults
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+---
+
+### T-027: Glob-Based File-to-Tier Matching
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `TierMatcher` struct with private `tierEntry` slice sorted by ascending tier number
+  - `NewTierMatcher(defs []TierDefinition) *TierMatcher` -- constructs matcher, sorts tiers, discards invalid patterns via `doublestar.ValidatePattern` at construction time
+  - `Match(filePath string) Tier` -- allocation-free per-file matching; evaluates tiers lowest-to-highest, first-match-wins; normalises paths (backslash -> forward slash, strips `./` prefix)
+  - `ClassifyFiles(files []string, tiers []TierDefinition) map[string]Tier` -- bulk classification returning original path keys
+  - `sortTierDefinitions` (insertion sort on short lists) and `normalisePath` internal helpers
+  - Input slice immutability: `NewTierMatcher` copies before sorting so callers' slices are never mutated
+  - 28+ table-driven test functions covering all T-027 spec cases, edge cases, and invariants; 97.7% statement coverage
+  - 2 benchmarks: `BenchmarkClassifyFiles10K` (~5ms for 10K files), `BenchmarkMatchSingle` (~367ns, 0 allocs)
+- **Files created/modified:**
+  - `internal/relevance/matcher.go` -- TierMatcher, NewTierMatcher, Match, ClassifyFiles, normalisePath
+  - `internal/relevance/matcher_test.go` -- Comprehensive unit tests and benchmarks
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go mod tidy` ✓  `go test -race` ✓
 
 ---
 
