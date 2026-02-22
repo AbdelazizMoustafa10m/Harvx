@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 18 |
+| Completed | 19 |
 | In Progress | 0 |
-| Not Started | 77 |
+| Not Started | 76 |
 
 ---
 
@@ -225,6 +225,28 @@
   - `go.mod` -- promoted koanf/v2 and koanf/providers/confmap to direct dependencies
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-019: Profile Inheritance with Deep Merge
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `ProfileResolution` struct with `Profile *Profile` and `Chain []string` fields for inheritance chain debugging
+  - `ResolveProfile(name string, profiles map[string]*Profile) (*ProfileResolution, error)` — public entry point; resolves full inheritance chain, emits slog.Warn when depth > 3, emits slog.Debug on successful resolution
+  - `resolveChain(name, profiles, visited)` — recursive DFS helper; detects circular/self-referential inheritance by tracking visited set; supports fresh-visited for implicit default base (avoids false positives when "default" appears in chain)
+  - `lookupProfile(name, profiles)` — synthesizes built-in `DefaultProfile()` for "default" when absent from map
+  - `mergeProfile(base, override *Profile) *Profile` — explicit per-field merge: strings (non-empty wins), ints (non-zero wins), booleans (override always wins), slices (non-empty override replaces base entirely), RelevanceConfig (per-tier), RedactionConfig (field-by-field); Extends always cleared; no mutation of inputs
+  - `mergeString`, `mergeInt`, `mergeSlice`, `mergeRelevance`, `mergeRedactionConfig` — unexported merge helpers
+  - Profiles without `extends` automatically get built-in defaults applied for unset fields
+  - 30+ table-driven tests covering: base cases, multi-level chains (1-3 levels), chain tracking, error cases (missing profile, missing parent, circular 2-way, circular 3-way, self-referential), slice semantics, relevance tier merge, boolean override, RedactionConfig field merge, TOML fixture integration, immutability
+- **Files created/modified:**
+  - `internal/config/profile.go` -- ProfileResolution, ResolveProfile, resolveChain, lookupProfile
+  - `internal/config/merge.go` -- mergeProfile and all merge helpers
+  - `internal/config/profile_test.go` -- 30+ tests
+  - `testdata/config/inheritance.toml` -- multi-level fixture (default, base, child, grandchild, deep, no_extends, custom_tiers, custom_redaction)
+  - `testdata/config/circular.toml` -- circular and self-referential fixture (a -> b -> a, self-ref)
+  - `docs/tasks/PROGRESS.md` -- updated summary
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ### T-018: Configuration File Auto-Detection and Discovery
 
 - **Status:** Completed
@@ -266,7 +288,7 @@ _None currently_
 | T-016 | Configuration Types, Defaults, and TOML Loading | Must Have | Medium (8-12hrs) | Completed |
 | T-017 | Multi-Source Configuration Merging and Resolution | Must Have | Large (14-20hrs) | Completed |
 | T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Completed |
-| T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Not Started |
+| T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Completed |
 | T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Not Started |
 | T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Not Started |
 | T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Not Started |
