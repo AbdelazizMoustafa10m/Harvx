@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 30 |
+| Completed | 31 |
 | In Progress | 0 |
-| Not Started | 65 |
+| Not Started | 64 |
 
 ---
 
@@ -320,6 +320,23 @@
 - **Files created/modified:**
   - `internal/relevance/sorter.go` -- SortByRelevance, GroupByTier, TierStat, TierSummary, ClassifyAndSort
   - `internal/relevance/sorter_test.go` -- comprehensive unit tests and benchmark
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+---
+
+### T-030: Parallel Per-File Token Counting
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `TokenCounter` struct wrapping a `Tokenizer` for parallel per-file token counting
+  - `CountFile(fd *pipeline.FileDescriptor)` -- populates `fd.TokenCount` from `fd.Content`, goroutine-safe
+  - `CountFiles(ctx context.Context, files []*pipeline.FileDescriptor) (int, error)` -- parallel counting via `errgroup` with `SetLimit(runtime.NumCPU())` bounded concurrency, returns total token count, supports context cancellation
+  - `EstimateOverhead(fileCount int, treeSize int) int` -- estimates output structure overhead using formula `200 + (fileCount * 35)`
+  - 15 unit tests + 2 benchmarks covering all acceptance criteria, edge cases (empty, zero files, cancellation, processed content, field mutation safety)
+- **Files created/modified:**
+  - `internal/tokenizer/counter.go` -- TokenCounter, NewTokenCounter, CountFile, CountFiles, EstimateOverhead
+  - `internal/tokenizer/counter_test.go` -- comprehensive unit tests and benchmarks
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
 ---
