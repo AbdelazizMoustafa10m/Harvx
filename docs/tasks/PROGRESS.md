@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 20 |
+| Completed | 21 |
 | In Progress | 0 |
-| Not Started | 75 |
+| Not Started | 74 |
 
 ---
 
@@ -284,6 +284,29 @@
   - `testdata/config/contradictory.toml` -- priority_files in ignore, glob in priority_files, redundant redaction excludes
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-021: Framework-Specific Profile Templates
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - Six TOML profile template files embedded in the binary via `//go:embed templates/*.toml`: `base`, `nextjs`, `go-cli`, `python-django`, `rust-cargo`, `monorepo`
+  - `TemplateInfo` struct with `Name` and `Description` fields
+  - `ListTemplates() []TemplateInfo` — returns defensive copy of 6-template registry in display order
+  - `GetTemplate(name string) (string, error)` — returns raw TOML via embed.FS; validates name against allowlist before FS access (path traversal prevention)
+  - `RenderTemplate(name, projectName string) (string, error)` — replaces `{{project_name}}` placeholder via `strings.ReplaceAll`
+  - All 6 templates pass `Validate()` with zero errors and zero warnings: valid format/tokenizer, max_tokens=128000, no glob metacharacters in priority_files, no priority_files/ignore overlap, no duplicate tier patterns, no explicit empty tiers
+  - 20 top-level test functions (with many subtests across 6 templates); 25+ subtests total
+- **Files created/modified:**
+  - `internal/config/templates.go` -- embed.FS directive, TemplateInfo type, ListTemplates, GetTemplate, RenderTemplate
+  - `internal/config/templates_test.go` -- 20+ test functions covering all acceptance criteria
+  - `internal/config/templates/base.toml` -- minimal starter template (tier_0, tier_1, tier_4)
+  - `internal/config/templates/nextjs.toml` -- Next.js / React (6 tiers, next.config.*, app/, pages/, components/)
+  - `internal/config/templates/go-cli.toml` -- Go CLI (5 tiers, cmd/, internal/, pkg/, testdata/)
+  - `internal/config/templates/python-django.toml` -- Python Django (5 tiers, views.py, models.py, templates/)
+  - `internal/config/templates/rust-cargo.toml` -- Rust Cargo (5 tiers, src/**/*.rs, benches/, examples/, tests/)
+  - `internal/config/templates/monorepo.toml` -- Monorepo (5 tiers, packages/*/src/, apps/*/src/, shared/)
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ---
 
 ## In Progress Tasks
@@ -310,7 +333,7 @@ _None currently_
 | T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Completed |
 | T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Completed |
 | T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Completed |
-| T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Not Started |
+| T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Completed |
 | T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Not Started |
 | T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Not Started |
 | T-024 | Config Debug Command | Should Have | Small (4-6hrs) | Not Started |
@@ -552,4 +575,35 @@ Detailed phase-level documentation with Mermaid dependency graphs, implementatio
   - `testdata/config/contradictory.toml` -- profile with priority_files in ignore, glob patterns in priority_files, and redundant redaction excludes
   - `docs/tasks/PROGRESS.md` -- updated summary
 
-_Last updated: 2026-02-22 (T-020 complete)_
+### T-021: Framework-Specific Profile Templates
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - Six TOML profile template files embedded in the binary via `//go:embed templates/*.toml`
+  - `TemplateInfo` struct with `Name` and `Description` fields
+  - `ListTemplates() []TemplateInfo` — returns all 6 templates in display order (base first)
+  - `GetTemplate(name string) (string, error)` — returns raw TOML content; validates name against known templates to prevent path traversal
+  - `RenderTemplate(name, projectName string) (string, error)` — replaces `{{project_name}}` placeholder with the provided project name using `strings.ReplaceAll`
+  - All 6 templates pass `Validate()` with zero hard errors and zero warnings
+  - Templates include explanatory comments for user education
+- **Template Files Created:**
+  - `internal/config/templates/base.toml` — minimal starter configuration for any project
+  - `internal/config/templates/nextjs.toml` — Next.js / React application (all 6 tiers)
+  - `internal/config/templates/go-cli.toml` — Go CLI application (all 6 tiers)
+  - `internal/config/templates/python-django.toml` — Python Django web application (all 6 tiers)
+  - `internal/config/templates/rust-cargo.toml` — Rust Cargo project (all 6 tiers)
+  - `internal/config/templates/monorepo.toml` — Monorepo with multiple packages (all 6 tiers)
+- **Files created/modified:**
+  - `internal/config/templates/base.toml` — minimal starter template
+  - `internal/config/templates/nextjs.toml` — Next.js template
+  - `internal/config/templates/go-cli.toml` — Go CLI template
+  - `internal/config/templates/python-django.toml` — Python Django template
+  - `internal/config/templates/rust-cargo.toml` — Rust Cargo template
+  - `internal/config/templates/monorepo.toml` — Monorepo template
+  - `internal/config/templates.go` — embed.FS directive, TemplateInfo type, ListTemplates, GetTemplate, RenderTemplate
+  - `internal/config/templates_test.go` — 17+ tests covering all acceptance criteria
+  - `docs/tasks/PROGRESS.md` — updated summary
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+_Last updated: 2026-02-22 (T-021 complete)_

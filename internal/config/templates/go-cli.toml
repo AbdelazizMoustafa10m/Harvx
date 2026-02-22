@@ -1,0 +1,70 @@
+# Harvx profile template — Go CLI application.
+# Run `harvx profiles init --template go-cli` to use this template.
+# Customize each section to match your project layout.
+#
+# Project: {{project_name}}
+
+[profile.default]
+format     = "markdown"
+max_tokens = 128000
+tokenizer  = "cl100k_base"
+output     = "{{project_name}}-context.md"
+
+# Exact file paths always included first, before tier-based sorting.
+# No glob patterns (*, ?, [, {) allowed here.
+priority_files = [
+  "go.mod",
+  "go.sum",
+  "Makefile",
+  "main.go",
+]
+
+# Glob patterns for paths to exclude from context generation.
+ignore = [
+  "vendor/",
+  "dist/",
+  "bin/",
+  "coverage/",
+]
+
+[profile.default.relevance]
+# Tier 0 – highest priority: Go module definition and build configuration.
+tier_0 = [
+  "go.mod",
+  "go.sum",
+  "Makefile",
+  ".goreleaser.yml",
+  ".goreleaser.yaml",
+]
+
+# Tier 1 – primary source: commands, internal packages, and public API.
+tier_1 = [
+  "cmd/**/*.go",
+  "internal/**/*.go",
+  "pkg/**/*.go",
+]
+
+# Tier 2 – secondary source: API definitions, proto files, and configs.
+tier_2 = [
+  "api/**/*.go",
+  "proto/**/*.proto",
+  "configs/**/*.go",
+]
+
+# Tier 3 – tests and test fixtures.
+tier_3 = [
+  "**/*_test.go",
+  "testdata/**/*.go",
+]
+
+# Tier 4 – documentation.
+tier_4 = [
+  "docs/**/*.md",
+  "**/*.md",
+]
+
+# Tier 5 – infrastructure: CI/CD workflows.
+tier_5 = [
+  ".github/**/*.yml",
+  ".github/**/*.yaml",
+]
