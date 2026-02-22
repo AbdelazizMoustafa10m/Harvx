@@ -169,579 +169,71 @@
 | `github.com/knadh/koanf/v2` | v2.3.2 | Multi-source config merging engine |
 | `github.com/knadh/koanf/providers/confmap` | v1.0.0 | In-memory map provider for koanf |
 
-### T-016: Configuration Types, Defaults, and TOML Loading
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `Config`, `Profile`, `RelevanceConfig`, `RedactionConfig` structs with `toml` struct tags
-  - `DefaultProfile()` constructor with all PRD Section 5.2 defaults (output, format, max_tokens, tokenizer, compression, redaction, ignore)
-  - `defaultRelevanceTiers()` with 6-tier glob patterns per PRD Section 5.3
-  - `LoadFromFile(path string) (*Config, error)` and `LoadFromString(data, name string) (*Config, error)` using `BurntSushi/toml` v1.5.0
-  - Unknown-key warning via `MetaData.Undecoded()` logged through slog (no error returned)
-  - 4 test fixture TOML files (valid, minimal, invalid_syntax, unknown_keys)
-  - 32+ new test functions across types_test.go, loader_test.go, and defaults_test.go
-- **Files created/modified:**
-  - `internal/config/types.go` -- Config, Profile, RelevanceConfig, RedactionConfig struct definitions
-  - `internal/config/defaults.go` -- DefaultProfile() and defaultRelevanceTiers() constructors
-  - `internal/config/loader.go` -- LoadFromFile, LoadFromString, warnUndecodedKeys
-  - `internal/config/types_test.go` -- struct defaults and field validation tests
-  - `internal/config/loader_test.go` -- TOML loading tests (all acceptance criteria)
-  - `internal/config/defaults_test.go` -- exhaustive default value and tier pattern tests
-  - `testdata/config/valid.toml` -- PRD example with default + finvault profiles
-  - `testdata/config/minimal.toml` -- minimal [profile.default] fixture
-  - `testdata/config/invalid_syntax.toml` -- malformed TOML for error testing
-  - `testdata/config/unknown_keys.toml` -- extra keys for warning testing
-  - `go.mod` / `go.sum` -- added github.com/BurntSushi/toml v1.5.0
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-017: Multi-Source Configuration Merging and Resolution
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `Source` type (iota) with 5 levels: SourceDefault, SourceGlobal, SourceRepo, SourceEnv, SourceFlag
-  - `SourceMap` type tracking per-key config origin
-  - `ApplyTargetPreset(p *Profile, target string) error` -- applies claude/chatgpt/generic presets
-  - `buildEnvMap()` -- reads HARVX_FORMAT, HARVX_MAX_TOKENS, HARVX_TOKENIZER, HARVX_OUTPUT, HARVX_TARGET, HARVX_COMPRESS, HARVX_REDACT env vars into flat koanf map
-  - `Resolve(opts ResolveOptions) (*ResolvedConfig, error)` -- 5-layer pipeline with koanf confmap provider
-  - `loadFileLayer()` / `extractProfileFlat()` / `flattenProfileRaw()` -- TOML raw-map parsing (only explicitly-set fields) for correct source attribution
-  - `profileToFlatMap()` / `flatMapToProfile()` -- bidirectional Profile ↔ flat map conversion (used for defaults and preset layers)
-  - `loadLayer()` -- merges flat map into koanf and marks all provided keys with their source
-  - 9 env var constants (EnvProfile, EnvMaxTokens, EnvFormat, etc.)
-  - Error for non-default profiles not found in any config file
-  - 50+ test functions across 4 test files
-- **Files created/modified:**
-  - `internal/config/sources.go` -- Source iota + SourceMap type
-  - `internal/config/target.go` -- ApplyTargetPreset() with claude/chatgpt/generic presets
-  - `internal/config/env.go` -- env var constants + buildEnvMap()
-  - `internal/config/resolver.go` -- Resolve(), ResolveOptions, ResolvedConfig, helpers
-  - `internal/config/sources_test.go` -- Source.String() and precedence tests
-  - `internal/config/target_test.go` -- preset tests for all valid targets + error cases
-  - `internal/config/env_test.go` -- env var parsing tests for all HARVX_ vars
-  - `internal/config/resolver_test.go` -- 25+ integration tests covering all 5 layers
-  - `testdata/config/global.toml` -- test global config fixture
-  - `testdata/config/repo.toml` -- test repo config fixture
-  - `go.mod` -- promoted koanf/v2 and koanf/providers/confmap to direct dependencies
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-019: Profile Inheritance with Deep Merge
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `ProfileResolution` struct with `Profile *Profile` and `Chain []string` fields for inheritance chain debugging
-  - `ResolveProfile(name string, profiles map[string]*Profile) (*ProfileResolution, error)` — public entry point; resolves full inheritance chain, emits slog.Warn when depth > 3, emits slog.Debug on successful resolution
-  - `resolveChain(name, profiles, visited)` — recursive DFS helper; detects circular/self-referential inheritance by tracking visited set; supports fresh-visited for implicit default base (avoids false positives when "default" appears in chain)
-  - `lookupProfile(name, profiles)` — synthesizes built-in `DefaultProfile()` for "default" when absent from map
-  - `mergeProfile(base, override *Profile) *Profile` — explicit per-field merge: strings (non-empty wins), ints (non-zero wins), booleans (override always wins), slices (non-empty override replaces base entirely), RelevanceConfig (per-tier), RedactionConfig (field-by-field); Extends always cleared; no mutation of inputs
-  - `mergeString`, `mergeInt`, `mergeSlice`, `mergeRelevance`, `mergeRedactionConfig` — unexported merge helpers
-  - Profiles without `extends` automatically get built-in defaults applied for unset fields
-  - 30+ table-driven tests covering: base cases, multi-level chains (1-3 levels), chain tracking, error cases (missing profile, missing parent, circular 2-way, circular 3-way, self-referential), slice semantics, relevance tier merge, boolean override, RedactionConfig field merge, TOML fixture integration, immutability
-- **Files created/modified:**
-  - `internal/config/profile.go` -- ProfileResolution, ResolveProfile, resolveChain, lookupProfile
-  - `internal/config/merge.go` -- mergeProfile and all merge helpers
-  - `internal/config/profile_test.go` -- 30+ tests
-  - `testdata/config/inheritance.toml` -- multi-level fixture (default, base, child, grandchild, deep, no_extends, custom_tiers, custom_redaction)
-  - `testdata/config/circular.toml` -- circular and self-referential fixture (a -> b -> a, self-ref)
-  - `docs/tasks/PROGRESS.md` -- updated summary
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-018: Configuration File Auto-Detection and Discovery
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `DiscoverRepoConfig(startDir string) (string, error)` — walks up the directory tree from `startDir` resolving symlinks first, checking for `harvx.toml` at each level, stopping at `.git` boundary or after 20 levels (max depth), returning the first config found or empty string
-  - `DiscoverGlobalConfig() (string, error)` — returns XDG-compatible global config path: `$XDG_CONFIG_HOME/harvx/config.toml`, `~/.config/harvx/config.toml` (Linux/macOS), or `%APPDATA%\harvx\config.toml` (Windows); returns empty string (no error) when file absent
-  - `globalConfigDir()` unexported helper isolating platform-specific path logic
-  - Resolver Layer 2 updated to use `DiscoverGlobalConfig()` instead of hard-coded `os.UserHomeDir()` + `filepath.Join`
-  - Resolver Layer 3 updated to use `DiscoverRepoConfig(targetDir)` instead of direct `filepath.Join(targetDir, "harvx.toml")`
-  - 29 tests covering all acceptance criteria, edge cases, and resolver integration
-- **Files created/modified:**
-  - `internal/config/discover.go` -- `DiscoverRepoConfig`, `DiscoverGlobalConfig`, `globalConfigDir`
-  - `internal/config/discover_test.go` -- 29 tests: start dir, parent dir, two levels up, max depth, .git boundary, symlink resolution, permission-denied, XDG env, table-driven, resolver integration
-  - `internal/config/resolver.go` -- Layer 2 and Layer 3 replaced to call discovery functions
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-020: Configuration Validation and Lint Engine
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `ValidationError` struct implementing the `error` interface with severity, field path, message, and suggestion fields
-  - `LintResult` struct embedding `ValidationError` plus a stable machine-readable `Code` for programmatic filtering
-  - `Validate(cfg *Config) []ValidationError` — accumulates all hard errors (invalid format/tokenizer/target/confidence_threshold, negative or out-of-range max_tokens, invalid glob syntax, circular/missing inheritance) and warnings (overlapping tier patterns, empty tiers, contradictory priority_files, redundant redaction exclude_paths, deep inheritance, oversized max_tokens, out-of-tree output path) across all profiles without stopping at the first error
-  - `Lint(cfg *Config) []LintResult` — runs all Validate checks plus three deeper analyses: unreachable tier detection ("unreachable-tier"), no-extension tier pattern detection ("no-ext-match"), and complexity score reporting ("complexity")
-  - 3 test fixture TOML files: invalid_format.toml, overlapping_tiers.toml, contradictory.toml
-  - 52+ table-driven tests with testify assertions covering all 16 spec test cases plus edge cases
-- **Files created/modified:**
-  - `internal/config/errors.go` -- ValidationError and LintResult types
-  - `internal/config/validate.go` -- Validate(), Lint(), and 12 unexported helper functions
-  - `internal/config/validate_test.go` -- 52+ tests covering all acceptance criteria and edge cases
-  - `testdata/config/invalid_format.toml` -- invalid format, tokenizer, target, max_tokens, confidence_threshold
-  - `testdata/config/overlapping_tiers.toml` -- overlapping glob patterns across tiers
-  - `testdata/config/contradictory.toml` -- priority_files in ignore, glob in priority_files, redundant redaction excludes
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-021: Framework-Specific Profile Templates
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - Six TOML profile template files embedded in the binary via `//go:embed templates/*.toml`: `base`, `nextjs`, `go-cli`, `python-django`, `rust-cargo`, `monorepo`
-  - `TemplateInfo` struct with `Name` and `Description` fields
-  - `ListTemplates() []TemplateInfo` — returns defensive copy of 6-template registry in display order
-  - `GetTemplate(name string) (string, error)` — returns raw TOML via embed.FS; validates name against allowlist before FS access (path traversal prevention)
-  - `RenderTemplate(name, projectName string) (string, error)` — replaces `{{project_name}}` placeholder via `strings.ReplaceAll`
-  - All 6 templates pass `Validate()` with zero errors and zero warnings: valid format/tokenizer, max_tokens=128000, no glob metacharacters in priority_files, no priority_files/ignore overlap, no duplicate tier patterns, no explicit empty tiers
-  - 20 top-level test functions (with many subtests across 6 templates); 25+ subtests total
-- **Files created/modified:**
-  - `internal/config/templates.go` -- embed.FS directive, TemplateInfo type, ListTemplates, GetTemplate, RenderTemplate
-  - `internal/config/templates_test.go` -- 20+ test functions covering all acceptance criteria
-  - `internal/config/templates/base.toml` -- minimal starter template (tier_0, tier_1, tier_4)
-  - `internal/config/templates/nextjs.toml` -- Next.js / React (6 tiers, next.config.*, app/, pages/, components/)
-  - `internal/config/templates/go-cli.toml` -- Go CLI (5 tiers, cmd/, internal/, pkg/, testdata/)
-  - `internal/config/templates/python-django.toml` -- Python Django (5 tiers, views.py, models.py, templates/)
-  - `internal/config/templates/rust-cargo.toml` -- Rust Cargo (5 tiers, src/**/*.rs, benches/, examples/, tests/)
-  - `internal/config/templates/monorepo.toml` -- Monorepo (5 tiers, packages/*/src/, apps/*/src/, shared/)
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-022: Profile CLI Subcommands -- init, list, show
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `profilesCmd` parent Cobra command registered under `rootCmd` with `list`, `init`, `show` subcommands
-  - `profiles list`: `text/tabwriter` aligned table showing NAME/SOURCE/EXTENDS/DESCRIPTION columns; always includes built-in `default`; loads profiles from global (`~/.config/harvx/config.toml`) and repo (`harvx.toml`) configs; appends template names section
-  - `profiles init`: writes `harvx.toml` from embedded template via `config.RenderTemplate`; `--template` (default `base`), `--output`, `--yes` flags; existence guard (returns error unless `--yes`); success message with 3 next-step suggestions
-  - `profiles show <name>`: resolves profile via `config.Resolve` (full 5-layer pipeline); outputs annotated TOML with `# source` inline comments and inheritance chain header; `--json` flag switches to `encoding/json` output; lists available profiles in error for unknown profile
-  - `ShowOptions` struct and `ShowProfile(opts ShowOptions) string` in `internal/config/show.go`: manually-rendered TOML with per-field source annotations, `[relevance]` and `[redaction_config]` sections, header comment block
-  - `ShowProfileJSON(p *Profile) (string, error)` for JSON serialization
-  - Shell completion for profile names (`ValidArgsFunction`) and template names (`completeTemplateNames`)
-  - 37+ tests in `profiles_test.go` including integration test (init → list → show sequence)
-  - 15 tests in `show_test.go` for TOML annotation correctness, JSON validity, edge cases
-- **Files created/modified:**
-  - `internal/cli/profiles.go` -- profilesCmd parent + list/init/show subcommands with completions
-  - `internal/cli/profiles_test.go` -- 37+ tests covering all acceptance criteria
-  - `internal/config/show.go` -- ShowOptions, ShowProfile, ShowProfileJSON, TOML annotation helpers
-  - `internal/config/show_test.go` -- 15 tests for serialization and source annotations
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-023: Profile CLI Subcommands -- lint and explain
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `profiles lint` Cobra subcommand: runs `config.Lint()`, groups by severity (errors/warnings/info), prints icons (X/!/i), exits 1 on errors; `--profile` flag filters to one profile
-  - `profiles explain <filepath>` Cobra subcommand: resolves profile via full 5-layer pipeline, explains file through simulated discovery pipeline steps, prints rule trace; supports glob expansion via `doublestar.Glob`; `--profile` flag; `ValidArgsFunction` for file completion
-  - `ExplainFile(filePath, profileName string, p *Profile) ExplainResult` in `internal/config/explain.go`: simulates 11 ordered pipeline steps (default ignores, profile ignores, .gitignore stub, include filter, priority files, tier 0-5), records `TraceStep` per step, computes `Tier`, `RedactionOn`, `Compression` language
-  - `TraceStep` struct: StepNum, Rule, Matched, Outcome
-  - `ExplainResult` struct: FilePath, ProfileName, Extends, Included, ExcludedBy, Tier, TierPattern, IsPriority, RedactionOn, Compression, Trace
-  - `compressionLanguage(filePath)` helper: 16-extension map for Tree-sitter language detection
-  - 47 new tests across 3 test files covering all acceptance criteria
-- **Files created/modified:**
-  - `internal/config/explain.go` -- ExplainFile engine, TraceStep, ExplainResult, compressionLanguage
-  - `internal/config/explain_test.go` -- 22 tests for explain engine
-  - `internal/cli/profiles_lint.go` -- lint subcommand implementation
-  - `internal/cli/profiles_lint_test.go` -- 11 tests for lint command
-  - `internal/cli/profiles_explain.go` -- explain subcommand implementation
-  - `internal/cli/profiles_explain_test.go` -- 14 tests for explain command
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-024: Config Debug Command
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `harvx config debug` Cobra subcommand showing fully resolved configuration with per-field source annotations
-  - `configCmd` parent command and `configDebugCmd` child registered under root
-  - `--json` flag for structured JSON output; `--profile <name>` flag to debug a specific profile
-  - `DebugOutput` struct with `ConfigFiles`, `ActiveProfile`, `InheritChain`, `EnvVars`, and `Config` fields
-  - `DebugOptions` struct with `ProfileName`, `TargetDir`, `GlobalConfigPath`, and `CLIFlags` fields
-  - `BuildDebugOutput(opts DebugOptions) (*DebugOutput, error)` — runs full 5-layer resolution, discovers config files, checks all HARVX_* env vars, builds ordered config entries with abbreviated slice display
-  - `FormatDebugOutput(out *DebugOutput, w io.Writer) error` — human-readable tabwriter-aligned report with "Config Files:", "Active Profile:", "Environment Variables:", and "Resolved Configuration:" sections
-  - `FormatDebugOutputJSON(out *DebugOutput, w io.Writer) error` — indented JSON via `encoding/json`
-  - `sourceDetailLabel(key, src)` — generates "env (HARVX_MAX_TOKENS)" or "flag (--output)" labels
-  - `abbreviateSlice(items)` — compact `[a, b, c ...N more]` format for slices longer than 3 items
-  - 60+ tests across 4 test files covering all 10 acceptance criteria
-- **Files created/modified:**
-  - `internal/config/debug.go` -- DebugOutput, DebugOptions, BuildDebugOutput, FormatDebugOutput, FormatDebugOutputJSON, helpers
-  - `internal/config/debug_test.go` -- 40 tests for core debug logic, abbreviation, env vars, inheritance
-  - `internal/cli/config_debug.go` -- configCmd parent + configDebugCmd with --json and --profile flags
-  - `internal/cli/config_debug_test.go` -- 20 tests for CLI command text/JSON output and flag registration
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
----
-
-## Completed Tasks (continued)
-
-### T-025: Profile System Integration Tests and Golden Tests
-
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `internal/testutil/golden.go` -- `Golden(t, name, actual)` helper with package-level `-update` flag for golden file regeneration; uses `t.Helper()` for correct caller reporting
-  - 8 integration scenario fixture directories under `testdata/integration/profiles/` with TOML config files matching the 8 test scenarios from the PRD
-  - `internal/config/integration_test.go` -- 8 scenario integration tests exercising the full 5-layer `Resolve` pipeline end-to-end (defaults, repo config, global+repo merge, 3-level inheritance, env overrides, CLI flag overrides, template init roundtrip, complex finvault profile)
-  - `internal/config/fuzz_test.go` -- `FuzzConfigParse` (feeds arbitrary bytes to `LoadFromString`, verifies no panic, checks cfg!=nil when err==nil, calls `Validate`); `FuzzValidate` (parses TOML then calls `Validate`+`Lint`, verifies neither panics); seeded with valid configs and pathological inputs
-  - `internal/config/benchmark_test.go` -- 6 benchmarks: `BenchmarkConfigResolve/{defaults-only,single-file,multi-source,ten-profiles}`, `BenchmarkConfigValidate/{clean-config,complex-config}`; setup outside `b.ResetTimer()`, no assertions
-  - `internal/cli/profiles_integration_test.go` -- 13 CLI integration tests covering `profiles list`, `profiles show`, `profiles lint` (clean+broken+no-config), `profiles explain` (included+excluded), `config debug`, full init→list→show→lint sequence; uses `newTestProfilesFull()` for isolated command trees and `changeDirForTest()` for CWD isolation
-  - All integration tests guarded with `testing.Short()` so `go test -short` skips them; full runs via `go test -run TestIntegration`/`TestCLI`
-- **Files created:**
-  - `internal/testutil/golden.go` -- golden test helper with `-update` flag support
-  - `internal/config/integration_test.go` -- 8 scenario integration tests + `fixturePath`/`nonexistentGlobal` helpers
-  - `internal/config/fuzz_test.go` -- `FuzzConfigParse` and `FuzzValidate` fuzz tests
-  - `internal/config/benchmark_test.go` -- 6 benchmarks for resolve and validate performance
-  - `internal/cli/profiles_integration_test.go` -- 13 CLI integration tests + `newTestProfilesFull`/`runCmd` helpers
-  - `testdata/integration/profiles/scenario-1-defaults-only/.gitkeep`
-  - `testdata/integration/profiles/scenario-2-repo-config/harvx.toml`
-  - `testdata/integration/profiles/scenario-3-global-plus-repo/global.toml`
-  - `testdata/integration/profiles/scenario-3-global-plus-repo/harvx.toml`
-  - `testdata/integration/profiles/scenario-4-inheritance/harvx.toml`
-  - `testdata/integration/profiles/scenario-5-env-overrides/harvx.toml`
-  - `testdata/integration/profiles/scenario-6-cli-flags/harvx.toml`
-  - `testdata/integration/profiles/scenario-7-template-init/.gitkeep`
-  - `testdata/integration/profiles/scenario-8-complex-finvault/harvx.toml`
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
----
-
-## Not Started Tasks
-
 ### Phase 2: Profiles (T-016 to T-025)
 
 - **Status:** Completed
-- **Tasks:** 10 (8 Must Have, 2 Should Have)
-- **Estimated Effort:** 75-105 hours
-- **PRD Roadmap:** Weeks 4-6
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-016 | Configuration Types, Defaults, and TOML Loading | Must Have | Medium (8-12hrs) | Completed |
-| T-017 | Multi-Source Configuration Merging and Resolution | Must Have | Large (14-20hrs) | Completed |
-| T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Completed |
-| T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Completed |
-| T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Completed |
-| T-021 | Framework-Specific Profile Templates | Must Have | Medium (6-10hrs) | Completed |
-| T-022 | Profile CLI -- init, list, show | Must Have | Medium (8-12hrs) | Completed |
-| T-023 | Profile CLI -- lint and explain | Should Have | Medium (8-12hrs) | Completed |
-| T-024 | Config Debug Command | Should Have | Small (4-6hrs) | Completed |
-| T-025 | Profile Integration Tests and Golden Tests | Must Have | Medium (8-12hrs) | Completed |
-
-**Deliverable:** `harvx --profile finvault --target claude` produces architecture-aware, token-budgeted output.
-
----
-
-### Phase 3: Relevance & Tokens (T-026 to T-033)
-
-- **Status:** Not Started
-- **Tasks:** 8 (6 Must Have, 2 Should Have)
-- **Estimated Effort:** 54-80 hours
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-026 | Tier Definitions and Default Tier Assignments | Must Have | Medium (6-8hrs) | Not Started |
-| T-027 | Glob-Based File-to-Tier Matching | Must Have | Medium (8-12hrs) | Not Started |
-| T-028 | Relevance Sorter -- Sort Files by Tier and Path | Must Have | Small (4-6hrs) | Not Started |
-| T-029 | Tokenizer Interface and Implementations (cl100k, o200k, none) | Must Have | Medium (8-12hrs) | Not Started |
-| T-030 | Parallel Per-File Token Counting | Must Have | Medium (6-10hrs) | Not Started |
-| T-031 | Token Budget Enforcement with Truncation Strategies | Must Have | Medium (8-12hrs) | Not Started |
-| T-032 | Relevance Explain and Inclusion Summary | Should Have | Medium (6-8hrs) | Not Started |
-| T-033 | Token Reporting CLI Flags and Heatmap | Should Have | Medium (8-12hrs) | Not Started |
-
----
-
-### Phase 4: Security (T-034 to T-041)
-
-- **Status:** Not Started
-- **Tasks:** 8 (8 Must Have)
-- **Estimated Effort:** 65-96 hours
-- **PRD Roadmap:** Weeks 7-9
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-034 | Redaction Core Types, Interfaces, and Pattern Registry | Must Have | Medium (6-8hrs) | Not Started |
-| T-035 | Gitleaks-Inspired Secret Detection Patterns | Must Have | Large (14-20hrs) | Not Started |
-| T-036 | Shannon Entropy Analyzer | Must Have | Medium (6-10hrs) | Not Started |
-| T-037 | Streaming Redaction Filter Pipeline | Must Have | Large (14-20hrs) | Not Started |
-| T-038 | Sensitive File Default Exclusions & Heightened Scanning | Must Have | Small (4-6hrs) | Not Started |
-| T-039 | Redaction Report and Output Summary | Must Have | Medium (6-10hrs) | Not Started |
-| T-040 | CLI Redaction Flags and Profile Configuration | Must Have | Medium (6-10hrs) | Not Started |
-| T-041 | Secret Detection Regression Test Corpus & Fuzz Testing | Must Have | Medium (8-12hrs) | Not Started |
-
-**Deliverable:** `harvx --compress --profile finvault` produces compressed, redacted output with zero known secret leaks.
-
----
-
-### Phase 5: Compression (T-042 to T-050)
-
-- **Status:** Not Started
-- **Tasks:** 9 (8 Must Have, 1 Should Have)
-- **Estimated Effort:** 83-114 hours
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-042 | Wazero WASM Runtime Setup and Grammar Embedding | Must Have | Medium (8-12hrs) | Not Started |
-| T-043 | Language Detection and LanguageCompressor Interface | Must Have | Small (3-4hrs) | Not Started |
-| T-044 | Tier 1 Compressor -- TypeScript and JavaScript | Must Have | Large (16-20hrs) | Not Started |
-| T-045 | Tier 1 Compressor -- Go | Must Have | Medium (8-12hrs) | Not Started |
-| T-046 | Tier 1 Compressor -- Python and Rust | Must Have | Large (14-18hrs) | Not Started |
-| T-047 | Tier 2 Compressor -- Java, C, and C++ | Should Have | Medium (10-14hrs) | Not Started |
-| T-048 | Tier 2 Config Compressors & Fallback | Must Have | Small (4-6hrs) | Not Started |
-| T-049 | Compression Orchestrator and Pipeline Integration | Must Have | Medium (10-14hrs) | Not Started |
-| T-050 | Regex Heuristic Fallback and E2E Compression Tests | Must Have | Medium (10-14hrs) | Not Started |
-
----
-
-### Phase 6: Output & Rendering (T-051 to T-058)
-
-- **Status:** Not Started
-- **Tasks:** 8 (6 Must Have, 2 Should Have)
-- **Estimated Effort:** 54-80 hours
-- **PRD Roadmap:** Weeks 10-11
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-051 | Directory Tree Builder | Must Have | Medium (8-12hrs) | Not Started |
-| T-052 | Markdown Output Renderer with Go Templates | Must Have | Large (14-20hrs) | Not Started |
-| T-053 | XML Output Renderer for Claude Target | Must Have | Medium (8-12hrs) | Not Started |
-| T-054 | Content Hashing (XXH3) and Deterministic Output | Must Have | Small (3-4hrs) | Not Started |
-| T-055 | Output Writer, File Path Resolution, Stdout Support | Must Have | Medium (6-8hrs) | Not Started |
-| T-056 | Output Splitter (Multi-Part File Generation) | Should Have | Medium (8-12hrs) | Not Started |
-| T-057 | Metadata JSON Sidecar Generation | Should Have | Small (3-4hrs) | Not Started |
-| T-058 | Output Pipeline Integration and Golden Tests | Must Have | Medium (8-12hrs) | Not Started |
-
-**Deliverable:** Full output rendering with Markdown, XML, splitting, and metadata sidecar support.
-
----
-
-### Phase 7: State & Diff (T-059 to T-065)
-
-- **Status:** Not Started
-- **Tasks:** 7 (all Should Have)
-- **Estimated Effort:** 38-64 hours
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-059 | State Snapshot Types and JSON Serialization | Should Have | Small (2-4hrs) | Not Started |
-| T-060 | Content Hashing with XXH3 | Should Have | Small (2-4hrs) | Not Started |
-| T-061 | State Cache Persistence (Read/Write) | Should Have | Medium (6-12hrs) | Not Started |
-| T-062 | State Comparison Engine | Should Have | Medium (6-12hrs) | Not Started |
-| T-063 | Git-Aware Diffing | Should Have | Medium (6-12hrs) | Not Started |
-| T-064 | `harvx diff` Subcommand and `--diff-only` Flag | Should Have | Medium (6-12hrs) | Not Started |
-| T-065 | Cache Subcommands and Change Summary Rendering | Should Have | Medium (6-12hrs) | Not Started |
-
----
-
-### Phase 8: Workflows (T-066 to T-078)
-
-- **Status:** Not Started
-- **Tasks:** 13 (11 Must Have, 1 Should Have, 1 Nice to Have)
-- **Estimated Effort:** 116-180 hours
-- **PRD Roadmap:** Weeks 10-11
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-066 | Core Pipeline as Go Library API | Must Have | Large (14-20hrs) | Not Started |
-| T-067 | Stdout Mode, Exit Codes, Non-Interactive Defaults | Must Have | Medium (6-10hrs) | Not Started |
-| T-068 | JSON Preview Output and Metadata Sidecar | Must Have | Medium (8-12hrs) | Not Started |
-| T-069 | Assert-Include Coverage Checks & Env Var Overrides | Must Have | Medium (6-10hrs) | Not Started |
-| T-070 | Repo Brief Command (`harvx brief`) | Must Have | Large (14-20hrs) | Not Started |
-| T-071 | Review Slice Command (`harvx review-slice`) | Must Have | Large (16-24hrs) | Not Started |
-| T-072 | Module Slice Command (`harvx slice`) | Must Have | Medium (8-12hrs) | Not Started |
-| T-073 | Workspace Manifest Config and Command | Must Have | Medium (10-14hrs) | Not Started |
-| T-074 | Session Bootstrap Docs & Claude Code Hooks | Must Have | Medium (6-10hrs) | Not Started |
-| T-075 | Verify Command (`harvx verify`) | Must Have | Medium (8-12hrs) | Not Started |
-| T-076 | Golden Questions Harness & Quality Evaluation | Should Have | Medium (8-12hrs) | Not Started |
-| T-077 | MCP Server v1.1 (`harvx mcp serve`) | Nice to Have | Large (16-24hrs) | Not Started |
-| T-078 | Workflow Integration Tests (E2E) | Must Have | Medium (10-14hrs) | Not Started |
-
-**Deliverable:** `harvx brief && harvx review-slice --base main --head HEAD` enriches review pipelines.
-
----
-
-### Phase 9: Interactive TUI (T-079 to T-087)
-
-- **Status:** Not Started
-- **Tasks:** 9 (9 Must Have)
-- **Estimated Effort:** 72-104 hours
-- **PRD Roadmap:** Weeks 12-13
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-079 | Bubble Tea Application Scaffold & Elm Architecture | Must Have | Medium (8-12hrs) | Not Started |
-| T-080 | File Tree Data Model & Keyboard Navigation | Must Have | Large (14-20hrs) | Not Started |
-| T-081 | File Tree Visual Rendering & Tier Color Coding | Must Have | Medium (8-12hrs) | Not Started |
-| T-082 | Stats Panel with Live Token Counting & Budget Bar | Must Have | Medium (8-12hrs) | Not Started |
-| T-083 | Profile Selector & Action Keybindings | Must Have | Medium (6-10hrs) | Not Started |
-| T-084 | Lipgloss Styling, Responsive Layout & Theme Support | Must Have | Medium (8-12hrs) | Not Started |
-| T-085 | Search/Filter, Tier Views & Help Overlay | Must Have | Medium (8-12hrs) | Not Started |
-| T-086 | TUI State Serialization to Profile TOML & Smart Default | Must Have | Small (4-6hrs) | Not Started |
-| T-087 | TUI Integration Testing & Pipeline Wiring | Must Have | Medium (6-10hrs) | Not Started |
-
-**Deliverable:** `harvx -i` launches a beautiful, responsive TUI for visual file selection with real-time token counting.
-
----
-
-### Phase 10: Polish & Distribution (T-088 to T-095)
-
-- **Status:** Not Started
-- **Tasks:** 7 (7 Must Have)
-- **Estimated Effort:** 48-72 hours
-- **PRD Roadmap:** Week 14
-
-#### Task List
-
-| Task | Name | Priority | Effort | Status |
-|------|------|----------|--------|--------|
-| T-088 | GoReleaser Config with Cosign Signing & Syft SBOM | Must Have | Medium (8-12hrs) | Not Started |
-| T-089 | GitHub Release Automation Workflow | Must Have | Small (4-6hrs) | Not Started |
-| T-090 | Shell Completion Generation & Man Pages | Must Have | Medium (6-8hrs) | Not Started |
-| T-091 | Performance Benchmarking Suite | Must Have | Medium (8-12hrs) | Not Started |
-| T-092 | Integration Test Suite Against Real OSS Repos | Must Have | Medium (8-12hrs) | Not Started |
-| T-093 | Fuzz Testing for Redaction & Config Parsing | Must Have | Medium (6-10hrs) | Not Started |
-| T-094 | Golden Test Infrastructure | Must Have | Medium (8-12hrs) | Not Started |
-
-**Deliverable:** Published v1.0.0 with signed binaries for all platforms.
-
----
-
-## Notes
-
-### Key Technical Decisions (from agent research)
-
-1. **koanf v2 over Viper** -- Produces 313% smaller binary, doesn't force-lowercase keys (which breaks TOML spec). Better fit for single-binary distribution.
-2. **zeebo/xxh3 over cespare/xxhash** -- PRD specifies XXH3, but cespare/xxhash implements XXH64. zeebo/xxh3 provides proper XXH3 in pure Go with SIMD optimizations.
-3. **Go stdlib regexp only** -- RE2 engine guarantees O(n) matching time for untrusted input. All Gitleaks patterns adapted without lookaheads.
-4. **malivvan/tree-sitter vs direct wazero** -- Needs evaluation. malivvan provides higher-level API but is pre-release (Jan 2025). Decision documented in T-042.
-5. **BurntSushi/toml v1.5.0** -- Latest stable. MetaData.Undecoded() enables unknown-key detection.
-6. **Bubble Tea v1.x** -- v2 still in RC as of Feb 2026. Stable v1.2+ recommended for production.
-
-### Phase Index Files
-
-Detailed phase-level documentation with Mermaid dependency graphs, implementation order, and tech stack summaries:
-- [PHASE-2-INDEX.md](PHASE-2-INDEX.md) -- Profile System
-- [PHASE-4-INDEX.md](PHASE-4-INDEX.md) -- Secret Redaction
-- [PHASE-5-INDEX.md](PHASE-5-INDEX.md) -- Tree-Sitter Compression
-- [PHASE-8-INDEX.md](PHASE-8-INDEX.md) -- Workflows
-
-
-### T-020: Configuration Validation and Lint Engine
-
-- **Status:** Completed
 - **Date:** 2026-02-22
-- **What was built:**
-  - `ValidationError` struct implementing `error` interface with Severity, Field, Message, Suggest fields
-  - `LintResult` struct embedding `ValidationError` plus a `Code` string for machine-readable lint rule IDs
-  - `Validate(cfg *Config) []ValidationError` — collects all hard errors and warnings across every profile; never stops at first issue
-  - Hard error checks: invalid format (not markdown/xml/plain), invalid tokenizer (not cl100k_base/o200k_base/none), invalid target (not claude/chatgpt/generic/empty), invalid confidence_threshold (not high/medium/low/empty), negative max_tokens, max_tokens > 2,000,000, invalid glob patterns via `doublestar.ValidatePattern`, circular inheritance (via ResolveProfile), missing parent profile
-  - Soft warning checks: overlapping glob patterns across tiers (same exact string in multiple tiers), empty relevance tiers (non-nil but zero-length slice), priority_files in ignore list (contradictory), priority_files containing glob metacharacters (*?[{), redaction exclude_paths overlapping with ignore (redundant), deep inheritance chain (> 3 levels), max_tokens > 500,000 (unusually large), output path starting with "../" or absolute (outside project directory)
-  - `Lint(cfg *Config) []LintResult` — runs all Validate checks plus three deeper analyses:
-    - `unreachable-tier` (Code): tier whose entire pattern set is already present in higher-priority tiers
-    - `no-ext-match` (Code): tier pattern with no file-extension suffix (matches any file type)
-    - `complexity` (Code): profile with > 8 non-empty fields (encourages splitting via extends)
-  - `patternHasExtension(pattern string) bool` — heuristic for detecting extension-free glob patterns
-  - `profileComplexityScore(p *Profile) int` — counts non-empty/non-zero fields across all 19 profile settings
-- **Files created/modified:**
-  - `internal/config/errors.go` -- ValidationError struct + error interface + LintResult struct
-  - `internal/config/validate.go` -- Validate(), Lint(), and all check helpers
-  - `testdata/config/invalid_format.toml` -- profile with invalid format, tokenizer, target, and negative max_tokens
-  - `testdata/config/overlapping_tiers.toml` -- profile with same patterns in multiple tiers
-  - `testdata/config/contradictory.toml` -- profile with priority_files in ignore, glob patterns in priority_files, and redundant redaction excludes
-  - `docs/tasks/PROGRESS.md` -- updated summary
+- **Tasks Completed:** 10 tasks
 
-### T-021: Framework-Specific Profile Templates
+#### Features Implemented
 
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - Six TOML profile template files embedded in the binary via `//go:embed templates/*.toml`
-  - `TemplateInfo` struct with `Name` and `Description` fields
-  - `ListTemplates() []TemplateInfo` — returns all 6 templates in display order (base first)
-  - `GetTemplate(name string) (string, error)` — returns raw TOML content; validates name against known templates to prevent path traversal
-  - `RenderTemplate(name, projectName string) (string, error)` — replaces `{{project_name}}` placeholder with the provided project name using `strings.ReplaceAll`
-  - All 6 templates pass `Validate()` with zero hard errors and zero warnings
-  - Templates include explanatory comments for user education
-- **Template Files Created:**
-  - `internal/config/templates/base.toml` — minimal starter configuration for any project
-  - `internal/config/templates/nextjs.toml` — Next.js / React application (all 6 tiers)
-  - `internal/config/templates/go-cli.toml` — Go CLI application (all 6 tiers)
-  - `internal/config/templates/python-django.toml` — Python Django web application (all 6 tiers)
-  - `internal/config/templates/rust-cargo.toml` — Rust Cargo project (all 6 tiers)
-  - `internal/config/templates/monorepo.toml` — Monorepo with multiple packages (all 6 tiers)
-- **Files created/modified:**
-  - `internal/config/templates/base.toml` — minimal starter template
-  - `internal/config/templates/nextjs.toml` — Next.js template
-  - `internal/config/templates/go-cli.toml` — Go CLI template
-  - `internal/config/templates/python-django.toml` — Python Django template
-  - `internal/config/templates/rust-cargo.toml` — Rust Cargo template
-  - `internal/config/templates/monorepo.toml` — Monorepo template
-  - `internal/config/templates.go` — embed.FS directive, TemplateInfo type, ListTemplates, GetTemplate, RenderTemplate
-  - `internal/config/templates_test.go` — 17+ tests covering all acceptance criteria
-  - `docs/tasks/PROGRESS.md` — updated summary
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Config types & TOML loading | T-016 | `Config`, `Profile`, `RelevanceConfig`, `RedactionConfig` structs; `LoadFromFile`/`LoadFromString` with unknown-key warnings via `MetaData.Undecoded()` |
+| Multi-source config resolution | T-017 | `Resolve()` 5-layer koanf pipeline (defaults → global → repo → env → flags); `Source` iota + `SourceMap` for per-key origin tracking; `ApplyTargetPreset` for claude/chatgpt/generic targets |
+| Config file auto-detection | T-018 | `DiscoverRepoConfig` (walks up to `.git` boundary, max 20 levels); `DiscoverGlobalConfig` (XDG-compatible: `$XDG_CONFIG_HOME`, `~/.config`, `%APPDATA%`) |
+| Profile inheritance & deep merge | T-019 | `ResolveProfile` with DFS cycle detection and `slog.Warn` at depth > 3; `mergeProfile` per-field merge (strings, ints, bools, slices, `RelevanceConfig`, `RedactionConfig`); inputs never mutated |
+| Validation & lint engine | T-020 | `Validate()` collects all hard errors (invalid format/tokenizer/target, bad globs, circular inheritance) and warnings (overlapping tiers, contradictory priority_files); `Lint()` adds codes `unreachable-tier`, `no-ext-match`, `complexity` |
+| Framework profile templates | T-021 | 6 TOML templates embedded via `//go:embed`: `base`, `nextjs`, `go-cli`, `python-django`, `rust-cargo`, `monorepo`; `GetTemplate` validates name against allowlist (path traversal prevention); `RenderTemplate` substitutes `{{project_name}}` |
+| Profile CLI: init, list, show | T-022 | `harvx profiles list` (tabwriter NAME/SOURCE/EXTENDS/DESCRIPTION); `profiles init` (writes from template, `--template`/`--output`/`--yes`); `profiles show` (annotated TOML with `# source` comments or `--json`); `ShowProfile`/`ShowProfileJSON` in `config/show.go` |
+| Profile CLI: lint, explain | T-023 | `profiles lint` (groups by severity, exits 1 on errors, `--profile` filter); `profiles explain` (11-step pipeline simulation via `ExplainFile`: default ignores → profile ignores → include → priority → tiers 0–5; `TraceStep`/`ExplainResult` structs; glob expansion via `doublestar.Glob`) |
+| Config debug command | T-024 | `harvx config debug` with `--json`/`--profile`; `BuildDebugOutput` discovers config files, reads all `HARVX_*` env vars, resolves full 5-layer config; `FormatDebugOutput` tabwriter report; `sourceDetailLabel` generates env/flag attribution |
+| Integration & golden tests | T-025 | `testutil.Golden` helper with `-update` flag; 8 end-to-end scenario tests; `FuzzConfigParse`/`FuzzValidate` fuzz targets; 6 benchmarks (`BenchmarkConfigResolve/{defaults-only,single-file,multi-source,ten-profiles}`, `BenchmarkConfigValidate/{clean,complex}`); 13 CLI integration tests |
 
-### T-022: Profile CLI Subcommands -- init, list, show
+#### Key Technical Decisions
 
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `profilesCmd` parent Cobra command (`harvx profiles`) with help text listing all subcommands; no RunE so it prints help when called without a subcommand
-  - `profilesListCmd` (`harvx profiles list`): tabular output via `text/tabwriter` showing NAME/SOURCE/EXTENDS/DESCRIPTION columns, always includes the built-in `default` entry, loads profiles from global and repo `harvx.toml` files, appends template listing at the bottom
-  - `profilesInitCmd` (`harvx profiles init`): creates `harvx.toml` using `config.RenderTemplate`; `--template` (default: `base`), `--output` (default: `harvx.toml`), `--yes` (overwrite); returns error if file exists without `--yes`; shows success message with next-steps
-  - `profilesShowCmd` (`harvx profiles show [profile]`): resolves through 5-layer `config.Resolve`; annotated TOML output (default) or `--json`; lists available profiles in error when profile not found; shell completion via `ValidArgsFunction`
-  - `ShowOptions` struct and `ShowProfile(opts ShowOptions) string` in `internal/config/show.go` -- renders annotated TOML with inline `# source` comments, inheritance chain header, relevance section, redaction_config section
-  - `ShowProfileJSON(p *Profile) (string, error)` -- marshals profile to indented JSON
-  - `resolveChainForShow(profileName string)` -- builds chain from repo+global profiles for inheritance header
-  - `collectProfileEntries()` / `loadAllConfigProfiles()` -- loads profiles from all config sources for the list table
-  - `displayPath(path string)` -- displays config file paths as relative or `~/`-prefixed
-  - `completeProfileNames` / `completeTemplateNames` -- Cobra `ValidArgsFunction` and flag completion with prefix filtering
-  - 37+ test functions across `profiles_test.go` and `show_test.go` covering all acceptance criteria
-- **Files created/modified:**
-  - `internal/cli/profiles.go` -- `profilesCmd`, `profilesListCmd`, `profilesInitCmd`, `profilesShowCmd`, all run functions, helpers, completions
-  - `internal/cli/profiles_test.go` -- 37+ tests: list output, init file creation, show TOML/JSON, completion functions, integration init+list+show sequence
-  - `internal/config/show.go` -- `ShowOptions`, `ShowProfile`, `ShowProfileJSON`, all field-writing helpers
-  - `internal/config/show_test.go` -- 15 tests: header comments, inheritance chain, source annotations, field presence, JSON validity, section rendering
-  - `docs/tasks/PROGRESS.md` -- updated summary
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+1. **koanf v2 over Viper** -- 313% smaller binary, preserves TOML key casing (Viper force-lowercases keys)
+2. **BurntSushi/toml `MetaData.Undecoded()`** -- emits `slog.Warn` for unknown keys without returning an error, allowing forward-compatible configs
+3. **Go stdlib `regexp` (RE2)** -- O(n) matching guarantees for untrusted input; all patterns avoid lookaheads
+4. **Allowlist in `GetTemplate`** -- validates template name against known set before `embed.FS` access, preventing path traversal
 
-### T-023: Profile CLI Subcommands -- lint and explain
+#### Key Files Reference
 
-- **Status:** Completed
-- **Date:** 2026-02-22
-- **What was built:**
-  - `ExplainFile(filePath, profileName string, p *Profile) ExplainResult` in `internal/config/explain.go` -- pure logic explain engine with no I/O
-  - `TraceStep` struct: 1-based StepNum, Rule string, Matched bool, Outcome string
-  - `ExplainResult` struct: FilePath, ProfileName, Extends, Included, ExcludedBy, Tier (-1 if untiered), TierPattern, IsPriority, RedactionOn, Compression, Trace
-  - Pipeline simulation in order: (1) default ignore patterns, (2) profile ignore patterns, (3) .gitignore stub (not simulated), (4) include filter, (5) priority files check, (6–11) relevance tiers 0–5 with first-match-wins and early stop
-  - `compressionLanguage(filePath string) string` -- 16-entry extension → language name map (.go, .ts, .tsx, .js, .jsx, .py, .rs, .c, .cpp, .h, .java, .rb, .php, .swift, .kt, .cs)
-  - `matchesAny(path string, patterns []string) bool` -- doublestar.Match helper used for redaction ExcludePaths and include filter
-  - `matchesGlob(pattern, filePath string) bool` -- error-silenced doublestar.Match wrapper
-  - `profilesLintCmd` (`harvx profiles lint`): loads repo config, runs `config.Lint()`, partitions results by severity (errors/warnings/info), prints grouped output with icons (X/!/i), summary line `N error(s), M warning(s), K info`; exits 1 if any errors found; `--profile` flag to lint single profile
-  - `profilesExplainCmd` (`harvx profiles explain <filepath>`): resolves profile via `config.Resolve`, detects glob patterns (`*?[{`) and expands via `doublestar.Glob(os.DirFS("."), ...)`, calls `ExplainFile` per matched path, renders formatted output with status, tier, matched-by, redaction, compression, priority, and full rule trace
-  - Both subcommands registered via separate `init()` functions (not modifying existing profiles.go init)
-  - `ValidArgsFunction` on explain command for shell file completion
-- **Files created:**
-  - `internal/config/explain.go` -- ExplainFile engine: TraceStep, ExplainResult, pipeline simulation, compression detection, matchesAny, matchesGlob helpers
-  - `internal/cli/profiles_lint.go` -- profilesLintCmd with runProfilesLint, grouped severity output, exit-1 on errors
-  - `internal/cli/profiles_explain.go` -- profilesExplainCmd with runProfilesExplain, glob expansion, printTo formatter, formatTier/formatRedaction/formatCompression/formatPriority helpers
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Purpose | Location |
+| ------- | -------- |
+| Config, Profile, RelevanceConfig, RedactionConfig struct definitions | `internal/config/types.go` |
+| `DefaultProfile()`, `defaultRelevanceTiers()` constructors | `internal/config/defaults.go` |
+| `LoadFromFile`, `LoadFromString`, unknown-key warning | `internal/config/loader.go` |
+| `Source` iota, `SourceMap` type | `internal/config/sources.go` |
+| `HARVX_*` env var constants, `buildEnvMap()` | `internal/config/env.go` |
+| `ApplyTargetPreset()` (claude/chatgpt/generic) | `internal/config/target.go` |
+| `Resolve()`, `ResolveOptions`, `ResolvedConfig` | `internal/config/resolver.go` |
+| `DiscoverRepoConfig()`, `DiscoverGlobalConfig()` | `internal/config/discover.go` |
+| `ProfileResolution`, `ResolveProfile()`, `resolveChain()` | `internal/config/profile.go` |
+| `mergeProfile()` and per-field merge helpers | `internal/config/merge.go` |
+| `ValidationError`, `LintResult` types | `internal/config/errors.go` |
+| `Validate()`, `Lint()` and all check helpers | `internal/config/validate.go` |
+| `ListTemplates()`, `GetTemplate()`, `RenderTemplate()` | `internal/config/templates.go` |
+| `ShowOptions`, `ShowProfile()`, `ShowProfileJSON()` | `internal/config/show.go` |
+| `ExplainFile()`, `TraceStep`, `ExplainResult`, pipeline simulation | `internal/config/explain.go` |
+| `BuildDebugOutput()`, `FormatDebugOutput()`, `FormatDebugOutputJSON()` | `internal/config/debug.go` |
+| `profilesCmd` + `list`/`init`/`show` subcommands | `internal/cli/profiles.go` |
+| `profiles lint` subcommand | `internal/cli/profiles_lint.go` |
+| `profiles explain` subcommand | `internal/cli/profiles_explain.go` |
+| `config debug` subcommand | `internal/cli/config_debug.go` |
+| Embedded TOML templates (base, nextjs, go-cli, python-django, rust-cargo, monorepo) | `internal/config/templates/*.toml` |
+| `Golden()` test helper with `-update` flag | `internal/testutil/golden.go` |
+| 8 end-to-end scenario integration tests | `internal/config/integration_test.go` |
+| `FuzzConfigParse`, `FuzzValidate` fuzz targets | `internal/config/fuzz_test.go` |
+| `BenchmarkConfigResolve`, `BenchmarkConfigValidate` | `internal/config/benchmark_test.go` |
+| TOML test fixtures (valid, minimal, invalid_syntax, unknown_keys, global, repo, inheritance, circular, invalid_format, overlapping_tiers, contradictory) | `testdata/config/*.toml` |
+| Integration scenario fixtures (8 scenarios) | `testdata/integration/profiles/scenario-{1-8}/` |
 
-_Last updated: 2026-02-22 (T-025 complete, Phase 2 all done)_
+#### Verification
+
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+
+---
+
