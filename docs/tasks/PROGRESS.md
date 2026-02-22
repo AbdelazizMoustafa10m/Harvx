@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 16 |
+| Completed | 17 |
 | In Progress | 0 |
-| Not Started | 79 |
+| Not Started | 78 |
 
 ---
 
@@ -126,11 +126,11 @@
 
 ---
 
-### Phase 2: Profiles (T-016)
+### Phase 2: Profiles (T-016, T-017)
 
-- **Status:** Partially Complete (T-016 done)
+- **Status:** Partially Complete (T-016 and T-017 done)
 - **Date:** 2026-02-22
-- **Tasks:** 1
+- **Tasks:** 2
 
 #### Features Implemented
 
@@ -139,6 +139,10 @@
 | Config Types | T-016 | `Config`, `Profile`, `RelevanceConfig`, `RedactionConfig` structs with `toml` tags |
 | Default Profile | T-016 | `DefaultProfile()` with PRD Section 5.2 values; `defaultRelevanceTiers()` with PRD Section 5.3 glob patterns |
 | TOML Loader | T-016 | `LoadFromFile()` and `LoadFromString()` via `BurntSushi/toml` v1.5.0; unknown-key warnings via `MetaData.Undecoded()` |
+| Multi-Source Resolver | T-017 | 5-layer merge pipeline: defaults → global → repo/profile-file → env vars → CLI flags |
+| Source Tracking | T-017 | `SourceMap` tracking which layer provided each config value |
+| Target Presets | T-017 | `ApplyTargetPreset()` for claude/chatgpt/generic LLM targets |
+| Env Var Parsing | T-017 | `buildEnvMap()` reads all `HARVX_*` env vars into koanf-compatible flat map |
 
 #### Key Files Added
 
@@ -147,15 +151,23 @@
 | Config struct types | `internal/config/types.go` |
 | Default profile | `internal/config/defaults.go` |
 | TOML loader | `internal/config/loader.go` |
-| Loader tests | `internal/config/loader_test.go` |
-| Types tests | `internal/config/types_test.go` |
-| Test fixtures | `testdata/config/{valid,minimal,invalid_syntax,unknown_keys}.toml` |
+| Source constants | `internal/config/sources.go` |
+| Target presets | `internal/config/target.go` |
+| Env var mapping | `internal/config/env.go` |
+| Multi-source resolver | `internal/config/resolver.go` |
+| Resolver tests | `internal/config/resolver_test.go` |
+| Target tests | `internal/config/target_test.go` |
+| Env tests | `internal/config/env_test.go` |
+| Sources tests | `internal/config/sources_test.go` |
+| Test fixtures | `testdata/config/{valid,minimal,invalid_syntax,unknown_keys,global,repo}.toml` |
 
-#### New Dependency
+#### New Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `github.com/BurntSushi/toml` | v1.5.0 | TOML v1.0 parsing with `MetaData.Undecoded()` |
+| `github.com/knadh/koanf/v2` | v2.3.2 | Multi-source config merging engine |
+| `github.com/knadh/koanf/providers/confmap` | v1.0.0 | In-memory map provider for koanf |
 
 ### T-016: Configuration Types, Defaults, and TOML Loading
 
@@ -183,6 +195,36 @@
   - `go.mod` / `go.sum` -- added github.com/BurntSushi/toml v1.5.0
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-017: Multi-Source Configuration Merging and Resolution
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `Source` type (iota) with 5 levels: SourceDefault, SourceGlobal, SourceRepo, SourceEnv, SourceFlag
+  - `SourceMap` type tracking per-key config origin
+  - `ApplyTargetPreset(p *Profile, target string) error` -- applies claude/chatgpt/generic presets
+  - `buildEnvMap()` -- reads HARVX_FORMAT, HARVX_MAX_TOKENS, HARVX_TOKENIZER, HARVX_OUTPUT, HARVX_TARGET, HARVX_COMPRESS, HARVX_REDACT env vars into flat koanf map
+  - `Resolve(opts ResolveOptions) (*ResolvedConfig, error)` -- 5-layer pipeline with koanf confmap provider
+  - `loadFileLayer()` / `extractProfileFlat()` / `flattenProfileRaw()` -- TOML raw-map parsing (only explicitly-set fields) for correct source attribution
+  - `profileToFlatMap()` / `flatMapToProfile()` -- bidirectional Profile ↔ flat map conversion (used for defaults and preset layers)
+  - `loadLayer()` -- merges flat map into koanf and marks all provided keys with their source
+  - 9 env var constants (EnvProfile, EnvMaxTokens, EnvFormat, etc.)
+  - Error for non-default profiles not found in any config file
+  - 50+ test functions across 4 test files
+- **Files created/modified:**
+  - `internal/config/sources.go` -- Source iota + SourceMap type
+  - `internal/config/target.go` -- ApplyTargetPreset() with claude/chatgpt/generic presets
+  - `internal/config/env.go` -- env var constants + buildEnvMap()
+  - `internal/config/resolver.go` -- Resolve(), ResolveOptions, ResolvedConfig, helpers
+  - `internal/config/sources_test.go` -- Source.String() and precedence tests
+  - `internal/config/target_test.go` -- preset tests for all valid targets + error cases
+  - `internal/config/env_test.go` -- env var parsing tests for all HARVX_ vars
+  - `internal/config/resolver_test.go` -- 25+ integration tests covering all 5 layers
+  - `testdata/config/global.toml` -- test global config fixture
+  - `testdata/config/repo.toml` -- test repo config fixture
+  - `go.mod` -- promoted koanf/v2 and koanf/providers/confmap to direct dependencies
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
 ---
 
 ## In Progress Tasks
@@ -205,7 +247,7 @@ _None currently_
 | Task | Name | Priority | Effort | Status |
 |------|------|----------|--------|--------|
 | T-016 | Configuration Types, Defaults, and TOML Loading | Must Have | Medium (8-12hrs) | Completed |
-| T-017 | Multi-Source Configuration Merging and Resolution | Must Have | Large (14-20hrs) | Not Started |
+| T-017 | Multi-Source Configuration Merging and Resolution | Must Have | Large (14-20hrs) | Completed |
 | T-018 | Configuration File Auto-Detection and Discovery | Must Have | Small (3-5hrs) | Not Started |
 | T-019 | Profile Inheritance with Deep Merge | Must Have | Medium (8-12hrs) | Not Started |
 | T-020 | Configuration Validation and Lint Engine | Must Have | Medium (8-12hrs) | Not Started |

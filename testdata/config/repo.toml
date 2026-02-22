@@ -1,0 +1,11 @@
+# repo.toml -- test fixture representing a harvx.toml in a project directory.
+
+[profile.default]
+format = "xml"
+max_tokens = 200000
+output = "repo-output.md"
+compression = true
+
+[profile.myprofile]
+format = "markdown"
+max_tokens = 75000
