@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 32 |
+| Completed | 34 |
 | In Progress | 0 |
-| Not Started | 63 |
+| Not Started | 62 |
 
 ---
 
@@ -366,6 +366,33 @@
   - Fixed 20-token marker reservation to always leave room for the truncation comment
   - `TruncatedFiles` is a subset of `IncludedFiles` (same pointer), not a separate copy
   - `BudgetRemaining` can be negative when overhead > maxTokens (spec requirement)
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+---
+
+### T-032: Relevance Explain and Inclusion Summary
+
+- **Status:** Completed
+- **Date:** 2026-02-22
+- **What was built:**
+  - `PatternMatch` struct: `Tier int`, `Pattern string` — records a single tier/pattern match for a file
+  - `ExplainResult` struct with all 9 fields: `FilePath`, `AssignedTier`, `MatchedPattern`, `MatchedTierDef`, `IsDefault`, `AllMatches`, `WouldBeIncluded`, `ExclusionReason`, `TokenCount`
+  - `Explain(filePath string, tiers []TierDefinition) *ExplainResult` — iterates ALL tiers and ALL patterns to collect every overlapping match; assigned tier is first-match-wins (lowest tier number, then pattern order); uses same `normalisePath`/`doublestar.ValidatePattern`/`doublestar.Match` as TierMatcher; caller enriches `WouldBeIncluded`/`ExclusionReason` after budget enforcement
+  - `TierLabel(tier int) string` — maps 0→"Config", 1→"Source", 2→"Secondary", 3→"Tests", 4→"Docs", 5→"CI/Lock", unknown→"Tier<n>"
+  - `tierDisplayLabel(tier int) string` — internal helper; returns "Source Code" for tier 1 to match spec example, `TierLabel` for all others
+  - `FormatExplain(result *ExplainResult) string` — human-readable terminal output with File, Tier, Matched Pattern, optional Budget Status (only when WouldBeIncluded set or ExclusionReason non-empty), and All matching patterns section including default fallback entry
+  - `GenerateInclusionSummary(result *tokenizer.BudgetResult) string` — per-tier table with file counts, token counts, exclusion annotations; budget Total line shown only when `BudgetUsed > 0 || len(ExcludedFiles) > 0`; column-aligned labels; comma-formatted integers
+  - `formatInt(n int) string` — internal helper for comma thousands separators (e.g. 1,234,567)
+  - 30+ table-driven unit tests covering all spec acceptance criteria
+- **Files created:**
+  - `internal/relevance/explain.go` — PatternMatch, ExplainResult, Explain, TierLabel, tierDisplayLabel, FormatExplain, GenerateInclusionSummary, formatInt
+  - `internal/relevance/explain_test.go` — comprehensive unit tests
+- **Key decisions:**
+  - `MatchedTierDef` uses the index within the sorted (internal) copy; sentinel value -1 indicates no match
+  - `AllMatches` is sorted by ascending tier then lexicographic pattern for fully deterministic output regardless of tier definition input order
+  - `formatInt` uses a simple string-slicing loop (no external dependency) to insert comma separators
+  - Budget line uses `BudgetUsed + BudgetRemaining` to recover the original `maxTokens` from the BudgetResult fields
+  - `FormatExplain` emits the default fallback entry in AllMatches when the file was unmatched (`IsDefault`) or had no pattern matches at all
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
 ---
