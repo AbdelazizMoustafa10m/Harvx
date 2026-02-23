@@ -1,0 +1,47 @@
+output = .harvx/finvault-context.md
+format = markdown
+max_tokens = 200000
+tokenizer = o200k_base
+compression = true
+redaction = false
+target = claude
+ignore =
+  - reports/
+  - .review-workspace/
+  - .harvx/
+  - .next/
+priority_files =
+  - CLAUDE.md
+  - prisma/schema.prisma
+  - .github/review/rules/finvault-patterns.md
+  - .github/review/rules/review-checklist.md
+include = []
+relevance.tier_0 =
+  - CLAUDE.md
+  - prisma/schema.prisma
+  - *.config.*
+relevance.tier_1 =
+  - app/api/**
+  - lib/services/**
+  - middleware.ts
+relevance.tier_2 =
+  - components/**
+  - hooks/**
+  - lib/**
+relevance.tier_3 =
+  - __tests__/**
+relevance.tier_4 =
+  - docs/**
+  - prompts/**
+relevance.tier_5 =
+  - .github/**
+  - *.lock
+redaction_config.enabled = true
+redaction_config.confidence_threshold = high
+redaction_config.exclude_paths =
+  - **/*test*/**
+  - **/fixtures/**
+  - docs/**/*.md
+chain =
+  - finvault
+  - default

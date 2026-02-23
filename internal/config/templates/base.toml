@@ -1,0 +1,50 @@
+# Harvx base profile template — minimal starter configuration.
+# Run `harvx profiles init` to use this template.
+# Customize each section to match your project layout.
+#
+# Project: {{project_name}}
+
+[profile.default]
+format     = "markdown"
+max_tokens = 128000
+tokenizer  = "cl100k_base"
+output     = "{{project_name}}-context.md"
+
+# Files always included first, regardless of tier assignment.
+# List exact file paths only — no glob patterns here.
+priority_files = [
+  "README.md",
+]
+
+# Glob patterns for paths to exclude from context generation.
+ignore = [
+  ".git/",
+  "node_modules/",
+  "dist/",
+  "coverage/",
+]
+
+[profile.default.relevance]
+# Tier 0 – highest priority: project configuration and entry points.
+tier_0 = [
+  "go.mod",
+  "go.sum",
+  "package.json",
+  "Cargo.toml",
+  "pyproject.toml",
+  "Makefile",
+]
+
+# Tier 1 – primary source code.
+tier_1 = [
+  "src/**/*.go",
+  "src/**/*.ts",
+  "src/**/*.py",
+  "src/**/*.rs",
+]
+
+# Tier 4 – documentation.
+tier_4 = [
+  "**/*.md",
+  "README*",
+]

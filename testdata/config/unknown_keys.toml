@@ -1,0 +1,13 @@
+# This file contains unknown keys to test forward-compatibility warnings.
+# The unknown keys should produce slog warnings but not cause an error.
+
+[profile.default]
+output = "harvx-output.md"
+format = "markdown"
+max_tokens = 128000
+future_feature = "some_value"
+experimental_flag = true
+
+[profile.default.relevance]
+tier_0 = ["go.mod", "Makefile"]
+undocumented_tier_6 = ["archive/**"]

@@ -1,0 +1,32 @@
+[profile.default]
+output = "harvx-output.md"
+format = "markdown"
+max_tokens = 128000
+tokenizer = "cl100k_base"
+compression = false
+redaction = true
+
+[profile.finvault]
+extends = "default"
+output = ".harvx/finvault-context.md"
+format = "xml"
+max_tokens = 200000
+tokenizer = "o200k_base"
+compression = true
+redaction = true
+target = "claude"
+ignore = ["node_modules", "dist", ".git", "coverage", "__pycache__", ".next", "target", "vendor", "*.test.ts", "*.spec.ts"]
+priority_files = ["src/core/engine.ts", "src/api/routes.ts", "README.md"]
+
+[profile.finvault.relevance]
+tier_0 = ["package.json", "tsconfig.json", "tsconfig.*.json", "*.config.*"]
+tier_1 = ["src/core/**", "src/api/**"]
+tier_2 = ["src/components/**", "src/hooks/**", "src/utils/**"]
+tier_3 = ["**/*.test.ts", "**/*.spec.ts", "**/__tests__/**"]
+tier_4 = ["**/*.md", "docs/**"]
+tier_5 = [".github/**", "**/*.lock"]
+
+[profile.finvault.redaction_config]
+enabled = true
+exclude_paths = ["testdata/**", "docs/**"]
+confidence_threshold = "high"

@@ -1,0 +1,4 @@
+# This file contains intentionally malformed TOML to exercise error handling.
+
+[profile.default
+output = "harvx-output.md"

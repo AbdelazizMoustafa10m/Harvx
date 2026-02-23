@@ -1,0 +1,11 @@
+# global.toml -- test fixture representing ~/.config/harvx/config.toml.
+
+[profile.default]
+format = "markdown"
+max_tokens = 100000
+tokenizer = "cl100k_base"
+output = "global-output.md"
+
+[profile.myprofile]
+format = "xml"
+max_tokens = 50000

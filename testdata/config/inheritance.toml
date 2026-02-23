@@ -1,0 +1,45 @@
+# inheritance.toml -- multi-level profile inheritance test fixture.
+# Used by TestResolveProfile_* tests in internal/config/profile_test.go.
+
+[profile.default]
+format = "markdown"
+max_tokens = 128000
+tokenizer = "cl100k_base"
+redaction = true
+
+[profile.base]
+extends = "default"
+max_tokens = 64000
+ignore = ["node_modules", "dist"]
+
+[profile.child]
+extends = "base"
+format = "xml"
+
+[profile.grandchild]
+extends = "child"
+output = "grandchild.md"
+
+[profile.deep]
+extends = "grandchild"
+tokenizer = "o200k_base"
+
+[profile.no_extends]
+format = "plain"
+max_tokens = 32000
+
+[profile.custom_tiers]
+extends = "default"
+format = "xml"
+
+[profile.custom_tiers.relevance]
+tier_0 = ["CLAUDE.md", "*.config.*"]
+tier_1 = ["app/**", "lib/**"]
+
+[profile.custom_redaction]
+extends = "default"
+
+[profile.custom_redaction.redaction_config]
+enabled = false
+exclude_paths = ["**/*test*/**"]
+confidence_threshold = "low"

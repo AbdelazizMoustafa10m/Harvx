@@ -1,0 +1,14 @@
+# circular.toml -- circular inheritance test fixture.
+# Used by TestResolveProfile_Circular* tests in internal/config/profile_test.go.
+
+[profile.a]
+extends = "b"
+format = "markdown"
+
+[profile.b]
+extends = "a"
+format = "xml"
+
+[profile.self-ref]
+extends = "self-ref"
+format = "plain"

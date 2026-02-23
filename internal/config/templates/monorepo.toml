@@ -1,0 +1,72 @@
+# Harvx profile template — Monorepo with multiple packages.
+# Run `harvx profiles init --template monorepo` to use this template.
+# Customize each section to match your workspace layout.
+#
+# Project: {{project_name}}
+
+[profile.default]
+format     = "markdown"
+max_tokens = 128000
+tokenizer  = "cl100k_base"
+output     = "{{project_name}}-context.md"
+
+# Exact file paths always included first, before tier-based sorting.
+# No glob patterns (*, ?, [, {) allowed here.
+priority_files = [
+  "package.json",
+  "pnpm-workspace.yaml",
+  "turbo.json",
+]
+
+# Glob patterns for paths to exclude from context generation.
+ignore = [
+  "node_modules/",
+  "dist/",
+  "build/",
+  ".turbo/",
+  ".nx/",
+]
+
+[profile.default.relevance]
+# Tier 0 – highest priority: workspace and monorepo tooling configuration.
+tier_0 = [
+  "package.json",
+  "pnpm-workspace.yaml",
+  "lerna.json",
+  "turbo.json",
+  "nx.json",
+]
+
+# Tier 1 – primary source: all package and app source files.
+tier_1 = [
+  "packages/*/src/**/*.ts",
+  "packages/*/src/**/*.tsx",
+  "apps/*/src/**/*.ts",
+  "apps/*/src/**/*.tsx",
+]
+
+# Tier 2 – secondary source: shared libraries and common utilities.
+tier_2 = [
+  "packages/*/lib/**/*.ts",
+  "shared/**/*.ts",
+  "common/**/*.ts",
+]
+
+# Tier 3 – tests across all packages and apps.
+tier_3 = [
+  "packages/*/**/*.test.ts",
+  "apps/*/**/*.test.ts",
+]
+
+# Tier 4 – documentation.
+tier_4 = [
+  "packages/**/README.md",
+  "**/*.md",
+]
+
+# Tier 5 – infrastructure: CI/CD workflows and build cache configs.
+tier_5 = [
+  ".github/**/*.yml",
+  ".github/**/*.yaml",
+  ".turbo/**/*.json",
+]

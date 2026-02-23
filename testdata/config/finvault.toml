@@ -1,0 +1,46 @@
+# finvault.toml -- PRD Section 5.2 example configuration.
+# Used by TestResolveProfile_FinvaultGolden in internal/config/profile_test.go.
+# Mirrors the exact profile.finvault block from the PRD, used as the
+# canonical golden test reference for profile inheritance resolution.
+
+[profile.default]
+output = "harvx-output.md"
+format = "markdown"
+max_tokens = 128000
+tokenizer = "cl100k_base"
+compression = false
+redaction = true
+ignore = ["node_modules", "dist", ".git", "coverage", "__pycache__"]
+
+[profile.finvault]
+extends = "default"
+output = ".harvx/finvault-context.md"
+max_tokens = 200000
+tokenizer = "o200k_base"
+compression = true
+target = "claude"
+priority_files = [
+  "CLAUDE.md",
+  "prisma/schema.prisma",
+  ".github/review/rules/finvault-patterns.md",
+  ".github/review/rules/review-checklist.md",
+]
+ignore = [
+  "reports/",
+  ".review-workspace/",
+  ".harvx/",
+  ".next/",
+]
+
+[profile.finvault.relevance]
+tier_0 = ["CLAUDE.md", "prisma/schema.prisma", "*.config.*"]
+tier_1 = ["app/api/**", "lib/services/**", "middleware.ts"]
+tier_2 = ["components/**", "hooks/**", "lib/**"]
+tier_3 = ["__tests__/**"]
+tier_4 = ["docs/**", "prompts/**"]
+tier_5 = [".github/**", "*.lock"]
+
+[profile.finvault.redaction_config]
+enabled = true
+exclude_paths = ["**/*test*/**", "**/fixtures/**", "docs/**/*.md"]
+confidence_threshold = "high"
