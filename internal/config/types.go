@@ -97,4 +97,39 @@ type RedactionConfig struct {
 	// ConfidenceThreshold controls which detected secrets are redacted.
 	// Valid values: "low", "medium", "high". Defaults to "high".
 	ConfidenceThreshold string `toml:"confidence_threshold"`
+
+	// OverrideSensitiveDefaults suppresses the warning that is emitted when
+	// a sensitive file (e.g., .env, *.pem) is explicitly included by the
+	// profile. Set to true only when you understand the risk (e.g., including
+	// .env.example with placeholder values). Default: false.
+	OverrideSensitiveDefaults bool `toml:"override_sensitive_defaults"`
+
+	// SensitivePatterns is an optional list of additional glob patterns to
+	// treat as sensitive, beyond the built-in defaults. Profiles can extend
+	// the default list but cannot silently remove from it.
+	SensitivePatterns []string `toml:"sensitive_patterns"`
+
+	// CustomPatterns is an optional list of project-specific redaction rules
+	// defined in the TOML config. These are compiled and added alongside built-in
+	// patterns when the redactor is instantiated.
+	CustomPatterns []CustomPatternDefinition `toml:"custom_patterns"`
+}
+
+// CustomPatternDefinition describes a user-defined redaction rule in TOML config.
+// It uses "regex" as the TOML key to match the spec, distinct from the
+// security.CustomPatternConfig which uses "pattern" internally.
+type CustomPatternDefinition struct {
+	// ID is a unique identifier for this custom rule.
+	ID string `toml:"id"`
+	// Description is a short human-readable explanation.
+	Description string `toml:"description"`
+	// Regex is a Go RE2-compatible regular expression. Validated at config load time.
+	Regex string `toml:"regex"`
+	// SecretType is the category label for the redaction marker.
+	SecretType string `toml:"secret_type"`
+	// Confidence is the certainty level: "high", "medium", or "low".
+	Confidence string `toml:"confidence"`
+	// Keywords is an optional list of strings that must appear in the same
+	// line for the pattern to trigger (case-insensitive pre-filter).
+	Keywords []string `toml:"keywords"`
 }

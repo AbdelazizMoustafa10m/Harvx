@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -32,6 +33,7 @@ type FlagValues struct {
 	LineNumbers     bool
 	NoRedact        bool
 	FailOnRedaction bool
+	RedactionReport string // path for --redaction-report; empty means flag not set
 	Verbose         bool
 	Quiet           bool
 	Yes             bool
@@ -66,6 +68,7 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 	pf.BoolVar(&fv.LineNumbers, "line-numbers", false, "add line numbers to code blocks")
 	pf.BoolVar(&fv.NoRedact, "no-redact", false, "disable secret redaction")
 	pf.BoolVar(&fv.FailOnRedaction, "fail-on-redaction", false, "exit 1 if secrets are detected")
+	pf.StringVar(&fv.RedactionReport, "redaction-report", "", "write redaction report to path (default: harvx-redaction-report.json when flag is set)")
 	pf.BoolVarP(&fv.Verbose, "verbose", "v", false, "enable debug logging")
 	pf.BoolVarP(&fv.Quiet, "quiet", "q", false, "suppress all output except errors")
 	pf.BoolVar(&fv.Yes, "yes", false, "skip confirmation prompts")
@@ -96,6 +99,12 @@ func ValidateFlags(fv *FlagValues, cmd *cobra.Command) error {
 	// Mutual exclusion: --verbose and --quiet
 	if fv.Verbose && fv.Quiet {
 		return fmt.Errorf("--verbose and --quiet are mutually exclusive")
+	}
+
+	// Mutual exclusion warning: --no-redact and --fail-on-redaction
+	// --no-redact takes precedence; warn the user.
+	if fv.NoRedact && fv.FailOnRedaction {
+		slog.Warn("--no-redact and --fail-on-redaction are both set; --no-redact takes precedence, redaction is disabled")
 	}
 
 	// Validate --dir exists and is a directory
@@ -182,6 +191,14 @@ func applyEnvOverrides(fv *FlagValues, cmd *cobra.Command) {
 	}
 	if os.Getenv("HARVX_QUIET") == "1" && !cmd.Flags().Changed("quiet") {
 		fv.Quiet = true
+	}
+	// HARVX_NO_REDACT=1 disables redaction (equivalent to --no-redact)
+	if os.Getenv("HARVX_NO_REDACT") == "1" && !cmd.Flags().Changed("no-redact") {
+		fv.NoRedact = true
+	}
+	// HARVX_FAIL_ON_REDACTION=1 enables CI enforcement mode
+	if os.Getenv("HARVX_FAIL_ON_REDACTION") == "1" && !cmd.Flags().Changed("fail-on-redaction") {
+		fv.FailOnRedaction = true
 	}
 }
 

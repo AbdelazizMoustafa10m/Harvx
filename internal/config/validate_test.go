@@ -1414,3 +1414,502 @@ func TestLintResult_EmbeddedValidationError(t *testing.T) {
 	assert.Equal(t, "unreachable-tier", lr.Code)
 	assert.NotEmpty(t, lr.Error())
 }
+
+// ── validateCustomPatterns ────────────────────────────────────────────────────
+
+// TestValidate_CustomPatterns_ValidPattern verifies that a well-formed custom
+// pattern definition produces no errors.
+func TestValidate_CustomPatterns_ValidPattern(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{
+							ID:         "my-token",
+							Description: "Internal company token",
+							Regex:      `MY_TOKEN_[A-Z0-9]{16}`,
+							SecretType: "my_company_token",
+							Confidence: "high",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	assert.Empty(t, cpErrs, "valid custom pattern must not produce errors")
+}
+
+// TestValidate_CustomPatterns_EmptyID verifies that a custom pattern with an
+// empty ID produces an error.
+func TestValidate_CustomPatterns_EmptyID(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{
+							ID:         "",
+							Regex:      `[A-Z]+`,
+							SecretType: "some_type",
+							Confidence: "high",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	require.NotEmpty(t, cpErrs)
+	assert.Contains(t, cpErrs[0].Message, "empty id")
+}
+
+// TestValidate_CustomPatterns_EmptyRegex verifies that a custom pattern with
+// an empty Regex produces an error.
+func TestValidate_CustomPatterns_EmptyRegex(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{
+							ID:         "my-rule",
+							Regex:      "",
+							SecretType: "some_type",
+							Confidence: "high",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	require.NotEmpty(t, cpErrs)
+	assert.Contains(t, cpErrs[0].Message, "empty regex")
+}
+
+// TestValidate_CustomPatterns_InvalidRegex verifies that a custom pattern with
+// an invalid Go RE2 regex produces an error.
+func TestValidate_CustomPatterns_InvalidRegex(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{
+							ID:         "bad-regex",
+							Regex:      `[invalid(`,
+							SecretType: "some_type",
+							Confidence: "high",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	require.NotEmpty(t, cpErrs)
+	assert.Contains(t, cpErrs[0].Message, "invalid regex")
+}
+
+// TestValidate_CustomPatterns_EmptySecretType verifies that a custom pattern
+// with an empty SecretType produces an error.
+func TestValidate_CustomPatterns_EmptySecretType(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{
+							ID:         "my-rule",
+							Regex:      `[A-Z]+`,
+							SecretType: "",
+							Confidence: "high",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	require.NotEmpty(t, cpErrs)
+	assert.Contains(t, cpErrs[0].Message, "empty secret_type")
+}
+
+// TestValidate_CustomPatterns_InvalidConfidence verifies that a custom pattern
+// with an invalid confidence level produces an error.
+func TestValidate_CustomPatterns_InvalidConfidence(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{
+							ID:         "my-rule",
+							Regex:      `[A-Z]+`,
+							SecretType: "my_type",
+							Confidence: "extreme",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	require.NotEmpty(t, cpErrs)
+	assert.Contains(t, cpErrs[0].Message, "invalid confidence")
+	assert.Contains(t, cpErrs[0].Message, "extreme")
+}
+
+// TestValidate_CustomPatterns_EmptyConfidenceAllowed verifies that an empty
+// Confidence value is valid (uses default).
+func TestValidate_CustomPatterns_EmptyConfidenceAllowed(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{
+							ID:         "my-rule",
+							Regex:      `[A-Z]+`,
+							SecretType: "my_type",
+							Confidence: "",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	assert.Empty(t, cpErrs, "empty confidence should be allowed")
+}
+
+// TestValidate_CustomPatterns_MultipleErrors verifies that multiple problems
+// across multiple custom patterns are all reported.
+func TestValidate_CustomPatterns_MultipleErrors(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						{ID: "", Regex: `[A-Z]+`, SecretType: "t", Confidence: "high"},
+						{ID: "ok-id", Regex: `[invalid(`, SecretType: "t", Confidence: "high"},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	assert.GreaterOrEqual(t, len(cpErrs), 2, "each invalid pattern should produce at least one error")
+}
+
+// ── validateCustomPatterns: additional edge cases ─────────────────────────────
+
+// TestValidate_CustomPatterns_TableDriven exercises all validation paths for
+// custom pattern definitions in a single table-driven test, covering the full
+// cross-product of field validity.
+func TestValidate_CustomPatterns_TableDriven(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		pattern   CustomPatternDefinition
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name: "valid full definition",
+			pattern: CustomPatternDefinition{
+				ID:         "full-rule",
+				Description: "A complete rule",
+				Regex:      `TOKEN_[A-Z0-9]{16}`,
+				SecretType: "company_token",
+				Confidence: "high",
+				Keywords:   []string{"TOKEN_"},
+			},
+			wantError: false,
+		},
+		{
+			name: "valid with empty confidence (uses default)",
+			pattern: CustomPatternDefinition{
+				ID:         "no-conf",
+				Regex:      `[A-Z]{8}`,
+				SecretType: "secret_type",
+				Confidence: "",
+			},
+			wantError: false,
+		},
+		{
+			name: "valid low confidence",
+			pattern: CustomPatternDefinition{
+				ID:         "low-conf-rule",
+				Regex:      `[A-Z]{4}`,
+				SecretType: "low_secret",
+				Confidence: "low",
+			},
+			wantError: false,
+		},
+		{
+			name: "valid medium confidence",
+			pattern: CustomPatternDefinition{
+				ID:         "med-conf-rule",
+				Regex:      `[A-Z]{8}`,
+				SecretType: "med_secret",
+				Confidence: "medium",
+			},
+			wantError: false,
+		},
+		{
+			name: "empty id is error",
+			pattern: CustomPatternDefinition{
+				ID:         "",
+				Regex:      `[A-Z]+`,
+				SecretType: "t",
+				Confidence: "high",
+			},
+			wantError: true,
+			errMsg:    "empty id",
+		},
+		{
+			name: "empty regex is error",
+			pattern: CustomPatternDefinition{
+				ID:         "no-regex",
+				Regex:      "",
+				SecretType: "t",
+				Confidence: "high",
+			},
+			wantError: true,
+			errMsg:    "empty regex",
+		},
+		{
+			name: "invalid regex is error",
+			pattern: CustomPatternDefinition{
+				ID:         "bad-re",
+				Regex:      `(?P<name>[`,
+				SecretType: "t",
+				Confidence: "high",
+			},
+			wantError: true,
+			errMsg:    "invalid regex",
+		},
+		{
+			name: "empty secret_type is error",
+			pattern: CustomPatternDefinition{
+				ID:         "no-type",
+				Regex:      `[A-Z]+`,
+				SecretType: "",
+				Confidence: "high",
+			},
+			wantError: true,
+			errMsg:    "empty secret_type",
+		},
+		{
+			name: "invalid confidence is error",
+			pattern: CustomPatternDefinition{
+				ID:         "bad-conf",
+				Regex:      `[A-Z]+`,
+				SecretType: "t",
+				Confidence: "critical",
+			},
+			wantError: true,
+			errMsg:    "invalid confidence",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &Config{
+				Profile: map[string]*Profile{
+					"p": {
+						RedactionConfig: RedactionConfig{
+							CustomPatterns: []CustomPatternDefinition{tt.pattern},
+						},
+					},
+				},
+			}
+
+			result := Validate(cfg)
+			errs := errorsWithSeverity(result, "error")
+			cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+
+			if tt.wantError {
+				require.NotEmpty(t, cpErrs, "expected a custom pattern error for case %q", tt.name)
+				assert.Contains(t, cpErrs[0].Message, tt.errMsg)
+			} else {
+				assert.Empty(t, cpErrs, "unexpected error for valid case %q", tt.name)
+			}
+		})
+	}
+}
+
+// TestValidate_ExcludePaths_ValidGlobs verifies that valid doublestar glob
+// patterns in redaction_config.exclude_paths do not produce errors.
+func TestValidate_ExcludePaths_ValidGlobs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		patterns []string
+	}{
+		{
+			name:     "doublestar wildcard patterns",
+			patterns: []string{"**/*test*/**", "**/fixtures/**", "docs/**/*.md"},
+		},
+		{
+			name:     "single-star patterns",
+			patterns: []string{"*.log", "tmp/*"},
+		},
+		{
+			name:     "exact directory names",
+			patterns: []string{"testdata", "fixtures"},
+		},
+		{
+			name:     "extension patterns",
+			patterns: []string{"**/*.pem", "**/*.key", "**/*.env"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &Config{
+				Profile: map[string]*Profile{
+					"p": {
+						RedactionConfig: RedactionConfig{
+							ExcludePaths: tt.patterns,
+						},
+					},
+				},
+			}
+
+			result := Validate(cfg)
+			errs := errorsWithSeverity(result, "error")
+			pathErrs := errorsWithField(errs, "profile.p.redaction_config.exclude_paths")
+			assert.Empty(t, pathErrs, "valid glob patterns must not produce errors")
+		})
+	}
+}
+
+// TestValidate_ExcludePaths_InvalidGlob verifies that a syntactically invalid
+// glob pattern in redaction_config.exclude_paths produces a hard error.
+func TestValidate_ExcludePaths_InvalidGlob(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					ExcludePaths: []string{"valid/**", "[invalid"},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	pathErrs := errorsWithField(errs, "profile.p.redaction_config.exclude_paths")
+	require.NotEmpty(t, pathErrs, "invalid glob in exclude_paths must produce a hard error")
+	assert.Contains(t, pathErrs[0].Message, "[invalid")
+	assert.Contains(t, pathErrs[0].Field, "[1]", "field must contain the index of the bad pattern")
+}
+
+// TestValidate_CustomPatterns_NoPatterns verifies that a profile with no
+// custom patterns does not produce any custom pattern errors.
+func TestValidate_CustomPatterns_NoPatterns(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					Enabled:             true,
+					ConfidenceThreshold: "medium",
+					ExcludePaths:        []string{"testdata/**"},
+					CustomPatterns:      nil, // no custom patterns
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	assert.Empty(t, cpErrs, "nil custom patterns must not produce errors")
+}
+
+// TestValidate_CustomPatterns_IndexInFieldPath verifies that when multiple
+// custom patterns are present, the field path includes the correct index of
+// the failing pattern.
+func TestValidate_CustomPatterns_IndexInFieldPath(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Profile: map[string]*Profile{
+			"p": {
+				RedactionConfig: RedactionConfig{
+					CustomPatterns: []CustomPatternDefinition{
+						// Index 0: valid
+						{ID: "valid-rule", Regex: `[A-Z]+`, SecretType: "valid", Confidence: "high"},
+						// Index 1: invalid regex
+						{ID: "bad-rule", Regex: `[invalid(`, SecretType: "t", Confidence: "high"},
+					},
+				},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	errs := errorsWithSeverity(result, "error")
+	cpErrs := errorsWithField(errs, "profile.p.redaction_config.custom_patterns")
+	require.NotEmpty(t, cpErrs)
+
+	// The failing pattern is at index 1.
+	assert.Contains(t, cpErrs[0].Field, "[1]",
+		"field path must include the index of the failing pattern")
+}

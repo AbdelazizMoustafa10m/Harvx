@@ -850,6 +850,242 @@ confidence_threshold = "low"
 	assert.Equal(t, "low", p.RedactionConfig.ConfidenceThreshold)
 }
 
+// TestLoadFromString_CustomPatterns_FullBlock verifies that a complete
+// [[profile.x.redaction_config.custom_patterns]] array of tables decodes
+// into the CustomPatterns slice with all fields populated.
+func TestLoadFromString_CustomPatterns_FullBlock(t *testing.T) {
+	t.Parallel()
+
+	const data = `
+[profile.myproject]
+output = "out.md"
+
+[profile.myproject.redaction_config]
+enabled = true
+exclude_paths = ["**/*test*/**", "**/fixtures/**", "docs/**/*.md"]
+confidence_threshold = "high"
+override_sensitive_defaults = false
+
+[[profile.myproject.redaction_config.custom_patterns]]
+id = "internal-api-key"
+description = "Internal API key format"
+regex = "MYCO_[A-Z0-9]{32}"
+secret_type = "internal_api_key"
+confidence = "high"
+keywords = ["MYCO_"]
+
+[[profile.myproject.redaction_config.custom_patterns]]
+id = "internal-db-token"
+description = "Internal database token"
+regex = "DB_TOKEN_[a-f0-9]{24}"
+secret_type = "internal_db_token"
+confidence = "medium"
+keywords = ["DB_TOKEN_", "db_token"]
+`
+
+	cfg, err := LoadFromString(data, "<test>")
+	require.NoError(t, err)
+
+	p := cfg.Profile["myproject"]
+	require.NotNil(t, p)
+
+	rc := p.RedactionConfig
+	assert.True(t, rc.Enabled, "enabled must be true")
+	assert.Equal(t, "high", rc.ConfidenceThreshold)
+	assert.Equal(t, []string{"**/*test*/**", "**/fixtures/**", "docs/**/*.md"}, rc.ExcludePaths)
+	assert.False(t, rc.OverrideSensitiveDefaults)
+
+	require.Len(t, rc.CustomPatterns, 2, "two custom patterns must decode")
+
+	first := rc.CustomPatterns[0]
+	assert.Equal(t, "internal-api-key", first.ID)
+	assert.Equal(t, "Internal API key format", first.Description)
+	assert.Equal(t, "MYCO_[A-Z0-9]{32}", first.Regex)
+	assert.Equal(t, "internal_api_key", first.SecretType)
+	assert.Equal(t, "high", first.Confidence)
+	assert.Equal(t, []string{"MYCO_"}, first.Keywords)
+
+	second := rc.CustomPatterns[1]
+	assert.Equal(t, "internal-db-token", second.ID)
+	assert.Equal(t, "medium", second.Confidence)
+	assert.Equal(t, []string{"DB_TOKEN_", "db_token"}, second.Keywords)
+}
+
+// TestLoadFromString_CustomPatterns_MinimalBlock verifies that a custom pattern
+// with only the mandatory fields (no keywords, no description) decodes without
+// error and optional fields take their zero values.
+func TestLoadFromString_CustomPatterns_MinimalBlock(t *testing.T) {
+	t.Parallel()
+
+	const data = `
+[profile.p]
+output = "out.md"
+
+[[profile.p.redaction_config.custom_patterns]]
+id = "bare-rule"
+regex = "[A-Z]{16}"
+secret_type = "bare_secret"
+confidence = "low"
+`
+
+	cfg, err := LoadFromString(data, "<test>")
+	require.NoError(t, err)
+
+	p := cfg.Profile["p"]
+	require.NotNil(t, p)
+
+	require.Len(t, p.RedactionConfig.CustomPatterns, 1)
+	cp := p.RedactionConfig.CustomPatterns[0]
+
+	assert.Equal(t, "bare-rule", cp.ID)
+	assert.Equal(t, "[A-Z]{16}", cp.Regex)
+	assert.Equal(t, "bare_secret", cp.SecretType)
+	assert.Equal(t, "low", cp.Confidence)
+	assert.Empty(t, cp.Description, "description should be empty (not set)")
+	assert.Nil(t, cp.Keywords, "keywords should be nil (not set)")
+}
+
+// TestLoadFromString_CustomPatterns_EmptyArray verifies that an empty
+// custom_patterns array decodes to a nil slice (no entries).
+func TestLoadFromString_CustomPatterns_EmptyArray(t *testing.T) {
+	t.Parallel()
+
+	const data = `
+[profile.p]
+output = "out.md"
+
+[profile.p.redaction_config]
+enabled = true
+confidence_threshold = "medium"
+`
+
+	cfg, err := LoadFromString(data, "<test>")
+	require.NoError(t, err)
+
+	p := cfg.Profile["p"]
+	require.NotNil(t, p)
+
+	assert.Nil(t, p.RedactionConfig.CustomPatterns,
+		"custom_patterns must be nil when no entries are defined")
+}
+
+// TestLoadFromString_CustomPatterns_NoRedactionBlock verifies that when there
+// is no [redaction_config] block at all, the CustomPatterns slice is nil and
+// all fields are zero values.
+func TestLoadFromString_CustomPatterns_NoRedactionBlock(t *testing.T) {
+	t.Parallel()
+
+	const data = `
+[profile.p]
+output = "out.md"
+format = "markdown"
+`
+
+	cfg, err := LoadFromString(data, "<test>")
+	require.NoError(t, err)
+
+	p := cfg.Profile["p"]
+	require.NotNil(t, p)
+
+	rc := p.RedactionConfig
+	assert.False(t, rc.Enabled, "Enabled must be false when section is absent")
+	assert.Empty(t, rc.ConfidenceThreshold)
+	assert.Nil(t, rc.ExcludePaths)
+	assert.Nil(t, rc.CustomPatterns)
+}
+
+// TestLoadFromString_CustomPatterns_ValidRegexCompiles verifies that the regex
+// field from a parsed custom pattern is a compilable Go RE2 expression.
+// This is a property test that bridges config parsing with the security layer.
+func TestLoadFromString_CustomPatterns_ValidRegexCompiles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		toml  string
+		regex string
+	}{
+		{
+			name:  "simple character class",
+			regex: `[A-Z]{16}`,
+			toml: `
+[profile.p]
+[[profile.p.redaction_config.custom_patterns]]
+id = "test-rule"
+regex = "[A-Z]{16}"
+secret_type = "test_secret"
+confidence = "high"
+`,
+		},
+		{
+			name:  "anchored pattern",
+			regex: `^MYCO_[A-Z0-9]{32}$`,
+			toml: `
+[profile.p]
+[[profile.p.redaction_config.custom_patterns]]
+id = "test-rule"
+regex = '^MYCO_[A-Z0-9]{32}$'
+secret_type = "test_secret"
+confidence = "high"
+`,
+		},
+		{
+			name:  "alternation",
+			regex: `(sk_live|sk_test)_[a-zA-Z0-9]{32}`,
+			toml: `
+[profile.p]
+[[profile.p.redaction_config.custom_patterns]]
+id = "test-rule"
+regex = '(sk_live|sk_test)_[a-zA-Z0-9]{32}'
+secret_type = "test_secret"
+confidence = "high"
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, err := LoadFromString(tt.toml, "<test>")
+			require.NoError(t, err)
+
+			p := cfg.Profile["p"]
+			require.NotNil(t, p)
+			require.Len(t, p.RedactionConfig.CustomPatterns, 1)
+			assert.Equal(t, tt.regex, p.RedactionConfig.CustomPatterns[0].Regex)
+		})
+	}
+}
+
+// TestLoadFromString_RedactionConfig_EnabledOnly verifies that a minimal
+// [redaction_config] block with only enabled = true decodes correctly with
+// other fields at their zero values.
+func TestLoadFromString_RedactionConfig_EnabledOnly(t *testing.T) {
+	t.Parallel()
+
+	const data = `
+[profile.p]
+output = "out.md"
+
+[profile.p.redaction_config]
+enabled = true
+`
+
+	cfg, err := LoadFromString(data, "<test>")
+	require.NoError(t, err)
+
+	p := cfg.Profile["p"]
+	require.NotNil(t, p)
+
+	rc := p.RedactionConfig
+	assert.True(t, rc.Enabled)
+	assert.Empty(t, rc.ConfidenceThreshold, "threshold must be empty when not set")
+	assert.Nil(t, rc.ExcludePaths, "exclude_paths must be nil when not set")
+	assert.Nil(t, rc.CustomPatterns, "custom_patterns must be nil when not set")
+}
+
 // containsAny returns true if s contains at least one of the given substrings.
 // It is used to verify that error messages include positional information which
 // may appear in different capitalizations depending on the TOML library version.
