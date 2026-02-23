@@ -1,0 +1,5 @@
+Token Heatmap (tokens per line):
+──────────────────────────────────
+  1. data/fixtures.json                                  142.3 tok/line  (780 lines, 111,000 tokens)
+  2. prisma/schema.prisma                                12.1 tok/line  (348 lines, 4,210 tokens)
+  3. package-lock.json                                   8.4 tok/line  (12,000 lines, 101,000 tokens)

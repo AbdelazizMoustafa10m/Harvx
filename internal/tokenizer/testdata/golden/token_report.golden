@@ -1,0 +1,11 @@
+Token Report (cl100k_base)
+────────────────────────────
+Total files:  5
+Total tokens: 11,010
+Budget:       200,000 (5% used)
+
+By Tier:
+  Tier 0 (Config): 1 files  4,210 tokens
+  Tier 1 (Source): 2 files  6,230 tokens
+  Tier 4 (Docs): 1 files  450 tokens
+  Tier 5 (CI/Lock): 1 files  120 tokens

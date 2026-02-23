@@ -36,6 +36,14 @@ type FlagValues struct {
 	Quiet           bool
 	Yes             bool
 	ClearCache      bool
+
+	// Token counting flags (T-033)
+	Tokenizer          string // Tokenizer encoding: cl100k_base, o200k_base, none
+	MaxTokens          int    // Token budget (0 = unlimited)
+	TruncationStrategy string // Budget overflow: truncate or skip
+	TokenCountOnly     bool   // Report token counts only, no output file generated
+	TopFiles           int    // Show N largest files by token count (0 = disabled)
+	Heatmap            bool   // Show token density heatmap (preview only)
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -62,6 +70,13 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 	pf.BoolVarP(&fv.Quiet, "quiet", "q", false, "suppress all output except errors")
 	pf.BoolVar(&fv.Yes, "yes", false, "skip confirmation prompts")
 	pf.BoolVar(&fv.ClearCache, "clear-cache", false, "clear cached state before running")
+
+	// Token reporting flags (T-033)
+	pf.StringVar(&fv.Tokenizer, "tokenizer", "cl100k_base", "Tokenizer encoding: cl100k_base, o200k_base, none")
+	pf.IntVar(&fv.MaxTokens, "max-tokens", 0, "Token budget (0 = unlimited)")
+	pf.StringVar(&fv.TruncationStrategy, "truncation-strategy", "skip", "Budget overflow: truncate or skip")
+	pf.BoolVar(&fv.TokenCountOnly, "token-count", false, "Report token counts only, no output file generated")
+	pf.IntVar(&fv.TopFiles, "top-files", 0, "Show N largest files by token count (0 = disabled)")
 
 	return fv
 }
@@ -114,6 +129,22 @@ func ValidateFlags(fv *FlagValues, cmd *cobra.Command) error {
 		return fmt.Errorf("--skip-large-files: %w", err)
 	}
 	fv.SkipLargeFiles = size
+
+	// Validate --tokenizer
+	switch fv.Tokenizer {
+	case "cl100k_base", "o200k_base", "none":
+		// valid
+	default:
+		return fmt.Errorf("--tokenizer: invalid value %q (allowed: cl100k_base, o200k_base, none)", fv.Tokenizer)
+	}
+
+	// Validate --truncation-strategy
+	switch fv.TruncationStrategy {
+	case "truncate", "skip":
+		// valid
+	default:
+		return fmt.Errorf("--truncation-strategy: invalid value %q (allowed: truncate, skip)", fv.TruncationStrategy)
+	}
 
 	// Normalize --filter: strip leading dots
 	for i, f := range fv.Filters {

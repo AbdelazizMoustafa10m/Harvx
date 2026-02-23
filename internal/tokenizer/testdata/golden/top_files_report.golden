@@ -1,0 +1,5 @@
+Top 3 Files by Token Count:
+─────────────────────────────
+  1. prisma/schema.prisma                                4,210 tokens  (Tier 0: Config)
+  2. lib/services/transaction.ts                         3,890 tokens  (Tier 1: Source)
+  3. app/api/transactions/route.ts                       2,340 tokens  (Tier 1: Source)

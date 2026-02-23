@@ -396,3 +396,137 @@ func TestSkipLargeFilesLowercase(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1*1024*1024), fv.SkipLargeFiles)
 }
+
+// --- T-033: Token counting flag tests ---
+
+func TestTokenizerDefault(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "cl100k_base", fv.Tokenizer)
+}
+
+func TestTokenizerValidValues(t *testing.T) {
+	tests := []string{"cl100k_base", "o200k_base", "none"}
+	for _, enc := range tests {
+		t.Run(enc, func(t *testing.T) {
+			cmd, fv := newTestCommand()
+			cmd.SetArgs([]string{"--tokenizer", enc})
+			require.NoError(t, cmd.Execute())
+
+			err := ValidateFlags(fv, cmd)
+			require.NoError(t, err)
+			assert.Equal(t, enc, fv.Tokenizer)
+		})
+	}
+}
+
+func TestTokenizerInvalidValue(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--tokenizer", "gpt2"})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--tokenizer")
+	assert.Contains(t, err.Error(), "gpt2")
+}
+
+func TestMaxTokensDefault(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fv.MaxTokens)
+}
+
+func TestMaxTokensExplicit(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--max-tokens", "200000"})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 200000, fv.MaxTokens)
+}
+
+func TestTruncationStrategyDefault(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "skip", fv.TruncationStrategy)
+}
+
+func TestTruncationStrategyValidValues(t *testing.T) {
+	tests := []string{"truncate", "skip"}
+	for _, s := range tests {
+		t.Run(s, func(t *testing.T) {
+			cmd, fv := newTestCommand()
+			cmd.SetArgs([]string{"--truncation-strategy", s})
+			require.NoError(t, cmd.Execute())
+
+			err := ValidateFlags(fv, cmd)
+			require.NoError(t, err)
+			assert.Equal(t, s, fv.TruncationStrategy)
+		})
+	}
+}
+
+func TestTruncationStrategyInvalidValue(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--truncation-strategy", "head"})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--truncation-strategy")
+	assert.Contains(t, err.Error(), "head")
+}
+
+func TestTokenCountOnlyDefault(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.False(t, fv.TokenCountOnly)
+}
+
+func TestTokenCountOnlyFlag(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--token-count"})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.True(t, fv.TokenCountOnly)
+}
+
+func TestTopFilesDefault(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fv.TopFiles)
+}
+
+func TestTopFilesExplicit(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--top-files", "20"})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 20, fv.TopFiles)
+}

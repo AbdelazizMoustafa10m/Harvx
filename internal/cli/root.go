@@ -53,6 +53,8 @@ func init() {
 	// These enable intelligent tab completion (e.g., --format <TAB>).
 	rootCmd.RegisterFlagCompletionFunc("format", completeFormat)
 	rootCmd.RegisterFlagCompletionFunc("target", completeTarget)
+	rootCmd.RegisterFlagCompletionFunc("tokenizer", completeTokenizer)
+	rootCmd.RegisterFlagCompletionFunc("truncation-strategy", completeTruncationStrategy)
 }
 
 // completeFormat returns the valid values for the --format flag.
@@ -63,6 +65,16 @@ func completeFormat(_ *cobra.Command, _ []string, _ string) ([]string, cobra.She
 // completeTarget returns the valid values for the --target flag.
 func completeTarget(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	return []string{"claude", "chatgpt", "generic"}, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeTokenizer returns the valid values for the --tokenizer flag.
+func completeTokenizer(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{"cl100k_base", "o200k_base", "none"}, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeTruncationStrategy returns the valid values for the --truncation-strategy flag.
+func completeTruncationStrategy(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{"truncate", "skip"}, cobra.ShellCompDirectiveNoFileComp
 }
 
 // Execute runs the root command and returns an appropriate exit code.
