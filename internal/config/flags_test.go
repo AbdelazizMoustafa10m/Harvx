@@ -530,3 +530,288 @@ func TestTopFilesExplicit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 20, fv.TopFiles)
 }
+
+// --- T-040: Redaction flags ---
+
+func TestRedactionReportFlagDefault(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "", fv.RedactionReport)
+}
+
+func TestRedactionReportFlagExplicit(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--redaction-report", "my-report.json"})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "my-report.json", fv.RedactionReport)
+}
+
+func TestEnvNoRedactOverride(t *testing.T) {
+	t.Setenv("HARVX_NO_REDACT", "1")
+
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.True(t, fv.NoRedact)
+}
+
+func TestEnvNoRedactNotOverriddenByExplicitFlag(t *testing.T) {
+	t.Setenv("HARVX_NO_REDACT", "1")
+
+	cmd, fv := newTestCommand()
+	// Explicit --no-redact=false should override env (flag wins because it was explicitly set).
+	// In this test, the explicit flag sets it to true which aligns with env so just test env works.
+	cmd.SetArgs([]string{"--no-redact"})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.True(t, fv.NoRedact)
+}
+
+func TestEnvFailOnRedactionOverride(t *testing.T) {
+	t.Setenv("HARVX_FAIL_ON_REDACTION", "1")
+
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.True(t, fv.FailOnRedaction)
+}
+
+func TestNoRedactAndFailOnRedactionBothSet_NoError(t *testing.T) {
+	// Both flags set should produce a warning (via slog), NOT an error.
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--no-redact", "--fail-on-redaction"})
+	require.NoError(t, cmd.Execute())
+
+	err := ValidateFlags(fv, cmd)
+	// No error expected -- only a slog warning
+	require.NoError(t, err)
+	assert.True(t, fv.NoRedact)
+	assert.True(t, fv.FailOnRedaction)
+}
+
+// --- T-040: additional coverage ---
+
+// TestRedactionFlags_TableDriven exercises all redaction-related boolean flags
+// and their defaults in a single table-driven test.
+func TestRedactionFlags_TableDriven(t *testing.T) {
+	tests := []struct {
+		name              string
+		args              []string
+		wantNoRedact      bool
+		wantFailOnRedact  bool
+		wantRedactReport  string
+	}{
+		{
+			name:             "defaults: all redaction flags off",
+			args:             []string{},
+			wantNoRedact:     false,
+			wantFailOnRedact: false,
+			wantRedactReport: "",
+		},
+		{
+			name:             "no-redact only",
+			args:             []string{"--no-redact"},
+			wantNoRedact:     true,
+			wantFailOnRedact: false,
+			wantRedactReport: "",
+		},
+		{
+			name:             "fail-on-redaction only",
+			args:             []string{"--fail-on-redaction"},
+			wantNoRedact:     false,
+			wantFailOnRedact: true,
+			wantRedactReport: "",
+		},
+		{
+			name:             "redaction-report with explicit path",
+			args:             []string{"--redaction-report", "report.json"},
+			wantNoRedact:     false,
+			wantFailOnRedact: false,
+			wantRedactReport: "report.json",
+		},
+		{
+			name:             "both no-redact and fail-on-redaction",
+			args:             []string{"--no-redact", "--fail-on-redaction"},
+			wantNoRedact:     true,
+			wantFailOnRedact: true,
+			wantRedactReport: "",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, fv := newTestCommand()
+			cmd.SetArgs(tt.args)
+			require.NoError(t, cmd.Execute())
+
+			skipLargeFilesRaw = "1MB"
+			err := ValidateFlags(fv, cmd)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantNoRedact, fv.NoRedact, "NoRedact mismatch")
+			assert.Equal(t, tt.wantFailOnRedact, fv.FailOnRedaction, "FailOnRedaction mismatch")
+			assert.Equal(t, tt.wantRedactReport, fv.RedactionReport, "RedactionReport mismatch")
+		})
+	}
+}
+
+// TestEnvNoRedactValues exercises different truthy and falsy values for
+// HARVX_NO_REDACT to verify that only "1" activates the flag.
+func TestEnvNoRedactValues(t *testing.T) {
+	tests := []struct {
+		envVal       string
+		wantNoRedact bool
+	}{
+		{envVal: "1", wantNoRedact: true},
+		{envVal: "0", wantNoRedact: false},
+		{envVal: "true", wantNoRedact: false}, // only "1" is accepted
+		{envVal: "yes", wantNoRedact: false},
+		{envVal: "", wantNoRedact: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run("HARVX_NO_REDACT="+tt.envVal, func(t *testing.T) {
+			t.Setenv("HARVX_NO_REDACT", tt.envVal)
+
+			cmd, fv := newTestCommand()
+			cmd.SetArgs([]string{})
+			require.NoError(t, cmd.Execute())
+
+			skipLargeFilesRaw = "1MB"
+			err := ValidateFlags(fv, cmd)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantNoRedact, fv.NoRedact,
+				"HARVX_NO_REDACT=%q: unexpected NoRedact value", tt.envVal)
+		})
+	}
+}
+
+// TestEnvFailOnRedactionValues exercises different truthy and falsy values for
+// HARVX_FAIL_ON_REDACTION.
+func TestEnvFailOnRedactionValues(t *testing.T) {
+	tests := []struct {
+		envVal          string
+		wantFailOnRedact bool
+	}{
+		{envVal: "1", wantFailOnRedact: true},
+		{envVal: "0", wantFailOnRedact: false},
+		{envVal: "true", wantFailOnRedact: false},
+		{envVal: "", wantFailOnRedact: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run("HARVX_FAIL_ON_REDACTION="+tt.envVal, func(t *testing.T) {
+			t.Setenv("HARVX_FAIL_ON_REDACTION", tt.envVal)
+
+			cmd, fv := newTestCommand()
+			cmd.SetArgs([]string{})
+			require.NoError(t, cmd.Execute())
+
+			skipLargeFilesRaw = "1MB"
+			err := ValidateFlags(fv, cmd)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantFailOnRedact, fv.FailOnRedaction,
+				"HARVX_FAIL_ON_REDACTION=%q: unexpected FailOnRedaction value", tt.envVal)
+		})
+	}
+}
+
+// TestExplicitFlagOverridesEnvForNoRedact verifies that an explicit --no-redact
+// CLI flag takes precedence over the HARVX_NO_REDACT env var. When the explicit
+// flag is set (to true), the env var value is irrelevant; the flag wins.
+func TestExplicitFlagOverridesEnvForNoRedact(t *testing.T) {
+	// Set env to "0" (falsy) and also pass --no-redact explicitly.
+	// The explicit flag should win and NoRedact should be true.
+	t.Setenv("HARVX_NO_REDACT", "0")
+
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--no-redact"})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.True(t, fv.NoRedact,
+		"explicit --no-redact must win regardless of HARVX_NO_REDACT env value")
+}
+
+// TestRedactionReportFlagWithCustomPath exercises the --redaction-report flag
+// with several custom path values.
+func TestRedactionReportFlagWithCustomPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		reportPath string
+	}{
+		{name: "simple filename", reportPath: "my-report.json"},
+		{name: "relative subdirectory", reportPath: "reports/redact.json"},
+		{name: "txt extension", reportPath: "out/redact.txt"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, fv := newTestCommand()
+			cmd.SetArgs([]string{"--redaction-report", tt.reportPath})
+			require.NoError(t, cmd.Execute())
+
+			skipLargeFilesRaw = "1MB"
+			err := ValidateFlags(fv, cmd)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.reportPath, fv.RedactionReport)
+		})
+	}
+}
+
+// TestNoRedactFlag_DefaultIsFalse verifies that --no-redact defaults to false,
+// meaning redaction is enabled by default.
+func TestNoRedactFlag_DefaultIsFalse(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+
+	assert.False(t, fv.NoRedact,
+		"redaction must be enabled by default (NoRedact=false)")
+}
+
+// TestFailOnRedactionFlag_DefaultIsFalse verifies that --fail-on-redaction
+// defaults to false (CI enforcement mode is opt-in).
+func TestFailOnRedactionFlag_DefaultIsFalse(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+
+	assert.False(t, fv.FailOnRedaction,
+		"--fail-on-redaction must default to false (CI mode is opt-in)")
+}

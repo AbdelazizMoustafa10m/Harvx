@@ -43,6 +43,11 @@ type WalkerConfig struct {
 	// Concurrency is the maximum number of parallel file-reading workers.
 	// Defaults to runtime.NumCPU() if <= 0.
 	Concurrency int
+
+	// SuppressSensitiveWarnings disables the slog.Warn emitted when a file
+	// matching a sensitive pattern is discovered. Set when
+	// RedactionConfig.OverrideSensitiveDefaults = true.
+	SuppressSensitiveWarnings bool
 }
 
 // Walker is the core file discovery engine that traverses a directory tree,
@@ -282,6 +287,14 @@ func (w *Walker) Walk(ctx context.Context, cfg WalkerConfig) (*pipeline.Discover
 				mu.Unlock()
 				return nil
 			}
+		}
+
+		// Sensitive file warning: emit slog.Warn if a sensitive file makes it
+		// past the default exclusions (e.g., due to a profile override).
+		if IsSensitivePath(relPath) && !cfg.SuppressSensitiveWarnings {
+			w.logger.Warn("sensitive file included by profile override",
+				"path", relPath,
+			)
 		}
 
 		fd := &pipeline.FileDescriptor{

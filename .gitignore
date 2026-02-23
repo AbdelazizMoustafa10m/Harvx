@@ -45,3 +45,19 @@ scripts/logs/*.log
 .env.*
 *.pem
 *.key
+
+# ─── Generated Test Fixtures ─────────────────────────
+# These files are regenerated at test time by
+# internal/security/golden_test.go writeFixtures().
+# They contain synthetic credentials that trigger
+# GitHub Push Protection if committed.
+testdata/secrets/stripe_keys.txt
+testdata/secrets/github_tokens.txt
+testdata/secrets/config.env
+testdata/secrets/generic_assignments.txt
+testdata/secrets/mixed_file.go
+testdata/secrets/mixed_file.ts
+testdata/secrets/mixed_file.py
+testdata/secrets/docker-compose.yml
+testdata/secrets/false_positives.txt
+testdata/secrets/test_fixtures/sample_test.go

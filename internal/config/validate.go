@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -207,6 +208,9 @@ func validateProfile(name string, p *Profile, allProfiles map[string]*Profile) [
 
 	// redaction_config.exclude_paths overlapping with ignore (redundant).
 	results = append(results, warnRedactionExcludeOverlap(name, p)...)
+
+	// Validate custom pattern regexes
+	results = append(results, validateCustomPatterns(name, p)...)
 
 	// Inheritance depth > 3.
 	results = append(results, warnDeepInheritance(name, p, allProfiles)...)
@@ -462,6 +466,61 @@ func warnDeepInheritance(profileName string, p *Profile, allProfiles map[string]
 			Suggest: "Flatten the inheritance chain to 3 levels or fewer for maintainability",
 		},
 	}
+}
+
+// validateCustomPatterns checks that each custom_patterns entry has a valid
+// Go RE2 regex and non-empty required fields.
+func validateCustomPatterns(profileName string, p *Profile) []ValidationError {
+	var results []ValidationError
+	for i, cp := range p.RedactionConfig.CustomPatterns {
+		field := fmt.Sprintf("profile.%s.redaction_config.custom_patterns[%d]", profileName, i)
+		if cp.ID == "" {
+			results = append(results, ValidationError{
+				Severity: "error",
+				Field:    field,
+				Message:  "custom pattern has empty id",
+				Suggest:  "Provide a unique non-empty id for each custom pattern",
+			})
+		}
+		if cp.Regex == "" {
+			results = append(results, ValidationError{
+				Severity: "error",
+				Field:    field,
+				Message:  fmt.Sprintf("custom pattern %q has empty regex", cp.ID),
+				Suggest:  "Provide a valid Go RE2 regular expression",
+			})
+			continue
+		}
+		if _, err := regexp.Compile(cp.Regex); err != nil {
+			results = append(results, ValidationError{
+				Severity: "error",
+				Field:    field,
+				Message:  fmt.Sprintf("custom pattern %q has invalid regex %q: %s", cp.ID, cp.Regex, err.Error()),
+				Suggest:  "Use a valid Go RE2 regular expression (no lookaheads or backreferences)",
+			})
+		}
+		if cp.SecretType == "" {
+			results = append(results, ValidationError{
+				Severity: "error",
+				Field:    field,
+				Message:  fmt.Sprintf("custom pattern %q has empty secret_type", cp.ID),
+				Suggest:  "Provide a secret_type label, e.g. \"internal_api_key\"",
+			})
+		}
+		// Validate confidence value
+		switch cp.Confidence {
+		case "high", "medium", "low", "":
+			// valid
+		default:
+			results = append(results, ValidationError{
+				Severity: "error",
+				Field:    field,
+				Message:  fmt.Sprintf("custom pattern %q has invalid confidence %q", cp.ID, cp.Confidence),
+				Suggest:  "Valid values: high, medium, low",
+			})
+		}
+	}
+	return results
 }
 
 // Lint runs all Validate checks and additionally performs deeper static

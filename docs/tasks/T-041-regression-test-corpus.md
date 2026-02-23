@@ -64,8 +64,8 @@ As a developer maintaining Harvx, I want a curated regression test corpus that c
 
 - **Synthetic secrets**: ALL secrets in the corpus must be clearly synthetic. Use patterns like:
   - AWS: `AKIAIOSFODNN7EXAMPLE`, `AKIAI44QH8DHBEXAMPLE`
-  - GitHub: `ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12`
-  - Stripe: `sk_test_FAKE00000000000000000000000`
+  - GitHub: `ghp_` + `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12` (assembled at runtime via `join()`)
+  - Stripe: `sk_test_` + `FAKE0000000000000000000000` (assembled at runtime via `join()`)
   - Private keys: Generate using `openssl genrsa 512` (small, insecure key that is obviously not real)
   - Connection strings: `postgres://testuser:testpass123@localhost:5432/testdb`
   - JWTs: Encode test payloads with a known key, clearly labeled as test tokens

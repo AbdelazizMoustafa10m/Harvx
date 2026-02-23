@@ -35,6 +35,18 @@ func TestDefaultIgnorePatterns_ContainsExpected(t *testing.T) {
 		"*secret*",
 		"*credential*",
 		"*password*",
+		// New patterns added in T-038
+		"*.jks",
+		"*.keystore",
+		"id_rsa",
+		"id_dsa",
+		"id_ecdsa",
+		"id_ed25519",
+		".htpasswd",
+		".netrc",
+		".npmrc",
+		"*.gpg",
+		"*.asc",
 		"package-lock.json",
 		"yarn.lock",
 		"pnpm-lock.yaml",
@@ -350,6 +362,40 @@ func TestDefaultIgnoreMatcher_NormalFilesNotIgnored(t *testing.T) {
 			t.Parallel()
 			assert.False(t, m.IsIgnored(path, false),
 				"normal file %q should not be ignored", path)
+		})
+	}
+}
+
+func TestDefaultIgnoreMatcher_SSHAndAuthFiles(t *testing.T) {
+	t.Parallel()
+
+	m := NewDefaultIgnoreMatcher()
+
+	tests := []struct {
+		name   string
+		path   string
+		expect bool
+	}{
+		{name: "id_rsa", path: "id_rsa", expect: true},
+		{name: "id_dsa", path: "id_dsa", expect: true},
+		{name: "id_ecdsa", path: "id_ecdsa", expect: true},
+		{name: "id_ed25519", path: "id_ed25519", expect: true},
+		{name: "nested id_rsa", path: ".ssh/id_rsa", expect: true},
+		{name: ".htpasswd", path: ".htpasswd", expect: true},
+		{name: ".netrc", path: ".netrc", expect: true},
+		{name: ".npmrc", path: ".npmrc", expect: true},
+		{name: "nested .htpasswd", path: "config/.htpasswd", expect: true},
+		{name: "jks file", path: "keystore.jks", expect: true},
+		{name: "keystore file", path: "app.keystore", expect: true},
+		{name: "gpg file", path: "signing.gpg", expect: true},
+		{name: "asc file", path: "key.asc", expect: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := m.IsIgnored(tt.path, false)
+			assert.Equal(t, tt.expect, got, "IsIgnored(%q, false)", tt.path)
 		})
 	}
 }

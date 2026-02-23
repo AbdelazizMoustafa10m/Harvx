@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 35 |
+| Completed | 44 |
 | In Progress | 0 |
-| Not Started | 61 |
+| Not Started | 51 |
 
 ---
 
@@ -284,6 +284,67 @@
 | `harvx preview` subcommand with `--heatmap` flag | `internal/cli/preview.go` |
 | 5 new persistent flags; `--tokenizer`/`--truncation-strategy` validation | `internal/config/flags.go` |
 | Shell completion for `--tokenizer` and `--truncation-strategy` | `internal/cli/root.go`, `internal/cli/generate.go` |
+
+#### Verification
+
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+
+---
+
+### Phase 4: Security (T-034 to T-041)
+
+- **Status:** Completed
+- **Date:** 2026-02-23
+- **Tasks Completed:** 8 tasks
+
+#### Features Implemented
+
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Redaction type system | T-034 | `Confidence`, `RedactionMatch`, `RedactionSummary`, `RedactionConfig`, `RedactionRule`, `Redactor` interface, `PatternRegistry` |
+| Built-in detection patterns | T-035 | 19 gitleaks-inspired rules in 3 confidence tiers (6 high, 9 medium, 4 low); structural validators `ValidateJWT`, `ValidateAWSKeyID` |
+| Shannon entropy analyzer | T-036 | `EntropyAnalyzer` with per-charset thresholds, `Calculate`, `DetectCharset`, `AnalyzeToken` with suspicious-context boosting |
+| Streaming redaction pipeline | T-037 | `StreamRedactor` with keyword pre-filter, entropy gating, multi-line PEM state machine, right-to-left replacement, context cancellation |
+| Sensitive file handling | T-038 | 29-pattern `sensitiveFilePatterns`, `SensitiveFilePatterns()`, `WarnIfSensitiveFile()`; extended `DefaultIgnorePatterns` and `SensitivePatterns` in discovery; walker warning integration |
+| Redaction reporting | T-039 | `ReportGenerator` with `BuildReport`, `GenerateJSON`, `GenerateText`, `WriteReport` (extension-based format), `FormatInlineSummary`; 18-entry `secretTypeLabels` |
+| CLI flags and pipeline wiring | T-040 | `--redaction-report` flag, `HARVX_NO_REDACT`/`HARVX_FAIL_ON_REDACTION` env overrides, `CustomPatternDefinition`, `CompileCustomPattern`, full pipeline redaction integration |
+| Regression corpus and fuzz tests | T-041 | 15 fixture files covering all 19 rules, 15 `.expected` JSON files, `TestGoldenCorpus`, `TestFalsePositiveRate`, `TestAllPatternsExercised`, 3 fuzz targets |
+
+#### Key Technical Decisions
+
+1. **RE2-only regex** -- no lookaheads or lookbehinds; O(n) matching guaranteed for untrusted content
+2. **Capture group 1 convention** -- all 19 built-in patterns use CG1 for secret value extraction, enabling uniform redactor logic
+3. **Right-to-left replacement** -- byte offsets are preserved when multiple matches appear on the same line
+4. **`ByConfidence` as `map[string]int`** -- clean JSON serialization with predictable string keys without custom marshaling
+5. **`SensitivePatterns ⊆ DefaultIgnorePatterns` invariant** -- enforced by `TestSensitivePatterns_SubsetOfDefaults`; avoids divergence between the two lists
+6. **`ConfidenceMedium` as default pipeline threshold** -- safe default that avoids low-confidence noise without discarding real secrets
+7. **Golden corpus checks presence, not exclusivity** -- `TestGoldenCorpus` asserts expected matches are found but allows extra entropy-triggered matches, preventing test brittleness
+
+#### Key Files Reference
+
+| Purpose | Location |
+| ------- | -------- |
+| Core types: Confidence, RedactionMatch, RedactionSummary, RedactionConfig | `internal/security/types.go` |
+| RedactionRule struct, NewRedactionRule constructor, FormatReplacement | `internal/security/rule.go` |
+| Redactor interface + StreamRedactor implementation | `internal/security/redactor.go` |
+| PatternRegistry, NewDefaultRegistry, NewEmptyRegistry | `internal/security/registry.go` |
+| 19 built-in rules, registerBuiltinPatterns | `internal/security/patterns.go` |
+| ValidateJWT, ValidateAWSKeyID structural validators | `internal/security/validate.go` |
+| EntropyAnalyzer, Calculate, DetectCharset, AnalyzeToken | `internal/security/entropy.go` |
+| IsSensitiveFile, SensitiveFilePatterns, WarnIfSensitiveFile | `internal/security/sensitive.go` |
+| Report, ReportGenerator, BuildReport, GenerateJSON/Text, FormatInlineSummary | `internal/security/report.go` |
+| CompileCustomPattern (config-to-security bridge) | `internal/security/custom.go` |
+| CustomPatternDefinition struct, RedactionConfig fields | `internal/config/types.go` |
+| --redaction-report flag, env var overrides | `internal/config/flags.go` |
+| validateCustomPatterns | `internal/config/validate.go` |
+| Extended DefaultIgnorePatterns and SensitivePatterns | `internal/discovery/defaults.go` |
+| SuppressSensitiveWarnings field, sensitive-file warning in Walk | `internal/discovery/walker.go` |
+| buildRedactionConfig, printRedactionSummary, maybeWriteReport | `internal/pipeline/pipeline.go` |
+| 15 secret fixture files + 15 .expected JSON files | `testdata/secrets/` |
+| TestGoldenCorpus, TestFalsePositiveRate, TestAllPatternsExercised | `internal/security/golden_test.go` |
+| FuzzRedactRandomContent, FuzzRedactEnvFile, FuzzEntropyAnalyzer | `internal/security/fuzz_test.go` |
 
 #### Verification
 

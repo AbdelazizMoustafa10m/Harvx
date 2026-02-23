@@ -37,11 +37,28 @@ var DefaultIgnorePatterns = []string{
 	"*.key",
 	"*.p12",
 	"*.pfx",
+	"*.jks",
+	"*.keystore",
 
 	// Sensitive naming patterns (PRD 7.3)
 	"*secret*",
 	"*credential*",
 	"*password*",
+
+	// SSH private keys
+	"id_rsa",
+	"id_dsa",
+	"id_ecdsa",
+	"id_ed25519",
+
+	// Auth configuration files
+	".htpasswd",
+	".netrc",
+	".npmrc",
+
+	// Encrypted/signed files
+	"*.gpg",
+	"*.asc",
 
 	// Lock files
 	"package-lock.json",
@@ -89,11 +106,28 @@ var SensitivePatterns = []string{
 	"*.key",
 	"*.p12",
 	"*.pfx",
+	"*.jks",
+	"*.keystore",
 
 	// Sensitive naming patterns
 	"*secret*",
 	"*credential*",
 	"*password*",
+
+	// SSH private keys
+	"id_rsa",
+	"id_dsa",
+	"id_ecdsa",
+	"id_ed25519",
+
+	// Auth configuration files
+	".htpasswd",
+	".netrc",
+	".npmrc",
+
+	// Encrypted/signed files
+	"*.gpg",
+	"*.asc",
 }
 
 // DefaultIgnoreMatcher compiles the DefaultIgnorePatterns into a matcher that
