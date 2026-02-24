@@ -241,33 +241,11 @@ func formatMetadata(node *TreeNode, opts TreeRenderOpts) string {
 	var parts []string
 
 	if opts.ShowSize {
-		parts = append(parts, humanizeSize(node.Size))
+		parts = append(parts, formatBytes(node.Size))
 	}
 	if opts.ShowTokens {
 		parts = append(parts, fmt.Sprintf("%d tokens", node.TokenCount))
 	}
 
 	return " (" + strings.Join(parts, ", ") + ")"
-}
-
-// humanizeSize formats a byte count into a human-readable string with
-// appropriate units (B, KB, MB, GB). Values 1 KB and above use one decimal
-// place.
-func humanizeSize(bytes int64) string {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-	)
-
-	switch {
-	case bytes >= gb:
-		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(gb))
-	case bytes >= mb:
-		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(mb))
-	case bytes >= kb:
-		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kb))
-	default:
-		return fmt.Sprintf("%d B", bytes)
-	}
 }
