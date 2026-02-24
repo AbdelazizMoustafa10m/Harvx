@@ -354,242 +354,82 @@
 
 ---
 
-### T-042: Wazero WASM Runtime Setup and Grammar Embedding
+### Phase 5: Compression (T-042 to T-050)
 
 - **Status:** Completed
 - **Date:** 2026-02-24
-- **What was built:**
-  - `GrammarRegistry` with wazero runtime initialization, lazy WASM module compilation, double-checked locking cache, concurrent access safety
-  - Grammar embedding package (`grammars/embed.go`) with `//go:embed *.wasm` for 8 tree-sitter languages (TypeScript, JavaScript, Go, Python, Rust, Java, C, C++)
-  - Grammar WASM files from Sourcegraph `tree-sitter-wasms` npm v0.1.13 (~10.4 MB total)
-  - `SupportedLanguages()`, `HasLanguage()`, `Close()`, `Runtime()` methods on registry
-  - `ErrUnknownLanguage` sentinel error with `errors.Is` support
-  - Fetch script (`scripts/fetch-grammars.sh`) with unpkg.com primary CDN and jsDelivr fallback
-  - 13 unit tests: language loading, caching, unknown language errors, concurrent access, context cancellation, resource cleanup
-  - 3 benchmarks: cold start per-grammar, warm cache retrieval, all-grammars compilation
-- **Files created/modified:**
-  - `grammars/embed.go` -- Grammar embedding package with `embed.FS` and `GrammarFiles` map
-  - `grammars/README.md` -- Grammar documentation with sizes, sources, license info
-  - `grammars/tree-sitter-{typescript,javascript,go,python,rust,java,c,cpp}.wasm` -- Embedded WASM grammar files
-  - `internal/compression/wasm.go` -- `GrammarRegistry` with lazy compilation, double-checked locking, `slog` logging
-  - `internal/compression/wasm_test.go` -- 13 unit tests including concurrent access and context cancellation
-  - `internal/compression/wasm_bench_test.go` -- 3 benchmarks (cold start, warm cache, all grammars)
-  - `scripts/fetch-grammars.sh` -- Grammar download script with CDN fallback
-  - `go.mod` / `go.sum` -- Added `github.com/tetratelabs/wazero v1.11.0`
-  - `.gitignore` -- Added `!grammars/*.wasm` negation
-- **Key decisions:**
-  - **Direct wazero over malivvan/tree-sitter** -- malivvan only supports C/C++, is pre-release (v0.0.1, 2 stars); direct wazero v1.11.0 is stable and gives full control
-  - **`CompiledModule` (not `api.Module`)** -- Registry compiles and caches WASM; instantiation with host functions deferred to T-043+ parser layer
-  - **`grammars/` package at module root** -- Go `//go:embed` forbids `..` paths; separate package cleanly exports embedded FS
-  - **Double-checked locking** -- RLock fast path for cache hits, Lock only for compilation, re-check after write lock acquisition
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- **Tasks Completed:** 9 tasks
 
-### T-043: Language Detection and LanguageCompressor Interface
+#### Features Implemented
 
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `LanguageCompressor` interface with `Compress`, `Language`, `SupportedNodeTypes` methods
-  - `SignatureKind` enum (9 kinds: function, class, struct, interface, type, import, export, constant, doc_comment) with `String()` method
-  - `Signature` struct capturing extracted code elements with source-order line numbers
-  - `CompressedOutput` struct with `Render()` (joins signatures with blank-line separators) and `CompressionRatio()` methods
-  - `LanguageDetector` mapping 24 file extensions to 12 language identifiers across Tier 1 (typescript, javascript, go, python, rust) and Tier 2 (java, c, cpp, json, yaml, toml)
-  - `CompressorRegistry` with `Register`, `Get`, `GetByLanguage`, `IsSupported`, `Languages` methods
-  - 21 detector tests: all extensions, unknown extensions, case sensitivity, ambiguous `.h`, nested paths, defensive copy, count
-  - 14 registry/types tests: registry CRUD, replacement, multi-compressor dispatch, `SignatureKind.String()`, `Render()`, `CompressionRatio()`, source ordering
-- **Files created/modified:**
-  - `internal/compression/types.go` -- `SignatureKind`, `Signature`, `CompressedOutput` types with `Render()` and `CompressionRatio()` methods
-  - `internal/compression/interface.go` -- `LanguageCompressor` interface definition
-  - `internal/compression/detector.go` -- `LanguageDetector` with 24 extension-to-language mappings and `SupportedExtensions()` copy method
-  - `internal/compression/registry.go` -- `CompressorRegistry` with register/lookup/dispatch by file path or language
-  - `internal/compression/detector_test.go` -- 7 test functions with 65+ subtests for language detection
-  - `internal/compression/registry_test.go` -- 14 test functions covering registry operations and type behavior
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| WASM Runtime & Grammar Embedding | T-042 | `GrammarRegistry` with wazero v1.11.0, lazy `CompiledModule` compilation, double-checked locking, 8 embedded tree-sitter WASM grammars (~10.4 MB) |
+| Language Detection & Compressor Interface | T-043 | `LanguageDetector` (24 extensions → 12 languages), `LanguageCompressor` interface, `SignatureKind` enum (9 kinds), `Signature`/`CompressedOutput` types, `CompressorRegistry` |
+| Tier 1 AST Compressors: TypeScript & JavaScript | T-044 | `TypeScriptCompressor` and `JavaScriptCompressor` via shared `jsParser` state machine; extracts functions, classes, interfaces, type aliases, enums, imports, exports, decorators |
+| Tier 1 AST Compressor: Go | T-045 | `GoCompressor` with 8-state parser; extracts package/import blocks, func/method signatures, structs with tags, interfaces, type/const/var blocks, generics, doc comments |
+| Tier 1 AST Compressors: Python & Rust | T-046 | `PythonCompressor` (indentation-based, 9 states) and `RustCompressor` (brace-tracking, 9 states); extracts all structural declarations with doc comment/attribute/decorator attachment |
+| Tier 2 AST Compressors: Java, C, C++ | T-047 | `JavaCompressor` (7 states), `CCompressor` (6 states), `CppCompressor` (8 states extending C); shared `c_base.go` helpers; full declaration extraction excluding bodies |
+| Config Compressors & Fallback | T-048 | `JSONCompressor` (depth-2 skeleton, array collapsing), `YAMLCompressor` (line-based, depth ≤ 2 preservation), `TOMLCompressor` (section/comment preservation); `FallbackCompressor` passthrough with `IsFallback()` |
+| Compression Orchestrator & Pipeline Integration | T-049 | `Orchestrator` with parallel execution (`errgroup.SetLimit`), per-file timeout, `CompressionStats` (atomic counters), `CompressedMarker`, `ProgressFunc` callback; `--compress`/`--compress-timeout` CLI flags |
+| Regex Fallback Engine & E2E Tests | T-050 | `RegexCompressor` with per-language patterns for 8 languages; `CompressEngine` type (`ast`/`regex`/`auto`); auto engine tries AST first, falls back to regex; `--compress-engine` CLI flag; E2E + faithfulness test suites |
 
-### T-044: Tier 1 Compressor -- TypeScript and JavaScript
+#### Key Technical Decisions
 
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `TypeScriptCompressor` and `JavaScriptCompressor` implementing `LanguageCompressor` interface
-  - Shared `jsParser` line-by-line state machine parser extracting structural signatures (functions, classes, interfaces, type aliases, enums, imports, exports, constants, doc comments, decorators)
-  - TypeScript-specific extraction: interfaces, type aliases, enums, type annotations
-  - JavaScript extraction: functions, classes, arrow functions, imports, exports, constants, doc comments
-  - Brace depth tracking with string-awareness (ignores braces in quotes/backticks)
-  - Doc comment and decorator attachment to following declarations
-  - Class body member extraction (field declarations + method signatures, no bodies)
-  - 10 TypeScript fixture files + 10 expected outputs for golden tests
-  - 5 JavaScript fixture files + 4 expected outputs for golden tests
-  - 9 TypeScript golden tests + 20+ unit tests + 2 benchmarks
-  - 4 JavaScript golden tests + 14+ unit tests + 1 benchmark
-- **Files created/modified:**
-  - `internal/compression/js_base.go` -- Shared JS/TS parsing engine with state machine, detection helpers, extraction helpers, brace counting
-  - `internal/compression/typescript.go` -- `TypeScriptCompressor` with full TS extraction (interfaces, types, enums, type annotations)
-  - `internal/compression/javascript.go` -- `JavaScriptCompressor` with JS-only extraction (no TS-specific features)
-  - `internal/compression/typescript_test.go` -- 9 golden tests, 20+ unit tests, 2 benchmarks
-  - `internal/compression/javascript_test.go` -- 4 golden tests, 14+ unit tests, 1 benchmark
-  - `testdata/compression/typescript/` -- 10 input fixtures + 10 expected outputs
-  - `testdata/compression/javascript/` -- 5 input fixtures + 4 expected outputs
-- **Key decisions:**
-  - **State machine over tree-sitter WASM** -- Sourcegraph WASM grammars are Emscripten SIDE_MODULE builds incompatible with standalone wazero instantiation; implemented robust line-by-line parser per PRD fallback plan
-  - **Shared `jsParser` with config flags** -- TypeScript and JavaScript share 95% of extraction logic; `jsParserConfig` booleans control TS-specific features
-  - **Separate class doc/decorator tracking** -- `classDocComment`/`classDecorators` fields prevent member-level doc comments from overwriting class-level ones
-  - **Verbatim extraction** -- all source text preserved exactly as written; function/method bodies replaced with `{ ... }` markers
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+1. **Direct wazero over malivvan/tree-sitter** -- malivvan only supports C/C++ and is pre-release (v0.0.1); wazero v1.11.0 is stable and gives full control over WASM instantiation
+2. **State machine parsers over tree-sitter WASM** -- Sourcegraph WASM grammars are Emscripten `SIDE_MODULE` builds incompatible with standalone wazero instantiation; line-by-line state machines implement the PRD fallback plan
+3. **Shared `jsParser` with `jsParserConfig` flags** -- TypeScript and JavaScript share 95% of extraction logic; booleans control TS-specific features (interfaces, type aliases, enums)
+4. **`grammars/` package at module root** -- Go `//go:embed` forbids `..` paths; separate package cleanly exports the embedded FS
+5. **Double-checked locking in `GrammarRegistry`** -- `RLock` fast path for cache hits; `Lock` only for compilation with re-check after write lock acquisition
+6. **Line-based YAML/TOML compressors without external library** -- avoids new dependencies for config-format structural skeletons
+7. **`CompressEngine` auto mode** -- tries AST first, falls back to `RegexCompressor` on parse failure; enables graceful degradation for all supported languages
 
-### T-045: Tier 1 Compressor -- Go
+#### Key Files Reference
 
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `GoCompressor` implementing `LanguageCompressor` interface with line-by-line state machine parser
-  - 8-state parser (`goStateTopLevel`, `goStateInLineComment`, `goStateInBlockComment`, `goStateInImport`, `goStateInType`, `goStateInConst`, `goStateInVar`, `goStateInFunc`)
-  - Extracts: package clauses, import blocks, function/method signatures (excluding bodies), struct declarations (with tags), interface declarations, type aliases/definitions, const/var blocks (including iota), doc comments
-  - Go-specific `goCountBraces` handling double-quoted strings, backtick raw strings (struct tags), rune literals, line comments, block comments
-  - `findFuncBodyBrace` correctly identifies function body `{` vs `interface{}` braces in parameter types
-  - Grouped declaration support: `type (...)`, `const (...)`, `var (...)` blocks using `trimmed == ")"` termination to avoid false positives from `)` inside expressions
-  - 8 golden test fixtures covering: simple functions, methods with receivers, structs with tags/embedding, interfaces with embedding, generics (Go 1.18+), const/iota blocks, import patterns, full realistic file
-  - 43+ unit tests covering all node types, edge cases, doc comments, build constraints, context cancellation
-  - 1 benchmark for compression throughput
-- **Files created/modified:**
-  - `internal/compression/golang.go` -- GoCompressor with 8-state line-by-line parser, signature extraction, Go-specific brace counting
-  - `internal/compression/golang_test.go` -- 8 golden tests, 43+ unit tests, 1 benchmark
-  - `testdata/compression/go/simple_func.go` + `.expected` -- Basic function declarations
-  - `testdata/compression/go/methods.go` + `.expected` -- Methods with receivers
-  - `testdata/compression/go/structs.go` + `.expected` -- Struct declarations with tags and embedding
-  - `testdata/compression/go/interfaces.go` + `.expected` -- Interface declarations with embedding
-  - `testdata/compression/go/generics.go` + `.expected` -- Generic types and functions
-  - `testdata/compression/go/const_iota.go` + `.expected` -- Const blocks with iota, var blocks
-  - `testdata/compression/go/imports.go` + `.expected` -- Various import patterns
-  - `testdata/compression/go/full_file.go` + `.expected` -- Realistic complete Go file
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Purpose | Location |
+| ------- | -------- |
+| Grammar embedding package | `grammars/embed.go` |
+| Tree-sitter WASM grammars (8 languages) | `grammars/tree-sitter-{typescript,javascript,go,python,rust,java,c,cpp}.wasm` |
+| Grammar download script | `scripts/fetch-grammars.sh` |
+| WASM runtime & GrammarRegistry | `internal/compression/wasm.go` |
+| Core types: SignatureKind, Signature, CompressedOutput | `internal/compression/types.go` |
+| LanguageCompressor interface | `internal/compression/interface.go` |
+| CompressEngine type & ParseCompressEngine | `internal/compression/engine.go` |
+| LanguageDetector (24 ext → 12 languages) | `internal/compression/detector.go` |
+| CompressorRegistry | `internal/compression/registry.go` |
+| Shared JS/TS parsing engine | `internal/compression/js_base.go` |
+| TypeScript compressor | `internal/compression/typescript.go` |
+| JavaScript compressor | `internal/compression/javascript.go` |
+| Go compressor | `internal/compression/golang.go` |
+| Python compressor | `internal/compression/python.go` |
+| Rust compressor | `internal/compression/rust.go` |
+| Java compressor | `internal/compression/java.go` |
+| Shared C/C++ helpers | `internal/compression/c_base.go` |
+| C compressor | `internal/compression/clang.go` |
+| C++ compressor | `internal/compression/cpp.go` |
+| JSON compressor | `internal/compression/json_compressor.go` |
+| YAML compressor | `internal/compression/yaml_compressor.go` |
+| TOML compressor | `internal/compression/toml_compressor.go` |
+| Fallback passthrough compressor | `internal/compression/fallback.go` |
+| Regex fallback compressor | `internal/compression/regex.go` |
+| Per-language regex pattern definitions | `internal/compression/regex_patterns.go` |
+| Orchestrator (parallel execution, engine selection) | `internal/compression/orchestrator.go` |
+| Atomic-safe CompressionStats | `internal/compression/stats.go` |
+| WASM runtime tests & benchmarks | `internal/compression/wasm_test.go`, `internal/compression/wasm_bench_test.go` |
+| Detector & registry tests | `internal/compression/detector_test.go`, `internal/compression/registry_test.go` |
+| Per-language compressor tests | `internal/compression/{typescript,javascript,golang,python,rust,java,clang,cpp}_test.go` |
+| Config compressor tests | `internal/compression/{json_compressor,yaml_compressor,toml_compressor,fallback}_test.go` |
+| Orchestrator, stats, regex tests | `internal/compression/{orchestrator,stats,regex}_test.go` |
+| E2E, faithfulness, benchmark tests | `internal/compression/{e2e,faithfulness,benchmark}_test.go` |
+| Golden test fixtures (11 languages) | `testdata/compression/{typescript,javascript,go,python,rust,c,cpp,json,yaml,toml,e2e}/` |
+| CLI flags (--compress, --compress-timeout, --compress-engine) | `internal/config/flags.go` |
+| Pipeline compression step | `internal/pipeline/pipeline.go` |
 
-### T-046: Tier 1 Compressor -- Python and Rust
+#### Verification
 
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `PythonCompressor` implementing `LanguageCompressor` interface with indentation-based state machine parser (9 states)
-  - Python extraction: imports, function/async function signatures, class declarations with method signatures and fields, decorators (@dataclass, @property, @staticmethod, @classmethod), docstrings (module/class/function), type-annotated assignments, `__all__` lists, Protocol classes
-  - Indentation-based scope tracking for Python's whitespace-significant syntax
-  - `RustCompressor` implementing `LanguageCompressor` interface with brace-tracking state machine parser (9 states)
-  - Rust extraction: use declarations, fn signatures (pub/pub(crate)/pub(super)/async/unsafe/const), structs (regular/tuple/unit with derive macros), enums with variants, traits with method signatures and associated types, impl blocks with method signatures, type aliases, const/static items, mod declarations, macro_rules! names, extern "C" blocks
-  - `rustCountBraces` handling raw strings (`r#"..."#`), string/char literals, line/block comments
-  - Doc comment (`///`, `//!`) and attribute (`#[...]`) attachment to declarations
-  - 8 Python golden test fixtures + 8 Rust golden test fixtures
-  - 35+ Python unit tests + 40+ Rust unit tests + 16 golden tests + 2 benchmarks
-- **Files created/modified:**
-  - `internal/compression/python.go` -- PythonCompressor with 9-state indentation-based parser
-  - `internal/compression/python_test.go` -- 35+ unit tests, 8 golden tests, 1 benchmark
-  - `internal/compression/python_golden_gen_test.go` -- Golden file regeneration helper
-  - `internal/compression/rust.go` -- RustCompressor with 9-state brace-tracking parser
-  - `internal/compression/rust_test.go` -- 40+ unit tests, 8 golden tests, 1 benchmark
-  - `testdata/compression/python/` -- 8 input fixtures + 8 expected outputs
-  - `testdata/compression/rust/` -- 8 input fixtures + 8 expected outputs
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
 
-### T-047: Tier 2 Compressor -- Java, C, and C++
-
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `JavaCompressor` implementing `LanguageCompressor` with 7-state line-by-line parser extracting: package/import declarations, class/interface/enum/annotation-type/record declarations, method/constructor signatures (bodies excluded), Javadoc and annotation attachment, nested class headers
-  - `CCompressor` implementing `LanguageCompressor` with 6-state parser extracting: `#include`/`#define` directives, function definitions and prototypes (bodies excluded), struct/enum declarations with fields, typedef statements, forward declarations, global variable declarations
-  - `CppCompressor` implementing `LanguageCompressor` with 8-state parser extending C extraction with: class declarations (with access specifiers, member extraction), template declarations, namespace definitions (with nested extraction), using declarations, enum class/struct, virtual/override/const/noexcept qualifiers, operator overloading, multiple inheritance
-  - Shared `c_base.go` with `cCountBraces`, `cExtractIdentifier`, detection helpers for preprocessor directives, function definitions, struct/enum/typedef, doc comment accumulation
-  - 4 C golden test fixtures + 4 C++ golden test fixtures
-  - Comprehensive test suites: 30+ Java tests, 25+ C tests, 25+ C++ tests, 2 benchmarks
-- **Files created/modified:**
-  - `internal/compression/java.go` -- Java compressor with 7-state parser
-  - `internal/compression/java_test.go` -- 30+ unit tests covering all Java declaration types
-  - `internal/compression/c_base.go` -- Shared C/C++ helpers (brace counting, detection, doc comments)
-  - `internal/compression/clang.go` -- C compressor with 6-state parser
-  - `internal/compression/clang_test.go` -- 25+ unit tests and 4 golden tests
-  - `internal/compression/cpp.go` -- C++ compressor with 8-state parser extending C
-  - `internal/compression/cpp_test.go` -- 25+ unit tests and 4 golden tests
-  - `testdata/compression/c/` -- 4 input fixtures + 4 expected outputs
-  - `testdata/compression/cpp/` -- 4 input fixtures + 4 expected outputs
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-048: Tier 2 Config Compressors (JSON/YAML/TOML) and Unsupported Language Fallback
-
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `JSONCompressor` using `encoding/json` -- decodes to `interface{}`, walks structure recursively: objects compressed to depth 2, arrays > 5 items collapsed to `/* N items */`, strings truncated at 50 chars, invalid JSON falls back to full content
-  - `YAMLCompressor` using line-based parsing (no external library) -- tracks indentation depth, preserves comments at depth <= 2, collapses lists > 5 items with `# ... (N more items)`, truncates multi-line block scalars to 3 lines, truncates long string values at 80 chars
-  - `TOMLCompressor` using line-based parsing (no external library) -- preserves section headers `[section]` and `[[array]]`, comments, blank lines; collapses inline arrays > 5 items to `[/* N items */]`, collapses multi-line arrays to item count, truncates long strings at 80 chars, handles multi-line strings (`"""`/`'''`)
-  - `FallbackCompressor` returning full file content unchanged for unsupported languages with `Language="unknown"` and `IsFallback()` helper for orchestrator integration
-  - 9 test fixture files (3 JSON, 3 YAML, 3 TOML) covering realistic config formats
-  - 70+ test functions with golden tests, unit tests, edge cases, and benchmarks across all 4 compressors
-- **Files created/modified:**
-  - `internal/compression/json_compressor.go` -- JSON structural skeleton compressor with depth limiting, array collapsing, string truncation
-  - `internal/compression/yaml_compressor.go` -- YAML line-based compressor with indentation tracking, comment preservation, list collapsing
-  - `internal/compression/toml_compressor.go` -- TOML line-based compressor with section/comment preservation, multi-line state machine
-  - `internal/compression/fallback.go` -- Fallback passthrough compressor with `IsFallback()` helper
-  - `internal/compression/json_compressor_test.go` -- JSON compressor tests (30+ tests, 3 benchmarks)
-  - `internal/compression/yaml_compressor_test.go` -- YAML compressor tests (29 tests, 2 benchmarks)
-  - `internal/compression/toml_compressor_test.go` -- TOML compressor tests (27 tests, 2 benchmarks)
-  - `internal/compression/fallback_test.go` -- Fallback compressor tests (15 tests)
-  - `testdata/compression/json/{package,tsconfig,simple}.json` -- JSON test fixtures
-  - `testdata/compression/yaml/{docker-compose,github-workflow,simple}.yml` -- YAML test fixtures
-  - `testdata/compression/toml/{cargo,pyproject,simple}.toml` -- TOML test fixtures
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-049: Compression Orchestrator and Pipeline Integration
-
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `Orchestrator` struct coordinating language detection, compressor dispatch, timeout enforcement, and parallel execution via `errgroup.SetLimit`
-  - `CompressibleFile` type (package-local DTO to avoid import cycles between compression and pipeline)
-  - `CompressionConfig` with `Enabled`, `TimeoutPerFile`, `Concurrency` fields and `DefaultCompressionConfig()` constructor
-  - `CompressionStats` with atomic-safe counters (`FilesCompressed`, `FilesFailed`, `FilesSkipped`, `FilesTimedOut`, `OriginalTokens`, `CompressedTokens`) and computed methods (`TotalFiles`, `TokenSavings`, `AverageRatio`, `String`)
-  - `CompressedMarker` constant (`<!-- Compressed: signatures only -->`) prepended to all compressed output
-  - `ProgressFunc` callback type for TUI/CLI progress reporting
-  - Pipeline integration: `--compress` and `--compress-timeout` CLI flags, `buildCompressionConfig` helper
-  - Graceful error handling: unsupported language → skip, parse error → keep original, timeout → keep original, context cancellation → propagate
-  - All 11 built-in compressors registered (TypeScript, JavaScript, Go, Python, Rust, Java, C, C++, JSON, YAML, TOML)
-- **Files created/modified:**
-  - `internal/compression/orchestrator.go` -- Orchestrator with parallel compression, timeout enforcement, progress reporting
-  - `internal/compression/stats.go` -- Atomic-safe CompressionStats type with helper methods
-  - `internal/compression/orchestrator_test.go` -- 19 tests + 1 benchmark covering all orchestrator behavior
-  - `internal/compression/stats_test.go` -- 8 tests covering atomic counters, calculations, concurrent safety
-  - `internal/compression/types.go` -- Removed duplicate CompressionConfig (moved to orchestrator.go)
-  - `internal/config/flags.go` -- Added `--compress` and `--compress-timeout` flags with validation
-  - `internal/pipeline/pipeline.go` -- Added compression step with `buildCompressionConfig` helper
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-050: Regex Heuristic Fallback and End-to-End Compression Tests
-
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `RegexCompressor` implementing `LanguageCompressor` interface with per-language regex patterns for 8 languages (Go, TypeScript, JavaScript, Python, Rust, Java, C, C++)
-  - `RegexPattern` struct with Kind, compiled Pattern, and MultiLine flag; multi-line signature extraction with parenthesis balance tracking
-  - `CompressEngine` type (`ast`, `regex`, `auto`) with `ParseCompressEngine` parser accepting "wasm" as alias for "ast"
-  - Engine selection in `Orchestrator`: AST-only, regex-only, or auto (try AST, fall back to regex on failure)
-  - `--compress-engine` CLI flag (default: auto) with validation
-  - Top-level-only regex matching (skips indented lines) to prevent body code leakage
-  - E2E test suite with 4 real-world fixture files (TypeScript API route, Go HTTP handler, Python FastAPI router, Rust struct+impl)
-  - Faithfulness test suite verifying verbatim extraction, source order, and no body leakage across both engines
-  - Cross-engine comparison tests (AST vs regex output characteristics)
-  - Performance benchmarks: per-language regex, AST vs regex comparison, batch orchestrator
-  - 70+ new tests across 4 test files
-- **Files created/modified:**
-  - `internal/compression/regex.go` -- RegexCompressor with line-by-line pattern matching, multi-line extraction, name extraction helpers
-  - `internal/compression/regex_patterns.go` -- Per-language regex pattern definitions for 8 languages
-  - `internal/compression/engine.go` -- CompressEngine type with ParseCompressEngine and ValidEngines
-  - `internal/compression/orchestrator.go` -- Added regex registry, engine selection logic (AST/regex/auto), compressFileAuto fallback chain
-  - `internal/config/flags.go` -- Added `--compress-engine` flag and CompressEngine field to FlagValues
-  - `internal/pipeline/pipeline.go` -- Wire engine config into buildCompressionConfig
-  - `internal/compression/regex_test.go` -- 32 test functions: per-language extraction, multi-line, edge cases, engine parsing, orchestrator engine tests
-  - `internal/compression/e2e_test.go` -- 13 E2E tests: all engines, mixed-language, unsupported types, markers, ratio bounds, stats, regressions
-  - `internal/compression/faithfulness_test.go` -- 8 faithfulness tests: verbatim, source order, no body leakage, doc comment dedup, marker origin
-  - `internal/compression/benchmark_test.go` -- 17 benchmarks: per-language regex, AST vs regex comparison, batch orchestrator
-  - `testdata/compression/e2e/typescript/api-route.ts` -- TypeScript E2E fixture
-  - `testdata/compression/e2e/go/http-handler.go` -- Go E2E fixture
-  - `testdata/compression/e2e/python/fastapi-router.py` -- Python E2E fixture
-  - `testdata/compression/e2e/rust/struct-impl.rs` -- Rust E2E fixture
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+---
 
