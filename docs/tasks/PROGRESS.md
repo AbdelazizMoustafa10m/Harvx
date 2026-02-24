@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 55 |
+| Completed | 56 |
 | In Progress | 0 |
-| Not Started | 40 |
+| Not Started | 39 |
 
 ---
 
@@ -480,5 +480,30 @@
   - `internal/output/testdata/golden/markdown-line-numbers.golden` -- Golden test: line-numbered rendering
   - `testdata/expected-output/markdown-basic.md` -- Reference output: basic Markdown
   - `testdata/expected-output/markdown-line-numbers.md` -- Reference output: line numbers
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-053: XML Output Renderer for Claude Target Preset
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `XMLRenderer` implementing `Renderer` interface, producing Claude-optimized XML with semantic tags (`<repository>`, `<metadata>`, `<file_summary>`, `<directory_structure>`, `<files>`, `<statistics>`)
+  - CDATA section wrapping for file content and directory tree with proper `]]>` splitting across CDATA boundaries
+  - `xmlEscapeAttr` for safe XML attribute/element encoding of user data (paths, project names, error messages)
+  - XML template system with 7 named sub-templates using `text/template` (not `encoding/xml`)
+  - `<file>` elements with `path`, `tokens`, `tier`, `size`, `language`, `compressed` attributes
+  - Line numbers support within CDATA content via `--line-numbers` flag
+  - Optional `<change_summary>` section for diff mode with added/modified/deleted file lists
+  - Well-formed XML output validated by `encoding/xml` decoder in tests
+  - Deterministic output: same input always produces byte-identical output
+- **Files created/modified:**
+  - `internal/output/xml.go` -- XMLRenderer struct, wrapCDATA, xmlEscapeAttr functions
+  - `internal/output/templates.go` -- XML template constants (xmlHeaderTmpl, xmlSummaryTmpl, xmlTreeTmpl, xmlFilesTmpl, xmlStatisticsTmpl, xmlChangeSummaryTmpl, xmlRootTmpl) and xmlFuncMap
+  - `internal/output/xml_test.go` -- 28+ unit tests + 3 golden tests + 2 benchmarks covering well-formedness, CDATA edge cases, special chars, section ordering
+  - `internal/output/testdata/golden/xml-basic.golden` -- Golden test: basic XML rendering
+  - `internal/output/testdata/golden/xml-line-numbers.golden` -- Golden test: line-numbered XML rendering
+  - `internal/output/testdata/golden/xml-cdata-edge.golden` -- Golden test: CDATA edge case with ]]> splitting
+  - `testdata/expected-output/xml-basic.xml` -- Reference output: basic XML
+  - `testdata/expected-output/xml-cdata-edge.xml` -- Reference output: CDATA edge cases
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

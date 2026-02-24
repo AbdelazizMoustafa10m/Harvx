@@ -183,3 +183,154 @@ const changeSummaryTmpl = `{{- define "changeSummary" -}}
 {{- end}}
 {{- end}}
 {{- end -}}`
+
+// ---------------------------------------------------------------------------
+// XML templates
+// ---------------------------------------------------------------------------
+
+// xmlFuncMap provides helper functions available within the XML template.
+var xmlFuncMap = template.FuncMap{
+	"formatBytes":    formatBytes,
+	"formatNumber":   formatNumber,
+	"addLineNumbers": addLineNumbers,
+	"tierLabel":      tierLabel,
+	"wrapCDATA":      wrapCDATA,
+	"xmlEscapeAttr":  xmlEscapeAttr,
+	"tierNumbers": func() []int {
+		return []int{0, 1, 2, 3, 4, 5}
+	},
+	"tierCount": func(counts map[int]int, tier int) int {
+		return counts[tier]
+	},
+	"sortedKeys": func(m map[string]int) []string {
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		return keys
+	},
+}
+
+// xmlTemplate is the compiled XML output template, parsed once at package
+// level. It is goroutine-safe for concurrent Execute calls.
+var xmlTemplate = template.Must(
+	template.New("xml").Funcs(xmlFuncMap).Parse(xmlTmpl),
+)
+
+// xmlTmpl is the complete XML template string composed of named sub-templates
+// for metadata, summary, tree, files, statistics, and change summary sections.
+const xmlTmpl = xmlHeaderTmpl + xmlSummaryTmpl + xmlTreeTmpl + xmlFilesTmpl + xmlStatisticsTmpl + xmlChangeSummaryTmpl + xmlRootTmpl
+
+// xmlRootTmpl is the top-level composition template that invokes sub-templates.
+const xmlRootTmpl = `{{- define "xml-root" -}}
+<?xml version="1.0" encoding="UTF-8"?>
+<repository>
+{{- template "xml-metadata" . }}
+{{- template "xml-summary" . }}
+{{- template "xml-tree" . }}
+{{- template "xml-files" . }}
+{{- template "xml-statistics" . }}
+{{- template "xml-changeSummary" . }}
+</repository>
+{{- end -}}`
+
+// xmlHeaderTmpl renders the metadata section with project information.
+const xmlHeaderTmpl = `{{- define "xml-metadata" }}
+  <metadata>
+    <project_name>{{xmlEscapeAttr .ProjectName}}</project_name>
+    <generated>{{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}</generated>
+    <content_hash>{{.ContentHash}}</content_hash>
+    <profile>{{xmlEscapeAttr .ProfileName}}</profile>
+    <tokenizer>{{.TokenizerName}}</tokenizer>
+    <total_tokens>{{.TotalTokens}}</total_tokens>
+    <total_files>{{.TotalFiles}}</total_files>
+  </metadata>
+{{- end -}}`
+
+// xmlSummaryTmpl renders the file summary with tier counts, top files, and
+// redaction information.
+const xmlSummaryTmpl = `{{- define "xml-summary" }}
+  <file_summary>
+    <total_files>{{.TotalFiles}}</total_files>
+    <total_tokens>{{formatNumber .TotalTokens}}</total_tokens>
+    <files_by_tier>
+{{- range $tier := tierNumbers}}
+{{- $count := tierCount $.TierCounts $tier}}
+{{- if gt $count 0}}
+      <tier number="{{$tier}}" label="{{tierLabel $tier}}" count="{{$count}}"/>
+{{- end}}
+{{- end}}
+    </files_by_tier>
+{{- if gt (len .TopFilesByTokens) 0}}
+    <top_files>
+{{- range .TopFilesByTokens}}
+      <file path="{{xmlEscapeAttr .Path}}" tokens="{{formatNumber .TokenCount}}" size="{{formatBytes .Size}}"/>
+{{- end}}
+    </top_files>
+{{- end}}
+{{- if gt .TotalRedactions 0}}
+    <redaction_summary total="{{.TotalRedactions}}">
+{{- range $key := sortedKeys .RedactionSummary}}
+      <type name="{{$key}}" count="{{index $.RedactionSummary $key}}"/>
+{{- end}}
+    </redaction_summary>
+{{- else}}
+    <redaction_summary total="0"/>
+{{- end}}
+  </file_summary>
+{{- end -}}`
+
+// xmlTreeTmpl renders the directory structure in a CDATA section.
+const xmlTreeTmpl = `{{- define "xml-tree" }}
+  <directory_structure>{{wrapCDATA .TreeString}}</directory_structure>
+{{- end -}}`
+
+// xmlFilesTmpl renders each file with attributes and CDATA-wrapped content.
+const xmlFilesTmpl = `{{- define "xml-files" }}
+  <files>
+{{- range .Files}}
+    <file path="{{xmlEscapeAttr .Path}}" tokens="{{.TokenCount}}" tier="{{if .TierLabel}}{{.TierLabel}}{{else}}{{tierLabel .Tier}}{{end}}" size="{{.Size}}" language="{{.Language}}" compressed="{{if .IsCompressed}}true{{else}}false{{end}}">
+{{- if .Error}}
+      <error>{{xmlEscapeAttr .Error}}</error>
+{{- else if $.ShowLineNumbers}}
+      <content>{{wrapCDATA (addLineNumbers .Content)}}</content>
+{{- else}}
+      <content>{{wrapCDATA .Content}}</content>
+{{- end}}
+    </file>
+{{- end}}
+  </files>
+{{- end -}}`
+
+// xmlStatisticsTmpl renders the statistics summary section.
+const xmlStatisticsTmpl = `{{- define "xml-statistics" }}
+  <statistics>
+    <total_files>{{.TotalFiles}}</total_files>
+    <total_tokens>{{.TotalTokens}}</total_tokens>
+  </statistics>
+{{- end -}}`
+
+// xmlChangeSummaryTmpl renders the change summary section, only when
+// DiffSummary is non-nil.
+const xmlChangeSummaryTmpl = `{{- define "xml-changeSummary" -}}
+{{- if .DiffSummary}}
+  <change_summary>
+    <added count="{{len .DiffSummary.AddedFiles}}">
+{{- range .DiffSummary.AddedFiles}}
+      <file>{{xmlEscapeAttr .}}</file>
+{{- end}}
+    </added>
+    <modified count="{{len .DiffSummary.ModifiedFiles}}">
+{{- range .DiffSummary.ModifiedFiles}}
+      <file>{{xmlEscapeAttr .}}</file>
+{{- end}}
+    </modified>
+    <deleted count="{{len .DiffSummary.DeletedFiles}}">
+{{- range .DiffSummary.DeletedFiles}}
+      <file>{{xmlEscapeAttr .}}</file>
+{{- end}}
+    </deleted>
+  </change_summary>
+{{- end}}
+{{- end -}}`

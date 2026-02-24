@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<repository>
+  <metadata>
+    <project_name>test-project</project_name>
+    <generated>2026-01-15T10:30:00Z</generated>
+    <content_hash>abc123def456</content_hash>
+    <profile>default</profile>
+    <tokenizer>cl100k_base</tokenizer>
+    <total_tokens>2500</total_tokens>
+    <total_files>3</total_files>
+  </metadata>
+  <file_summary>
+    <total_files>3</total_files>
+    <total_tokens>2,500</total_tokens>
+    <files_by_tier>
+      <tier number="0" label="critical" count="1"/>
+      <tier number="1" label="primary" count="1"/>
+      <tier number="2" label="secondary" count="1"/>
+    </files_by_tier>
+    <top_files>
+      <file path="src/main.go" tokens="1,200" size="2.0 KB"/>
+      <file path="src/util.go" tokens="800" size="1.0 KB"/>
+      <file path="README.md" tokens="500" size="512 B"/>
+    </top_files>
+    <redaction_summary total="0"/>
+  </file_summary>
+  <directory_structure><![CDATA[src/
+  main.go
+  util.go
+README.md]]></directory_structure>
+  <files>
+    <file path="src/main.go" tokens="1200" tier="critical" size="2048" language="go" compressed="false">
+      <content><![CDATA[1 | package main
+2 | 
+3 | import "fmt"
+4 | 
+5 | func main() {
+6 | 	fmt.Println("hello")
+7 | }]]></content>
+    </file>
+    <file path="src/util.go" tokens="800" tier="primary" size="1024" language="go" compressed="false">
+      <content><![CDATA[1 | package main
+2 | 
+3 | func add(a, b int) int {
+4 | 	return a + b
+5 | }]]></content>
+    </file>
+    <file path="README.md" tokens="500" tier="secondary" size="512" language="markdown" compressed="false">
+      <content><![CDATA[1 | # Test Project
+2 | 
+3 | This is a test project.]]></content>
+    </file>
+  </files>
+  <statistics>
+    <total_files>3</total_files>
+    <total_tokens>2500</total_tokens>
+  </statistics>
+</repository>
