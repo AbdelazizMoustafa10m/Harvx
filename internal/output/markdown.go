@@ -31,5 +31,5 @@ func (r *MarkdownRenderer) Render(ctx context.Context, w io.Writer, data *Render
 		return fmt.Errorf("render data is nil")
 	}
 
-	return markdownTemplate.Execute(w, data)
+	return markdownTemplate.ExecuteTemplate(w, "markdown-root", data)
 }

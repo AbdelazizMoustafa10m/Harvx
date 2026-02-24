@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 54 |
+| Completed | 55 |
 | In Progress | 0 |
-| Not Started | 41 |
+| Not Started | 40 |
 
 ---
 
@@ -454,5 +454,31 @@
   - `testdata/expected-output/tree-with-metadata.txt` -- Reference output: metadata annotations
   - `testdata/expected-output/tree-collapsed.txt` -- Reference output: collapsed dirs
   - `testdata/expected-output/tree-depth-limited.txt` -- Reference output: depth limit
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-052: Markdown Output Renderer with Go Templates
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `Renderer` interface with `Render(ctx, w, data)` for format dispatch
+  - `RenderData` and `FileRenderEntry` structs holding all pipeline output for rendering
+  - `MarkdownRenderer` implementation using Go `text/template` with streaming output to `io.Writer`
+  - Template system with named sub-templates: header, summary, tree, files, changeSummary composed via `markdown-root`
+  - `template.FuncMap` helpers: formatBytes, formatNumber, languageFromExt (60+ extensions), addLineNumbers, escapeTripleBackticks, tierLabel, sortedKeys
+  - Line numbers support via `ShowLineNumbers` flag with right-aligned numbering
+  - Conditional change summary section (diff mode) with added/modified/deleted file lists
+  - Deterministic output: same input always produces byte-identical output
+- **Files created/modified:**
+  - `internal/output/renderer.go` -- Renderer interface, RenderData, FileRenderEntry, DiffSummaryData types
+  - `internal/output/markdown.go` -- MarkdownRenderer implementation with context cancellation support
+  - `internal/output/templates.go` -- Markdown template constants (header, summary, tree, files, changeSummary, root) and FuncMap
+  - `internal/output/helpers.go` -- languageFromExt (60+ ext map), formatBytes, formatNumber, addLineNumbers, repeatString, tierLabel, escapeTripleBackticks
+  - `internal/output/helpers_test.go` -- 60+ unit tests for all helper functions
+  - `internal/output/markdown_test.go` -- 25 unit tests + 2 golden tests + 2 benchmarks covering all acceptance criteria
+  - `internal/output/testdata/golden/markdown-basic.golden` -- Golden test: basic Markdown rendering
+  - `internal/output/testdata/golden/markdown-line-numbers.golden` -- Golden test: line-numbered rendering
+  - `testdata/expected-output/markdown-basic.md` -- Reference output: basic Markdown
+  - `testdata/expected-output/markdown-line-numbers.md` -- Reference output: line numbers
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
