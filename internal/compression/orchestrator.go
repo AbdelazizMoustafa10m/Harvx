@@ -33,9 +33,10 @@ type CompressibleFile struct {
 
 // CompressionConfig holds configuration for the orchestrator.
 type CompressionConfig struct {
-	Enabled        bool          // Whether compression is active.
-	TimeoutPerFile time.Duration // Max time per file (default 5s).
-	Concurrency    int           // Number of parallel compression workers.
+	Enabled        bool           // Whether compression is active.
+	TimeoutPerFile time.Duration  // Max time per file (default 5s).
+	Concurrency    int            // Number of parallel compression workers.
+	Engine         CompressEngine // Which compression engine to use (default: auto).
 }
 
 // DefaultCompressionConfig returns a CompressionConfig with sensible defaults.
@@ -44,27 +45,32 @@ func DefaultCompressionConfig() CompressionConfig {
 		Enabled:        false,
 		TimeoutPerFile: 5 * time.Second,
 		Concurrency:    runtime.NumCPU(),
+		Engine:         EngineAuto,
 	}
 }
 
 // Orchestrator manages the compression pipeline. It coordinates language
 // detection, compressor dispatch, timeout enforcement, and parallel execution
-// via errgroup.
+// via errgroup. The orchestrator supports multiple compression engines (AST,
+// regex, auto) via the Engine field in CompressionConfig.
 type Orchestrator struct {
-	registry   *CompressorRegistry
-	config     CompressionConfig
-	logger     *slog.Logger
-	progressFn ProgressFunc
-	processed  int64 // atomic counter for progress reporting
+	registry      *CompressorRegistry // Primary registry (AST state-machine compressors).
+	regexRegistry *CompressorRegistry // Regex-based fallback compressors.
+	config        CompressionConfig
+	logger        *slog.Logger
+	progressFn    ProgressFunc
+	processed     int64 // atomic counter for progress reporting
 }
 
 // NewOrchestrator creates a compression orchestrator with all built-in
-// compressors registered. The orchestrator is ready to use immediately.
+// compressors registered. Both the primary AST registry and the regex
+// fallback registry are populated. The orchestrator is ready to use
+// immediately.
 func NewOrchestrator(config CompressionConfig) *Orchestrator {
 	detector := NewLanguageDetector()
-	registry := NewCompressorRegistry(detector)
 
-	// Register all built-in compressors.
+	// Primary registry: AST state-machine compressors.
+	registry := NewCompressorRegistry(detector)
 	registry.Register(NewTypeScriptCompressor())
 	registry.Register(NewJavaScriptCompressor())
 	registry.Register(NewGoCompressor())
@@ -77,10 +83,17 @@ func NewOrchestrator(config CompressionConfig) *Orchestrator {
 	registry.Register(NewYAMLCompressor())
 	registry.Register(NewTOMLCompressor())
 
+	// Regex registry: heuristic regex-based compressors.
+	regexReg := NewCompressorRegistry(detector)
+	for lang := range regexPatternRegistry {
+		regexReg.Register(NewRegexCompressor(lang))
+	}
+
 	return &Orchestrator{
-		registry: registry,
-		config:   config,
-		logger:   slog.Default(),
+		registry:      registry,
+		regexRegistry: regexReg,
+		config:        config,
+		logger:        slog.Default(),
 	}
 }
 
@@ -135,13 +148,88 @@ func (o *Orchestrator) Compress(ctx context.Context, files []*CompressibleFile) 
 // On any failure (unsupported language, parse error, timeout), the file retains
 // its original content. Only context cancellation (Ctrl+C) is propagated as a
 // fatal error.
+//
+// Engine selection logic:
+//   - EngineAST: use only the primary registry (state-machine parsers).
+//   - EngineRegex: use only the regex registry.
+//   - EngineAuto: try primary registry first; on error, retry with regex registry.
 func (o *Orchestrator) compressFile(ctx context.Context, f *CompressibleFile, stats *CompressionStats) error {
 	// Check parent context first.
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("compression cancelled: %w", err)
 	}
 
+	switch o.config.Engine {
+	case EngineAST:
+		return o.compressFileWithRegistry(ctx, f, stats, o.registry, false)
+	case EngineRegex:
+		return o.compressFileWithRegistry(ctx, f, stats, o.regexRegistry, false)
+	case EngineAuto:
+		return o.compressFileAuto(ctx, f, stats)
+	default:
+		// Unknown engine -- treat as auto.
+		return o.compressFileAuto(ctx, f, stats)
+	}
+}
+
+// compressFileAuto implements the EngineAuto strategy: try AST first, then
+// fall back to regex on failure.
+func (o *Orchestrator) compressFileAuto(ctx context.Context, f *CompressibleFile, stats *CompressionStats) error {
+	// Try the primary AST registry first.
 	compressor := o.registry.Get(f.Path)
+	if compressor == nil {
+		// No AST compressor -- try regex registry directly.
+		return o.compressFileWithRegistry(ctx, f, stats, o.regexRegistry, false)
+	}
+
+	// Enforce per-file timeout.
+	fileCtx, cancel := context.WithTimeout(ctx, o.config.TimeoutPerFile)
+	defer cancel()
+
+	start := time.Now()
+	output, err := compressor.Compress(fileCtx, []byte(f.Content))
+	elapsed := time.Since(start)
+
+	if err != nil {
+		// Check if parent context was cancelled (Ctrl+C) -- propagate.
+		if ctx.Err() != nil {
+			return fmt.Errorf("compression cancelled: %w", ctx.Err())
+		}
+
+		// AST failed -- fall back to regex.
+		o.logger.Debug("AST compression failed, falling back to regex",
+			"file", f.Path,
+			"language", compressor.Language(),
+			"error", err,
+			"elapsed", elapsed,
+		)
+		return o.compressFileWithRegistry(ctx, f, stats, o.regexRegistry, true)
+	}
+
+	// Check for fallback output.
+	if IsFallback(output) {
+		// Try regex instead.
+		return o.compressFileWithRegistry(ctx, f, stats, o.regexRegistry, false)
+	}
+
+	return o.applyCompression(f, stats, output, compressor.Language(), elapsed)
+}
+
+// compressFileWithRegistry compresses a file using the specified registry.
+// If isFallbackAttempt is true, failures are logged differently.
+func (o *Orchestrator) compressFileWithRegistry(
+	ctx context.Context,
+	f *CompressibleFile,
+	stats *CompressionStats,
+	reg *CompressorRegistry,
+	isFallbackAttempt bool,
+) error {
+	// Check parent context first.
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("compression cancelled: %w", err)
+	}
+
+	compressor := reg.Get(f.Path)
 	if compressor == nil {
 		// Unsupported language -- keep original content.
 		stats.addSkipped()
@@ -181,6 +269,7 @@ func (o *Orchestrator) compressFile(ctx context.Context, f *CompressibleFile, st
 				"language", compressor.Language(),
 				"error", err,
 				"elapsed", elapsed,
+				"fallback_attempt", isFallbackAttempt,
 			)
 		}
 		return nil
@@ -196,14 +285,25 @@ func (o *Orchestrator) compressFile(ctx context.Context, f *CompressibleFile, st
 		return nil
 	}
 
-	// Apply compressed content.
+	return o.applyCompression(f, stats, output, compressor.Language(), elapsed)
+}
+
+// applyCompression applies a successful compression result to the file and
+// updates statistics.
+func (o *Orchestrator) applyCompression(
+	f *CompressibleFile,
+	stats *CompressionStats,
+	output *CompressedOutput,
+	language string,
+	elapsed time.Duration,
+) error {
 	rendered := output.Render()
 	compressed := CompressedMarker + "\n" + rendered
 	originalLen := len(f.Content)
 
 	f.Content = compressed
 	f.IsCompressed = true
-	f.Language = compressor.Language()
+	f.Language = language
 
 	stats.addCompressed()
 	// Track byte counts (using content length as proxy; actual token
@@ -212,7 +312,7 @@ func (o *Orchestrator) compressFile(ctx context.Context, f *CompressibleFile, st
 
 	o.logger.Debug("file compressed",
 		"file", f.Path,
-		"language", compressor.Language(),
+		"language", language,
 		"ratio", output.CompressionRatio(),
 		"elapsed", elapsed,
 		"original_bytes", originalLen,

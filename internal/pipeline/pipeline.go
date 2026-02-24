@@ -81,6 +81,7 @@ func Run(ctx context.Context, cfg *config.FlagValues) error {
 			"enabled", compressionCfg.Enabled,
 			"timeout_per_file", compressionCfg.TimeoutPerFile,
 			"concurrency", compressionCfg.Concurrency,
+			"engine", compressionCfg.Engine,
 		)
 		// TODO: Apply compression to budget-surviving files once the full pipeline is wired.
 		_ = compressionCfg
@@ -148,5 +149,18 @@ func buildCompressionConfig(cfg *config.FlagValues) compression.CompressionConfi
 	cc := compression.DefaultCompressionConfig()
 	cc.Enabled = cfg.Compress
 	cc.TimeoutPerFile = time.Duration(cfg.CompressTimeout) * time.Millisecond
+
+	// Parse the engine flag. Validation already happened in ValidateFlags,
+	// so errors here are unexpected. Fall back to auto on error.
+	engine, err := compression.ParseCompressEngine(cfg.CompressEngine)
+	if err != nil {
+		slog.Warn("invalid compress engine, defaulting to auto",
+			"engine", cfg.CompressEngine,
+			"error", err,
+		)
+		engine = compression.EngineAuto
+	}
+	cc.Engine = engine
+
 	return cc
 }

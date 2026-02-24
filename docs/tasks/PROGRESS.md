@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 52 |
+| Completed | 53 |
 | In Progress | 0 |
-| Not Started | 43 |
+| Not Started | 42 |
 
 ---
 
@@ -558,5 +558,38 @@
   - `internal/compression/types.go` -- Removed duplicate CompressionConfig (moved to orchestrator.go)
   - `internal/config/flags.go` -- Added `--compress` and `--compress-timeout` flags with validation
   - `internal/pipeline/pipeline.go` -- Added compression step with `buildCompressionConfig` helper
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-050: Regex Heuristic Fallback and End-to-End Compression Tests
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `RegexCompressor` implementing `LanguageCompressor` interface with per-language regex patterns for 8 languages (Go, TypeScript, JavaScript, Python, Rust, Java, C, C++)
+  - `RegexPattern` struct with Kind, compiled Pattern, and MultiLine flag; multi-line signature extraction with parenthesis balance tracking
+  - `CompressEngine` type (`ast`, `regex`, `auto`) with `ParseCompressEngine` parser accepting "wasm" as alias for "ast"
+  - Engine selection in `Orchestrator`: AST-only, regex-only, or auto (try AST, fall back to regex on failure)
+  - `--compress-engine` CLI flag (default: auto) with validation
+  - Top-level-only regex matching (skips indented lines) to prevent body code leakage
+  - E2E test suite with 4 real-world fixture files (TypeScript API route, Go HTTP handler, Python FastAPI router, Rust struct+impl)
+  - Faithfulness test suite verifying verbatim extraction, source order, and no body leakage across both engines
+  - Cross-engine comparison tests (AST vs regex output characteristics)
+  - Performance benchmarks: per-language regex, AST vs regex comparison, batch orchestrator
+  - 70+ new tests across 4 test files
+- **Files created/modified:**
+  - `internal/compression/regex.go` -- RegexCompressor with line-by-line pattern matching, multi-line extraction, name extraction helpers
+  - `internal/compression/regex_patterns.go` -- Per-language regex pattern definitions for 8 languages
+  - `internal/compression/engine.go` -- CompressEngine type with ParseCompressEngine and ValidEngines
+  - `internal/compression/orchestrator.go` -- Added regex registry, engine selection logic (AST/regex/auto), compressFileAuto fallback chain
+  - `internal/config/flags.go` -- Added `--compress-engine` flag and CompressEngine field to FlagValues
+  - `internal/pipeline/pipeline.go` -- Wire engine config into buildCompressionConfig
+  - `internal/compression/regex_test.go` -- 32 test functions: per-language extraction, multi-line, edge cases, engine parsing, orchestrator engine tests
+  - `internal/compression/e2e_test.go` -- 13 E2E tests: all engines, mixed-language, unsupported types, markers, ratio bounds, stats, regressions
+  - `internal/compression/faithfulness_test.go` -- 8 faithfulness tests: verbatim, source order, no body leakage, doc comment dedup, marker origin
+  - `internal/compression/benchmark_test.go` -- 17 benchmarks: per-language regex, AST vs regex comparison, batch orchestrator
+  - `testdata/compression/e2e/typescript/api-route.ts` -- TypeScript E2E fixture
+  - `testdata/compression/e2e/go/http-handler.go` -- Go E2E fixture
+  - `testdata/compression/e2e/python/fastapi-router.py` -- Python E2E fixture
+  - `testdata/compression/e2e/rust/struct-impl.rs` -- Rust E2E fixture
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
