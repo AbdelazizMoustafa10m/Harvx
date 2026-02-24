@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 56 |
+| Completed | 57 |
 | In Progress | 0 |
-| Not Started | 39 |
+| Not Started | 38 |
 
 ---
 
@@ -505,5 +505,23 @@
   - `internal/output/testdata/golden/xml-cdata-edge.golden` -- Golden test: CDATA edge case with ]]> splitting
   - `testdata/expected-output/xml-basic.xml` -- Reference output: basic XML
   - `testdata/expected-output/xml-cdata-edge.xml` -- Reference output: CDATA edge cases
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-054: Content Hashing (XXH3) and Deterministic Output
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `ContentHasher` with `ComputeContentHash` computing deterministic XXH3 64-bit hash over sorted file collections using `zeebo/xxh3`
+  - `IncrementalHasher` implementing `io.Writer` for streaming hash computation during output writing
+  - `FormatHash` producing 16-character zero-padded lowercase hex string for output headers
+  - `FileHashEntry` type with path + null byte separator convention preventing path/content boundary collisions
+  - Defensive input copy before sorting to avoid mutating caller's slice
+  - Case-sensitive byte-order sorting for platform-independent determinism
+- **Files created/modified:**
+  - `internal/output/hash.go` -- ContentHasher, IncrementalHasher, FileHashEntry, FormatHash
+  - `internal/output/hash_test.go` -- 29 unit tests + 3 benchmarks covering determinism, order independence, stability, null byte separation, Unicode paths, empty inputs, incremental equivalence
+  - `go.mod` -- Added `github.com/zeebo/xxh3 v1.1.0` dependency
+  - `go.sum` -- Updated with xxh3 and klauspost/cpuid transitive dependencies
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
