@@ -1,0 +1,46 @@
+"""Django model for managing blog articles."""
+
+from django.db import models
+
+from django.utils import timezone
+
+from django.contrib.auth.models import User
+
+__all__ = ["Article", "ArticleManager"]
+
+class ArticleManager(models.Manager):
+    """Custom manager for Article model."""
+
+    def published(self):
+        """Return only published articles."""
+
+    def by_author(self, author):
+        """Return articles by a specific author."""
+
+class Article(models.Model):
+    """Blog article with rich metadata."""
+    STATUS_CHOICES = [
+    title: str = models.CharField(max_length=200)
+    slug: str = models.SlugField(unique=True)
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    body = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    pub_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    objects = ArticleManager()
+        ordering = ["-pub_date"]
+        verbose_name_plural = "articles"
+        indexes = [
+
+    def __str__(self) -> str:
+
+    def publish(self) -> None:
+        """Publish this article."""
+
+    @property
+    def is_published(self) -> bool:
+        """Check if article is currently published."""
+
+    def get_absolute_url(self) -> str:
+        """Return the canonical URL for this article."""

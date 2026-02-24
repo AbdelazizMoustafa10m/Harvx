@@ -1,0 +1,58 @@
+"""Examples of various Python decorators."""
+
+import functools
+
+from abc import ABC, abstractmethod
+
+from typing import Any, Callable
+
+def timer(func: Callable) -> Callable:
+    """Decorator that times function execution."""
+
+def retry(max_attempts: int = 3, delay: float = 1.0) -> Callable:
+    """Decorator factory for retrying failed operations."""
+
+class Shape(ABC):
+    """Abstract base class for shapes."""
+
+    @abstractmethod
+    def area(self) -> float:
+        """Calculate the area of the shape."""
+
+    @abstractmethod
+    def perimeter(self) -> float:
+        """Calculate the perimeter of the shape."""
+
+    def describe(self) -> str:
+        """Return a description of the shape."""
+
+class Circle(Shape):
+    """A circle shape."""
+
+    def __init__(self, radius: float) -> None:
+
+    @property
+    def radius(self) -> float:
+        """The radius of the circle."""
+
+    @radius.setter
+    def radius(self, value: float) -> None:
+
+    def area(self) -> float:
+        """Calculate circle area."""
+
+    def perimeter(self) -> float:
+        """Calculate circle perimeter."""
+
+    @staticmethod
+    def from_diameter(diameter: float) -> "Circle":
+        """Create a circle from its diameter."""
+
+    @classmethod
+    def unit_circle(cls) -> "Circle":
+        """Create a unit circle with radius 1."""
+
+@timer
+@retry(max_attempts=5)
+def fetch_resource(url: str) -> dict:
+    """Fetch a resource from a URL with retry logic."""

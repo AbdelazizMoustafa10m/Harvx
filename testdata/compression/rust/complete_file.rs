@@ -1,0 +1,147 @@
+//! A simple HTTP server implementation.
+
+use std::collections::HashMap;
+use std::io::{self, Read, Write};
+use std::sync::Arc;
+
+/// Maximum number of connections allowed.
+const MAX_CONNECTIONS: usize = 100;
+
+/// Default timeout in seconds.
+pub const DEFAULT_TIMEOUT: u64 = 30;
+
+/// The global request counter.
+static REQUEST_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// A type alias for our Result type.
+pub type Result<T> = std::result::Result<T, ServerError>;
+
+/// Server error variants.
+#[derive(Debug, thiserror::Error)]
+pub enum ServerError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Connection refused")]
+    ConnectionRefused,
+    #[error("Timeout after {seconds}s")]
+    Timeout { seconds: u64 },
+}
+
+/// HTTP request representation.
+pub struct Request {
+    pub method: String,
+    pub path: String,
+    pub headers: HashMap<String, String>,
+    body: Vec<u8>,
+}
+
+/// HTTP response representation.
+#[derive(Debug)]
+pub struct Response {
+    pub status: u16,
+    pub headers: HashMap<String, String>,
+    pub body: Vec<u8>,
+}
+
+/// The handler trait for processing requests.
+pub trait Handler: Send + Sync + 'static {
+    /// Handle an incoming request.
+    fn handle(&self, req: &Request) -> Response;
+
+    /// Check if this handler can process the given path.
+    fn matches(&self, path: &str) -> bool;
+
+    /// Return a human-readable name for this handler.
+    fn name(&self) -> &str {
+        "unnamed"
+    }
+}
+
+/// The main HTTP server.
+pub struct Server {
+    addr: String,
+    handlers: Vec<Box<dyn Handler>>,
+    max_connections: usize,
+}
+
+impl Server {
+    /// Create a new server bound to the given address.
+    pub fn new(addr: &str) -> Self {
+        Server {
+            addr: addr.to_string(),
+            handlers: Vec::new(),
+            max_connections: MAX_CONNECTIONS,
+        }
+    }
+
+    /// Register a handler.
+    pub fn register(&mut self, handler: Box<dyn Handler>) {
+        self.handlers.push(handler);
+    }
+
+    /// Start the server.
+    pub fn start(&self) -> Result<()> {
+        println!("Starting server on {}", self.addr);
+        for handler in &self.handlers {
+            println!("  handler: {}", handler.name());
+        }
+        Ok(())
+    }
+
+    /// Find a handler for the given path.
+    fn find_handler(&self, path: &str) -> Option<&dyn Handler> {
+        for handler in &self.handlers {
+            if handler.matches(path) {
+                return Some(handler.as_ref());
+            }
+        }
+        None
+    }
+}
+
+impl Display for Server {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Server({})", self.addr)
+    }
+}
+
+/// A simple static file handler.
+pub struct StaticHandler {
+    root: String,
+}
+
+impl StaticHandler {
+    pub fn new(root: &str) -> Self {
+        StaticHandler { root: root.to_string() }
+    }
+}
+
+impl Handler for StaticHandler {
+    fn handle(&self, req: &Request) -> Response {
+        let path = format!("{}{}", self.root, req.path);
+        match std::fs::read(&path) {
+            Ok(body) => Response {
+                status: 200,
+                headers: HashMap::new(),
+                body,
+            },
+            Err(_) => Response {
+                status: 404,
+                headers: HashMap::new(),
+                body: b"Not Found".to_vec(),
+            },
+        }
+    }
+
+    fn matches(&self, path: &str) -> bool {
+        path.starts_with("/static/")
+    }
+}
+
+/// Run the server with default configuration.
+pub fn run_server(addr: &str) -> Result<()> {
+    let mut server = Server::new(addr);
+    let handler = StaticHandler::new("./public");
+    server.register(Box::new(handler));
+    server.start()
+}

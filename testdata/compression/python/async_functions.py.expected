@@ -1,0 +1,73 @@
+"""Async functions, context managers, and *args/**kwargs patterns."""
+
+import asyncio
+
+from typing import Any, AsyncIterator, Optional
+
+from contextlib import asynccontextmanager
+
+async def fetch_url(url: str, timeout: float = 30.0) -> bytes:
+    """Fetch content from a URL."""
+
+async def process_batch(
+    items: list[str],
+    *args: Any,
+    concurrency: int = 10,
+    **kwargs: Any,
+) -> list[dict]:
+    """Process a batch of items concurrently.
+
+    Args:
+        items: Items to process.
+        *args: Additional positional arguments.
+        concurrency: Maximum concurrent tasks.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        List of processing results.
+    """
+
+@asynccontextmanager
+async def managed_connection(
+    host: str,
+    port: int,
+    **kwargs: Any,
+) -> AsyncIterator[Any]:
+    """Async context manager for managed connections."""
+
+async def stream_data(
+    source: str,
+    chunk_size: int = 1024,
+) -> AsyncIterator[bytes]:
+    """Stream data from a source in chunks."""
+
+def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+    """Synchronous wrapper for running async functions."""
+
+async def gather_with_errors(
+    *coros: Any,
+    return_exceptions: bool = False,
+) -> list[Any]:
+    """Gather coroutines with optional error handling."""
+
+class AsyncProcessor:
+    """Async processor with lifecycle management."""
+
+    def __init__(self, name: str, workers: int = 4) -> None:
+        """Initialize the async processor."""
+
+    async def __aenter__(self) -> "AsyncProcessor":
+
+    async def __aexit__(self, *args: Any) -> None:
+
+    async def start(self) -> None:
+        """Start the processor."""
+
+    async def stop(self) -> None:
+        """Stop the processor."""
+
+    async def process(self, data: Any, **kwargs: Any) -> Optional[Any]:
+        """Process a single item."""
+
+    async def _do_process(self, data: Any, **kwargs: Any) -> Any:
+        """Internal processing logic."""

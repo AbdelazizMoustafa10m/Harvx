@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 48 |
+| Completed | 49 |
 | In Progress | 0 |
-| Not Started | 47 |
+| Not Started | 46 |
 
 ---
 
@@ -462,5 +462,29 @@
   - `testdata/compression/go/const_iota.go` + `.expected` -- Const blocks with iota, var blocks
   - `testdata/compression/go/imports.go` + `.expected` -- Various import patterns
   - `testdata/compression/go/full_file.go` + `.expected` -- Realistic complete Go file
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-046: Tier 1 Compressor -- Python and Rust
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `PythonCompressor` implementing `LanguageCompressor` interface with indentation-based state machine parser (9 states)
+  - Python extraction: imports, function/async function signatures, class declarations with method signatures and fields, decorators (@dataclass, @property, @staticmethod, @classmethod), docstrings (module/class/function), type-annotated assignments, `__all__` lists, Protocol classes
+  - Indentation-based scope tracking for Python's whitespace-significant syntax
+  - `RustCompressor` implementing `LanguageCompressor` interface with brace-tracking state machine parser (9 states)
+  - Rust extraction: use declarations, fn signatures (pub/pub(crate)/pub(super)/async/unsafe/const), structs (regular/tuple/unit with derive macros), enums with variants, traits with method signatures and associated types, impl blocks with method signatures, type aliases, const/static items, mod declarations, macro_rules! names, extern "C" blocks
+  - `rustCountBraces` handling raw strings (`r#"..."#`), string/char literals, line/block comments
+  - Doc comment (`///`, `//!`) and attribute (`#[...]`) attachment to declarations
+  - 8 Python golden test fixtures + 8 Rust golden test fixtures
+  - 35+ Python unit tests + 40+ Rust unit tests + 16 golden tests + 2 benchmarks
+- **Files created/modified:**
+  - `internal/compression/python.go` -- PythonCompressor with 9-state indentation-based parser
+  - `internal/compression/python_test.go` -- 35+ unit tests, 8 golden tests, 1 benchmark
+  - `internal/compression/python_golden_gen_test.go` -- Golden file regeneration helper
+  - `internal/compression/rust.go` -- RustCompressor with 9-state brace-tracking parser
+  - `internal/compression/rust_test.go` -- 40+ unit tests, 8 golden tests, 1 benchmark
+  - `testdata/compression/python/` -- 8 input fixtures + 8 expected outputs
+  - `testdata/compression/rust/` -- 8 input fixtures + 8 expected outputs
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

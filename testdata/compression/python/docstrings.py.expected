@@ -1,0 +1,80 @@
+"""
+Module-level docstring that spans
+multiple lines to test multi-line
+module docstring handling.
+"""
+
+import os
+
+from pathlib import Path
+
+def simple_docstring() -> None:
+    """A simple single-line docstring."""
+
+def multi_line_docstring(x: int, y: int) -> int:
+    """
+    Add two numbers together.
+
+    Args:
+        x: The first number.
+        y: The second number.
+
+    Returns:
+        The sum of x and y.
+    """
+
+def google_style_docstring(path: str) -> bool:
+    """Check if a file exists at the given path.
+
+    This function wraps os.path.exists with additional
+    logging and validation.
+
+    Args:
+        path: The filesystem path to check.
+
+    Returns:
+        True if the file exists, False otherwise.
+
+    Raises:
+        ValueError: If the path is empty.
+    """
+
+def single_quote_docstring() -> str:
+    '''Return a greeting using single-quote docstring.'''
+
+class Documented:
+    """A class with comprehensive documentation.
+
+    This class demonstrates various docstring patterns
+    used in Python code.
+
+    Attributes:
+        name: The name of the instance.
+        value: An integer value.
+    """
+
+    def __init__(self, name: str, value: int = 0) -> None:
+        """Initialize the Documented instance.
+
+        Args:
+            name: The name for this instance.
+            value: An optional integer value.
+        """
+
+    def method_with_docstring(self) -> str:
+        """Return the string representation."""
+
+    def method_without_docstring(self) -> int:
+
+    def method_multiline_docstring(self, factor: int) -> int:
+        """
+        Multiply the value by a factor.
+
+        Args:
+            factor: The multiplication factor.
+
+        Returns:
+            The multiplied value.
+        """
+
+def no_docstring(x: int) -> int:

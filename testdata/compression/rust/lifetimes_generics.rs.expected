@@ -1,0 +1,35 @@
+use std::collections::HashMap;
+
+/// Find the longest of two string slices.
+pub fn longest<'a>(x: &'a str, y: &'a str) -> &'a str
+
+/// Map items from one type to another.
+pub fn map_items<T, U>(items: Vec<T>, f: fn(T) -> U) -> Vec<U>
+
+/// Print all items that implement Display and Debug.
+pub fn print_all<T>(items: &[T]) where T: std::fmt::Display + std::fmt::Debug
+
+/// A generic cache with hash and equality constraints.
+pub struct Cache<K: Hash + Eq, V> {
+    data: HashMap<K, V>,
+    capacity: usize,
+}
+
+/// A reference wrapper with a lifetime.
+pub struct Ref<'a, T> {
+    inner: &'a T,
+}
+
+impl<K: Hash + Eq, V> Cache<K, V> {
+    pub fn new(capacity: usize) -> Self
+    pub fn get(&self, key: &K) -> Option<&V>
+    pub fn insert(&mut self, key: K, value: V) -> Option<V>
+}
+
+impl<'a, T> Ref<'a, T> {
+    pub fn new(inner: &'a T) -> Self
+    pub fn get(&self) -> &T
+}
+
+/// Convert with a where clause and multiple bounds.
+pub fn convert<T, U>(input: T) -> U where T: Into<U> + Clone, U: Default

@@ -1,0 +1,40 @@
+/// Create a vector of strings from string literals.
+macro_rules! vec_of_strings {
+    ($($s:expr),*) => {
+        vec![$($s.to_string()),*]
+    };
+}
+
+/// Implement Display for a type using its Debug impl.
+macro_rules! display_from_debug {
+    ($t:ty) => {
+        impl std::fmt::Display for $t {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "{:?}", self)
+            }
+        }
+    };
+}
+
+extern "C" {
+    fn abs(input: i32) -> i32;
+    fn strlen(s: *const c_char) -> usize;
+    fn malloc(size: usize) -> *mut c_void;
+    static errno: c_int;
+}
+
+/// FFI bindings for the system library.
+extern "system" {
+    fn GetLastError() -> u32;
+    fn SetLastError(code: u32);
+}
+
+/// An unsafe extern function.
+pub unsafe extern "C" fn dangerous_callback(ptr: *const u8) -> i32 {
+    *ptr as i32
+}
+
+/// A safe function after the extern blocks.
+pub fn safe_wrapper(value: i32) -> i32 {
+    unsafe { abs(value) }
+}
