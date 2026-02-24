@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 45 |
+| Completed | 46 |
 | In Progress | 0 |
-| Not Started | 50 |
+| Not Started | 49 |
 
 ---
 
@@ -382,5 +382,27 @@
   - **`CompiledModule` (not `api.Module`)** -- Registry compiles and caches WASM; instantiation with host functions deferred to T-043+ parser layer
   - **`grammars/` package at module root** -- Go `//go:embed` forbids `..` paths; separate package cleanly exports embedded FS
   - **Double-checked locking** -- RLock fast path for cache hits, Lock only for compilation, re-check after write lock acquisition
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-043: Language Detection and LanguageCompressor Interface
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `LanguageCompressor` interface with `Compress`, `Language`, `SupportedNodeTypes` methods
+  - `SignatureKind` enum (9 kinds: function, class, struct, interface, type, import, export, constant, doc_comment) with `String()` method
+  - `Signature` struct capturing extracted code elements with source-order line numbers
+  - `CompressedOutput` struct with `Render()` (joins signatures with blank-line separators) and `CompressionRatio()` methods
+  - `LanguageDetector` mapping 24 file extensions to 12 language identifiers across Tier 1 (typescript, javascript, go, python, rust) and Tier 2 (java, c, cpp, json, yaml, toml)
+  - `CompressorRegistry` with `Register`, `Get`, `GetByLanguage`, `IsSupported`, `Languages` methods
+  - 21 detector tests: all extensions, unknown extensions, case sensitivity, ambiguous `.h`, nested paths, defensive copy, count
+  - 14 registry/types tests: registry CRUD, replacement, multi-compressor dispatch, `SignatureKind.String()`, `Render()`, `CompressionRatio()`, source ordering
+- **Files created/modified:**
+  - `internal/compression/types.go` -- `SignatureKind`, `Signature`, `CompressedOutput` types with `Render()` and `CompressionRatio()` methods
+  - `internal/compression/interface.go` -- `LanguageCompressor` interface definition
+  - `internal/compression/detector.go` -- `LanguageDetector` with 24 extension-to-language mappings and `SupportedExtensions()` copy method
+  - `internal/compression/registry.go` -- `CompressorRegistry` with register/lookup/dispatch by file path or language
+  - `internal/compression/detector_test.go` -- 7 test functions with 65+ subtests for language detection
+  - `internal/compression/registry_test.go` -- 14 test functions covering registry operations and type behavior
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
