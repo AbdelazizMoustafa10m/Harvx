@@ -1,0 +1,39 @@
+#include <iostream>
+
+#include <vector>
+
+#include <string>
+
+#define MAX_SIZE
+
+using StringVec = std::vector<std::string>;
+
+enum class LogLevel {
+    Debug,
+    Info,
+    Error
+};
+
+struct Config {
+    std::string host;
+    int port;
+};
+
+class Logger {
+public:
+private:
+    std::string name_;
+
+    Logger(const std::string& name) : name_(name) { ... }
+
+    void log(LogLevel level, const std::string& msg) { ... }
+
+    const std::string& name() const { ... }
+};
+
+namespace utils {
+int helper(int x)
+}
+
+template<typename T>
+T clamp(T value, T low, T high)

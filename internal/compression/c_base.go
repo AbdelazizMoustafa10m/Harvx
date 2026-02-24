@@ -131,15 +131,24 @@ func isCFuncDefinition(trimmed string) bool {
 			return false
 		}
 	}
-	// Must not be a struct/enum/union definition.
-	if strings.HasPrefix(trimmed, "struct ") || strings.HasPrefix(trimmed, "enum ") ||
-		strings.HasPrefix(trimmed, "union ") || strings.HasPrefix(trimmed, "typedef ") {
+	// Must not be a union definition or typedef (without struct/enum return type).
+	if strings.HasPrefix(trimmed, "union ") || strings.HasPrefix(trimmed, "typedef ") {
 		return false
 	}
 	// The '{' must come after ')' to be a function definition.
 	parenClose := strings.LastIndex(trimmed, ")")
 	braceOpen := strings.Index(trimmed, "{")
-	return parenClose != -1 && braceOpen > parenClose
+	if parenClose == -1 || braceOpen <= parenClose {
+		return false
+	}
+	// For lines starting with struct/enum, the '(' must come before '{'
+	// to distinguish function definitions (with struct/enum return types)
+	// from struct/enum declarations.
+	if strings.HasPrefix(trimmed, "struct ") || strings.HasPrefix(trimmed, "enum ") {
+		parenOpen := strings.Index(trimmed, "(")
+		return parenOpen != -1 && parenOpen < braceOpen
+	}
+	return true
 }
 
 // isCFuncPrototype detects function prototypes (declarations ending with ;).
@@ -154,37 +163,82 @@ func isCFuncPrototype(trimmed string) bool {
 			return false
 		}
 	}
-	// Must not be typedef, struct, enum, union, #include, etc.
+	// Must not be typedef, union, or preprocessor.
 	if strings.HasPrefix(trimmed, "typedef ") || strings.HasPrefix(trimmed, "#") ||
-		strings.HasPrefix(trimmed, "struct ") || strings.HasPrefix(trimmed, "enum ") ||
 		strings.HasPrefix(trimmed, "union ") {
 		return false
 	}
 	// Must have ')' before the ';'.
 	semiIdx := strings.LastIndex(trimmed, ";")
 	parenClose := strings.LastIndex(trimmed, ")")
-	return parenClose != -1 && parenClose < semiIdx
+	if parenClose == -1 || parenClose >= semiIdx {
+		return false
+	}
+	// Lines starting with struct/enum are prototypes only if they have
+	// the pattern of a function prototype (identifier + parens), not a
+	// forward declaration like "struct Foo;".
+	if strings.HasPrefix(trimmed, "struct ") || strings.HasPrefix(trimmed, "enum ") {
+		// Must have parens -- already checked above.
+		return true
+	}
+	return true
 }
 
 // isCStructDecl detects struct declarations.
+// It returns false for function definitions that have a struct return type,
+// such as "struct Config *config_new(const char *host, int port) {".
 func isCStructDecl(trimmed string) bool {
 	s := trimmed
 	// Strip static/extern qualifiers.
 	s = strings.TrimPrefix(s, "static ")
 	s = strings.TrimPrefix(s, "extern ")
-	return strings.HasPrefix(s, "struct ") ||
-		(strings.HasPrefix(trimmed, "typedef struct") &&
-			(strings.Contains(trimmed, "{") || strings.Contains(trimmed, ";")))
+	if !strings.HasPrefix(s, "struct ") &&
+		!(strings.HasPrefix(trimmed, "typedef struct") &&
+			(strings.Contains(trimmed, "{") || strings.Contains(trimmed, ";"))) {
+		return false
+	}
+	// If the line has '(' before '{', it is a function with a struct return type,
+	// not a struct declaration.
+	parenIdx := strings.Index(s, "(")
+	braceIdx := strings.Index(s, "{")
+	if parenIdx != -1 {
+		// Has parens. If there is no brace or the paren comes before the brace,
+		// this looks like a function, not a struct declaration.
+		if braceIdx == -1 || parenIdx < braceIdx {
+			// Exception: "typedef struct" with a brace is always a struct.
+			if strings.HasPrefix(trimmed, "typedef struct") {
+				return true
+			}
+			return false
+		}
+	}
+	return true
 }
 
 // isCEnumDecl detects enum declarations.
+// It returns false for function definitions that have an enum return type.
 func isCEnumDecl(trimmed string) bool {
 	s := trimmed
 	s = strings.TrimPrefix(s, "static ")
 	s = strings.TrimPrefix(s, "extern ")
-	return strings.HasPrefix(s, "enum ") ||
-		(strings.HasPrefix(trimmed, "typedef enum") &&
-			(strings.Contains(trimmed, "{") || strings.Contains(trimmed, ";")))
+	if !strings.HasPrefix(s, "enum ") &&
+		!(strings.HasPrefix(trimmed, "typedef enum") &&
+			(strings.Contains(trimmed, "{") || strings.Contains(trimmed, ";"))) {
+		return false
+	}
+	// If the line has '(' before '{', it is a function with an enum return type,
+	// not an enum declaration.
+	parenIdx := strings.Index(s, "(")
+	braceIdx := strings.Index(s, "{")
+	if parenIdx != -1 {
+		if braceIdx == -1 || parenIdx < braceIdx {
+			if strings.HasPrefix(trimmed, "typedef enum") {
+				return true
+			}
+			return false
+		}
+	}
+	return true
 }
 
 // isCTypedef detects typedef statements.

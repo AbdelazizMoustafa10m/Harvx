@@ -1,0 +1,33 @@
+#include <stdio.h>
+
+#include <stdlib.h>
+
+#include <string.h>
+
+#define VERSION
+
+#define MAX(a, b)
+
+struct Point {
+    int x;
+    int y;
+};
+
+enum Color {
+    RED,
+    GREEN,
+    BLUE
+};
+
+typedef void (*callback_t)(int);
+
+static int counter = 0;
+
+/**
+ * Create a new point.
+ */
+struct Point *point_new(int x, int y)
+
+void point_free(struct Point *p)
+
+int point_distance(const struct Point *a, const struct Point *b)

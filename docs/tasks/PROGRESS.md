@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 49 |
+| Completed | 50 |
 | In Progress | 0 |
-| Not Started | 46 |
+| Not Started | 45 |
 
 ---
 
@@ -486,5 +486,28 @@
   - `internal/compression/rust_test.go` -- 40+ unit tests, 8 golden tests, 1 benchmark
   - `testdata/compression/python/` -- 8 input fixtures + 8 expected outputs
   - `testdata/compression/rust/` -- 8 input fixtures + 8 expected outputs
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-047: Tier 2 Compressor -- Java, C, and C++
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `JavaCompressor` implementing `LanguageCompressor` with 7-state line-by-line parser extracting: package/import declarations, class/interface/enum/annotation-type/record declarations, method/constructor signatures (bodies excluded), Javadoc and annotation attachment, nested class headers
+  - `CCompressor` implementing `LanguageCompressor` with 6-state parser extracting: `#include`/`#define` directives, function definitions and prototypes (bodies excluded), struct/enum declarations with fields, typedef statements, forward declarations, global variable declarations
+  - `CppCompressor` implementing `LanguageCompressor` with 8-state parser extending C extraction with: class declarations (with access specifiers, member extraction), template declarations, namespace definitions (with nested extraction), using declarations, enum class/struct, virtual/override/const/noexcept qualifiers, operator overloading, multiple inheritance
+  - Shared `c_base.go` with `cCountBraces`, `cExtractIdentifier`, detection helpers for preprocessor directives, function definitions, struct/enum/typedef, doc comment accumulation
+  - 4 C golden test fixtures + 4 C++ golden test fixtures
+  - Comprehensive test suites: 30+ Java tests, 25+ C tests, 25+ C++ tests, 2 benchmarks
+- **Files created/modified:**
+  - `internal/compression/java.go` -- Java compressor with 7-state parser
+  - `internal/compression/java_test.go` -- 30+ unit tests covering all Java declaration types
+  - `internal/compression/c_base.go` -- Shared C/C++ helpers (brace counting, detection, doc comments)
+  - `internal/compression/clang.go` -- C compressor with 6-state parser
+  - `internal/compression/clang_test.go` -- 25+ unit tests and 4 golden tests
+  - `internal/compression/cpp.go` -- C++ compressor with 8-state parser extending C
+  - `internal/compression/cpp_test.go` -- 25+ unit tests and 4 golden tests
+  - `testdata/compression/c/` -- 4 input fixtures + 4 expected outputs
+  - `testdata/compression/cpp/` -- 4 input fixtures + 4 expected outputs
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
