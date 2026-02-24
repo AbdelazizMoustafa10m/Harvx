@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 44 |
+| Completed | 45 |
 | In Progress | 0 |
-| Not Started | 51 |
+| Not Started | 50 |
 
 ---
 
@@ -353,4 +353,34 @@
 - `go test ./...` pass
 
 ---
+
+### T-042: Wazero WASM Runtime Setup and Grammar Embedding
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `GrammarRegistry` with wazero runtime initialization, lazy WASM module compilation, double-checked locking cache, concurrent access safety
+  - Grammar embedding package (`grammars/embed.go`) with `//go:embed *.wasm` for 8 tree-sitter languages (TypeScript, JavaScript, Go, Python, Rust, Java, C, C++)
+  - Grammar WASM files from Sourcegraph `tree-sitter-wasms` npm v0.1.13 (~10.4 MB total)
+  - `SupportedLanguages()`, `HasLanguage()`, `Close()`, `Runtime()` methods on registry
+  - `ErrUnknownLanguage` sentinel error with `errors.Is` support
+  - Fetch script (`scripts/fetch-grammars.sh`) with unpkg.com primary CDN and jsDelivr fallback
+  - 13 unit tests: language loading, caching, unknown language errors, concurrent access, context cancellation, resource cleanup
+  - 3 benchmarks: cold start per-grammar, warm cache retrieval, all-grammars compilation
+- **Files created/modified:**
+  - `grammars/embed.go` -- Grammar embedding package with `embed.FS` and `GrammarFiles` map
+  - `grammars/README.md` -- Grammar documentation with sizes, sources, license info
+  - `grammars/tree-sitter-{typescript,javascript,go,python,rust,java,c,cpp}.wasm` -- Embedded WASM grammar files
+  - `internal/compression/wasm.go` -- `GrammarRegistry` with lazy compilation, double-checked locking, `slog` logging
+  - `internal/compression/wasm_test.go` -- 13 unit tests including concurrent access and context cancellation
+  - `internal/compression/wasm_bench_test.go` -- 3 benchmarks (cold start, warm cache, all grammars)
+  - `scripts/fetch-grammars.sh` -- Grammar download script with CDN fallback
+  - `go.mod` / `go.sum` -- Added `github.com/tetratelabs/wazero v1.11.0`
+  - `.gitignore` -- Added `!grammars/*.wasm` negation
+- **Key decisions:**
+  - **Direct wazero over malivvan/tree-sitter** -- malivvan only supports C/C++, is pre-release (v0.0.1, 2 stars); direct wazero v1.11.0 is stable and gives full control
+  - **`CompiledModule` (not `api.Module`)** -- Registry compiles and caches WASM; instantiation with host functions deferred to T-043+ parser layer
+  - **`grammars/` package at module root** -- Go `//go:embed` forbids `..` paths; separate package cleanly exports embedded FS
+  - **Double-checked locking** -- RLock fast path for cache hits, Lock only for compilation, re-check after write lock acquisition
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
