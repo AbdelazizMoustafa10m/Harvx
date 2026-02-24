@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 47 |
+| Completed | 48 |
 | In Progress | 0 |
-| Not Started | 48 |
+| Not Started | 47 |
 
 ---
 
@@ -435,5 +435,32 @@
   - **Shared `jsParser` with config flags** -- TypeScript and JavaScript share 95% of extraction logic; `jsParserConfig` booleans control TS-specific features
   - **Separate class doc/decorator tracking** -- `classDocComment`/`classDecorators` fields prevent member-level doc comments from overwriting class-level ones
   - **Verbatim extraction** -- all source text preserved exactly as written; function/method bodies replaced with `{ ... }` markers
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-045: Tier 1 Compressor -- Go
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `GoCompressor` implementing `LanguageCompressor` interface with line-by-line state machine parser
+  - 8-state parser (`goStateTopLevel`, `goStateInLineComment`, `goStateInBlockComment`, `goStateInImport`, `goStateInType`, `goStateInConst`, `goStateInVar`, `goStateInFunc`)
+  - Extracts: package clauses, import blocks, function/method signatures (excluding bodies), struct declarations (with tags), interface declarations, type aliases/definitions, const/var blocks (including iota), doc comments
+  - Go-specific `goCountBraces` handling double-quoted strings, backtick raw strings (struct tags), rune literals, line comments, block comments
+  - `findFuncBodyBrace` correctly identifies function body `{` vs `interface{}` braces in parameter types
+  - Grouped declaration support: `type (...)`, `const (...)`, `var (...)` blocks using `trimmed == ")"` termination to avoid false positives from `)` inside expressions
+  - 8 golden test fixtures covering: simple functions, methods with receivers, structs with tags/embedding, interfaces with embedding, generics (Go 1.18+), const/iota blocks, import patterns, full realistic file
+  - 43+ unit tests covering all node types, edge cases, doc comments, build constraints, context cancellation
+  - 1 benchmark for compression throughput
+- **Files created/modified:**
+  - `internal/compression/golang.go` -- GoCompressor with 8-state line-by-line parser, signature extraction, Go-specific brace counting
+  - `internal/compression/golang_test.go` -- 8 golden tests, 43+ unit tests, 1 benchmark
+  - `testdata/compression/go/simple_func.go` + `.expected` -- Basic function declarations
+  - `testdata/compression/go/methods.go` + `.expected` -- Methods with receivers
+  - `testdata/compression/go/structs.go` + `.expected` -- Struct declarations with tags and embedding
+  - `testdata/compression/go/interfaces.go` + `.expected` -- Interface declarations with embedding
+  - `testdata/compression/go/generics.go` + `.expected` -- Generic types and functions
+  - `testdata/compression/go/const_iota.go` + `.expected` -- Const blocks with iota, var blocks
+  - `testdata/compression/go/imports.go` + `.expected` -- Various import patterns
+  - `testdata/compression/go/full_file.go` + `.expected` -- Realistic complete Go file
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

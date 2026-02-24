@@ -1,0 +1,28 @@
+package server
+
+import (
+	"net/http"
+	"sync"
+)
+
+// Server handles HTTP requests.
+type Server struct {
+	addr    string
+	handler http.Handler
+	mu      sync.Mutex
+}
+
+// NewServer creates a new Server.
+func NewServer(addr string, handler http.Handler) *Server
+
+// Start begins listening on the configured address.
+func (s *Server) Start() error
+
+// Shutdown gracefully stops the server.
+func (s *Server) Shutdown()
+
+// String returns a string representation.
+func (s Server) String() string
+
+// unexported method with pointer receiver
+func (s *Server) reset()
