@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 58 |
+| Completed | 59 |
 | In Progress | 0 |
-| Not Started | 37 |
+| Not Started | 36 |
 
 ---
 
@@ -543,5 +543,28 @@
   - `internal/output/writer_test.go` -- 20+ unit tests covering stdout/file modes, atomic writes, hash consistency, path resolution, error cases
   - `internal/output/format.go` -- Format constants, NewRenderer factory, ExtensionForFormat, DefaultOutputPath, ResolveOutputPath
   - `internal/output/format_test.go` -- Table-driven tests for renderer factory, extension mapping, path resolution
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-056: Output Splitter (Multi-Part File Generation)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `Splitter` with greedy bin-packing algorithm that assigns files to parts respecting tier boundaries and file atomicity (no file split across parts)
+  - `PartData` and `PartResult` types for per-part render data and metadata
+  - `SplitOpts` configuration with tokens-per-part budget, format, and overhead estimation
+  - Directory coherence: soft preference to keep same-tier files from the same top-level directory together (15% overflow tolerance)
+  - Part 1 includes directory tree and file summary; Parts 2+ include minimal header referencing Part 1
+  - `PartPath` helper inserting `.part-NNN` before file extension with 3-digit zero-padding
+  - `WriteSplit` method on `OutputWriter` orchestrating multi-part rendering (file and stdout modes)
+  - `--split` CLI flag (int, default 0 = disabled) with validation rejecting negative values
+  - Oversized single files get their own part with `slog.Warn`
+  - Single-part passthrough when all files fit (no `.part-NNN` suffix)
+- **Files created/modified:**
+  - `internal/output/splitter.go` -- Splitter, SplitOpts, PartData, PartResult, SplitOutputOpts, Split, WriteSplit, PartPath, assignFilesToParts, buildPartRenderData
+  - `internal/output/splitter_test.go` -- 60 unit tests + 3 benchmarks covering all acceptance criteria, edge cases, XML/Markdown, stdout/file modes
+  - `internal/output/writer.go` -- Added Parts []PartResult field to OutputResult
+  - `internal/config/flags.go` -- Added Split int field to FlagValues, --split flag registration, validation
+  - `internal/config/flags_test.go` -- 4 tests for --split flag (default, explicit, negative rejected, zero valid)
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

@@ -815,3 +815,50 @@ func TestFailOnRedactionFlag_DefaultIsFalse(t *testing.T) {
 	assert.False(t, fv.FailOnRedaction,
 		"--fail-on-redaction must default to false (CI mode is opt-in)")
 }
+
+// --- T-056: Split flag tests ---
+
+func TestSplitFlagDefault(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fv.Split)
+}
+
+func TestSplitFlagExplicit(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--split", "50000"})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 50000, fv.Split)
+}
+
+func TestSplitFlagNegativeRejected(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--split", "-100"})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--split")
+	assert.Contains(t, err.Error(), "non-negative")
+}
+
+func TestSplitFlagZeroIsValid(t *testing.T) {
+	cmd, fv := newTestCommand()
+	cmd.SetArgs([]string{"--split", "0"})
+	require.NoError(t, cmd.Execute())
+
+	skipLargeFilesRaw = "1MB"
+	err := ValidateFlags(fv, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fv.Split)
+}

@@ -42,6 +42,10 @@ type OutputResult struct {
 
 	// BytesWritten is the total number of bytes written to the output.
 	BytesWritten int64
+
+	// Parts holds per-part metadata when split mode is used. Nil for
+	// single-file output.
+	Parts []PartResult
 }
 
 // OutputWriter orchestrates rendering output to a file or stdout. It coordinates
