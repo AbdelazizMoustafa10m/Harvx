@@ -1,0 +1,16 @@
+import express from 'express';
+
+import { authenticate } from './middleware';
+
+const router
+
+/** Get all users */
+function getUsers(req, res)
+
+/** Create a new user */
+async function createUser(req, res)
+
+/** Delete a user by ID */
+function deleteUser(req, res)
+
+export default router;

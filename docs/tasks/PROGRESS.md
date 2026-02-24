@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 46 |
+| Completed | 47 |
 | In Progress | 0 |
-| Not Started | 49 |
+| Not Started | 48 |
 
 ---
 
@@ -404,5 +404,36 @@
   - `internal/compression/registry.go` -- `CompressorRegistry` with register/lookup/dispatch by file path or language
   - `internal/compression/detector_test.go` -- 7 test functions with 65+ subtests for language detection
   - `internal/compression/registry_test.go` -- 14 test functions covering registry operations and type behavior
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-044: Tier 1 Compressor -- TypeScript and JavaScript
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `TypeScriptCompressor` and `JavaScriptCompressor` implementing `LanguageCompressor` interface
+  - Shared `jsParser` line-by-line state machine parser extracting structural signatures (functions, classes, interfaces, type aliases, enums, imports, exports, constants, doc comments, decorators)
+  - TypeScript-specific extraction: interfaces, type aliases, enums, type annotations
+  - JavaScript extraction: functions, classes, arrow functions, imports, exports, constants, doc comments
+  - Brace depth tracking with string-awareness (ignores braces in quotes/backticks)
+  - Doc comment and decorator attachment to following declarations
+  - Class body member extraction (field declarations + method signatures, no bodies)
+  - 10 TypeScript fixture files + 10 expected outputs for golden tests
+  - 5 JavaScript fixture files + 4 expected outputs for golden tests
+  - 9 TypeScript golden tests + 20+ unit tests + 2 benchmarks
+  - 4 JavaScript golden tests + 14+ unit tests + 1 benchmark
+- **Files created/modified:**
+  - `internal/compression/js_base.go` -- Shared JS/TS parsing engine with state machine, detection helpers, extraction helpers, brace counting
+  - `internal/compression/typescript.go` -- `TypeScriptCompressor` with full TS extraction (interfaces, types, enums, type annotations)
+  - `internal/compression/javascript.go` -- `JavaScriptCompressor` with JS-only extraction (no TS-specific features)
+  - `internal/compression/typescript_test.go` -- 9 golden tests, 20+ unit tests, 2 benchmarks
+  - `internal/compression/javascript_test.go` -- 4 golden tests, 14+ unit tests, 1 benchmark
+  - `testdata/compression/typescript/` -- 10 input fixtures + 10 expected outputs
+  - `testdata/compression/javascript/` -- 5 input fixtures + 4 expected outputs
+- **Key decisions:**
+  - **State machine over tree-sitter WASM** -- Sourcegraph WASM grammars are Emscripten SIDE_MODULE builds incompatible with standalone wazero instantiation; implemented robust line-by-line parser per PRD fallback plan
+  - **Shared `jsParser` with config flags** -- TypeScript and JavaScript share 95% of extraction logic; `jsParserConfig` booleans control TS-specific features
+  - **Separate class doc/decorator tracking** -- `classDocComment`/`classDecorators` fields prevent member-level doc comments from overwriting class-level ones
+  - **Verbatim extraction** -- all source text preserved exactly as written; function/method bodies replaced with `{ ... }` markers
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

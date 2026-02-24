@@ -1,0 +1,25 @@
+/**
+ * Represents a configuration object for the application.
+ * @property name - The application name
+ * @property version - The semantic version string
+ */
+interface AppConfig {
+  name: string;
+  version: string;
+  debug: boolean;
+}
+
+/** Loads configuration from disk */
+function loadConfig(path: string): AppConfig {
+  const data = readFileSync(path, 'utf-8');
+  return JSON.parse(data);
+}
+
+/**
+ * Validates the given configuration.
+ * @param config - The configuration to validate
+ * @returns true if valid, false otherwise
+ */
+function validateConfig(config: AppConfig): boolean {
+  return config.name.length > 0 && config.version.length > 0;
+}

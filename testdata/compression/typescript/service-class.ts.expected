@@ -1,0 +1,24 @@
+import { Injectable } from '@nestjs/common';
+
+import { Database } from './database';
+
+import type { Logger } from './logger';
+
+/** User service handles all user-related operations */
+@Injectable()
+class UserService extends BaseService {
+  private db: Database;
+  private logger: Logger;
+
+  constructor(db: Database, logger: Logger) { ... }
+
+  async getUser(id: string): Promise<User> { ... }
+
+  async updateUser(id: string, data: Partial<User>): Promise<User> { ... }
+
+  private validate(data: unknown): boolean { ... }
+
+  get serviceName(): string { ... }
+}
+
+export { UserService };
