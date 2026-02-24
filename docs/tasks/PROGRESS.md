@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 53 |
+| Completed | 54 |
 | In Progress | 0 |
-| Not Started | 42 |
+| Not Started | 41 |
 
 ---
 
@@ -432,4 +432,27 @@
 - `go test ./...` pass
 
 ---
+
+### T-051: Directory Tree Builder (In-Memory Tree + Rendering)
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `TreeNode` nested struct with `BuildTree` (flat path list → in-memory tree) and `RenderTree` (Unicode box-drawing output with emoji indicators)
+  - Directory collapsing: single-child directory chains merge into combined paths (e.g., `src/utils/helpers/`)
+  - Sorting: directories before files, both alphabetically case-insensitive
+  - `TreeRenderOpts` with `MaxDepth` (truncates with `...`), `ShowSize`, and `ShowTokens` metadata annotations
+  - Human-readable size formatting (B, KB, MB, GB)
+- **Files created/modified:**
+  - `internal/output/tree.go` -- TreeNode, FileEntry, TreeRenderOpts types; BuildTree, RenderTree, collapseTree, sortTree, humanizeSize functions
+  - `internal/output/tree_test.go` -- 27 unit tests + 4 golden tests + 3 benchmarks covering hierarchy, sorting, collapsing, depth limits, metadata, Unicode, edge cases
+  - `internal/output/testdata/golden/tree-basic.golden` -- Golden test: basic tree rendering
+  - `internal/output/testdata/golden/tree-with-metadata.golden` -- Golden test: size and token annotations
+  - `internal/output/testdata/golden/tree-collapsed.golden` -- Golden test: collapsed directory chains
+  - `internal/output/testdata/golden/tree-depth-limited.golden` -- Golden test: MaxDepth=2 truncation
+  - `testdata/expected-output/tree-basic.txt` -- Reference output: basic tree
+  - `testdata/expected-output/tree-with-metadata.txt` -- Reference output: metadata annotations
+  - `testdata/expected-output/tree-collapsed.txt` -- Reference output: collapsed dirs
+  - `testdata/expected-output/tree-depth-limited.txt` -- Reference output: depth limit
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
