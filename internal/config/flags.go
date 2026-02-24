@@ -46,6 +46,10 @@ type FlagValues struct {
 	TokenCountOnly     bool   // Report token counts only, no output file generated
 	TopFiles           int    // Show N largest files by token count (0 = disabled)
 	Heatmap            bool   // Show token density heatmap (preview only)
+
+	// Compression flags (T-049)
+	Compress        bool // Enable tree-sitter compression
+	CompressTimeout int  // Per-file timeout in milliseconds (default: 5000)
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -80,6 +84,10 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 	pf.StringVar(&fv.TruncationStrategy, "truncation-strategy", "skip", "Budget overflow: truncate or skip")
 	pf.BoolVar(&fv.TokenCountOnly, "token-count", false, "Report token counts only, no output file generated")
 	pf.IntVar(&fv.TopFiles, "top-files", 0, "Show N largest files by token count (0 = disabled)")
+
+	// Compression flags (T-049)
+	pf.BoolVar(&fv.Compress, "compress", false, "Enable tree-sitter code compression")
+	pf.IntVar(&fv.CompressTimeout, "compress-timeout", 5000, "Per-file compression timeout in milliseconds")
 
 	return fv
 }
@@ -153,6 +161,11 @@ func ValidateFlags(fv *FlagValues, cmd *cobra.Command) error {
 		// valid
 	default:
 		return fmt.Errorf("--truncation-strategy: invalid value %q (allowed: truncate, skip)", fv.TruncationStrategy)
+	}
+
+	// Validate --compress-timeout
+	if fv.CompressTimeout <= 0 {
+		return fmt.Errorf("--compress-timeout: must be a positive integer, got %d", fv.CompressTimeout)
 	}
 
 	// Normalize --filter: strip leading dots

@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 51 |
+| Completed | 52 |
 | In Progress | 0 |
-| Not Started | 44 |
+| Not Started | 43 |
 
 ---
 
@@ -534,5 +534,29 @@
   - `testdata/compression/json/{package,tsconfig,simple}.json` -- JSON test fixtures
   - `testdata/compression/yaml/{docker-compose,github-workflow,simple}.yml` -- YAML test fixtures
   - `testdata/compression/toml/{cargo,pyproject,simple}.toml` -- TOML test fixtures
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-049: Compression Orchestrator and Pipeline Integration
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `Orchestrator` struct coordinating language detection, compressor dispatch, timeout enforcement, and parallel execution via `errgroup.SetLimit`
+  - `CompressibleFile` type (package-local DTO to avoid import cycles between compression and pipeline)
+  - `CompressionConfig` with `Enabled`, `TimeoutPerFile`, `Concurrency` fields and `DefaultCompressionConfig()` constructor
+  - `CompressionStats` with atomic-safe counters (`FilesCompressed`, `FilesFailed`, `FilesSkipped`, `FilesTimedOut`, `OriginalTokens`, `CompressedTokens`) and computed methods (`TotalFiles`, `TokenSavings`, `AverageRatio`, `String`)
+  - `CompressedMarker` constant (`<!-- Compressed: signatures only -->`) prepended to all compressed output
+  - `ProgressFunc` callback type for TUI/CLI progress reporting
+  - Pipeline integration: `--compress` and `--compress-timeout` CLI flags, `buildCompressionConfig` helper
+  - Graceful error handling: unsupported language → skip, parse error → keep original, timeout → keep original, context cancellation → propagate
+  - All 11 built-in compressors registered (TypeScript, JavaScript, Go, Python, Rust, Java, C, C++, JSON, YAML, TOML)
+- **Files created/modified:**
+  - `internal/compression/orchestrator.go` -- Orchestrator with parallel compression, timeout enforcement, progress reporting
+  - `internal/compression/stats.go` -- Atomic-safe CompressionStats type with helper methods
+  - `internal/compression/orchestrator_test.go` -- 19 tests + 1 benchmark covering all orchestrator behavior
+  - `internal/compression/stats_test.go` -- 8 tests covering atomic counters, calculations, concurrent safety
+  - `internal/compression/types.go` -- Removed duplicate CompressionConfig (moved to orchestrator.go)
+  - `internal/config/flags.go` -- Added `--compress` and `--compress-timeout` flags with validation
+  - `internal/pipeline/pipeline.go` -- Added compression step with `buildCompressionConfig` helper
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
