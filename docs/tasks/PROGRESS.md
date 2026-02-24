@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 57 |
+| Completed | 58 |
 | In Progress | 0 |
-| Not Started | 38 |
+| Not Started | 37 |
 
 ---
 
@@ -523,5 +523,25 @@
   - `internal/output/hash_test.go` -- 29 unit tests + 3 benchmarks covering determinism, order independence, stability, null byte separation, Unicode paths, empty inputs, incremental equivalence
   - `go.mod` -- Added `github.com/zeebo/xxh3 v1.1.0` dependency
   - `go.sum` -- Updated with xxh3 and klauspost/cpuid transitive dependencies
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-055: Output Writer, File Path Resolution, and Stdout Support
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `OutputWriter` orchestration layer coordinating renderer, content hasher, and output destination (file or stdout)
+  - `OutputOpts` and `OutputResult` structs for write configuration and structured results
+  - Atomic file writes: `os.CreateTemp` → render → `Sync` → `Close` → `os.Rename` with deferred cleanup on error
+  - Stdout mode with `io.MultiWriter` for simultaneous streaming and XXH3 hash computation
+  - Format dispatch factory (`NewRenderer`) returning `MarkdownRenderer` or `XMLRenderer`
+  - Output path resolution with 3-tier precedence: CLI flag → profile config → default path
+  - Automatic file extension appending (`.md`/`.xml`) when path has no extension
+  - `countingWriter` helper for tracking bytes written during streaming
+- **Files created/modified:**
+  - `internal/output/writer.go` -- OutputWriter, OutputOpts, OutputResult, countingWriter, Write/writeStdout/writeFile methods
+  - `internal/output/writer_test.go` -- 20+ unit tests covering stdout/file modes, atomic writes, hash consistency, path resolution, error cases
+  - `internal/output/format.go` -- Format constants, NewRenderer factory, ExtensionForFormat, DefaultOutputPath, ResolveOutputPath
+  - `internal/output/format_test.go` -- Table-driven tests for renderer factory, extension mapping, path resolution
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
