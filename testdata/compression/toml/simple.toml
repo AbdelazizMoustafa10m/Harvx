@@ -1,0 +1,9 @@
+# Simple TOML config
+title = "My Application"
+version = 1
+debug = true
+
+[database]
+host = "localhost"
+port = 5432
+name = "mydb"

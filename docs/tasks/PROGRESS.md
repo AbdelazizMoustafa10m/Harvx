@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 50 |
+| Completed | 51 |
 | In Progress | 0 |
-| Not Started | 45 |
+| Not Started | 44 |
 
 ---
 
@@ -509,5 +509,30 @@
   - `internal/compression/cpp_test.go` -- 25+ unit tests and 4 golden tests
   - `testdata/compression/c/` -- 4 input fixtures + 4 expected outputs
   - `testdata/compression/cpp/` -- 4 input fixtures + 4 expected outputs
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-048: Tier 2 Config Compressors (JSON/YAML/TOML) and Unsupported Language Fallback
+
+- **Status:** Completed
+- **Date:** 2026-02-24
+- **What was built:**
+  - `JSONCompressor` using `encoding/json` -- decodes to `interface{}`, walks structure recursively: objects compressed to depth 2, arrays > 5 items collapsed to `/* N items */`, strings truncated at 50 chars, invalid JSON falls back to full content
+  - `YAMLCompressor` using line-based parsing (no external library) -- tracks indentation depth, preserves comments at depth <= 2, collapses lists > 5 items with `# ... (N more items)`, truncates multi-line block scalars to 3 lines, truncates long string values at 80 chars
+  - `TOMLCompressor` using line-based parsing (no external library) -- preserves section headers `[section]` and `[[array]]`, comments, blank lines; collapses inline arrays > 5 items to `[/* N items */]`, collapses multi-line arrays to item count, truncates long strings at 80 chars, handles multi-line strings (`"""`/`'''`)
+  - `FallbackCompressor` returning full file content unchanged for unsupported languages with `Language="unknown"` and `IsFallback()` helper for orchestrator integration
+  - 9 test fixture files (3 JSON, 3 YAML, 3 TOML) covering realistic config formats
+  - 70+ test functions with golden tests, unit tests, edge cases, and benchmarks across all 4 compressors
+- **Files created/modified:**
+  - `internal/compression/json_compressor.go` -- JSON structural skeleton compressor with depth limiting, array collapsing, string truncation
+  - `internal/compression/yaml_compressor.go` -- YAML line-based compressor with indentation tracking, comment preservation, list collapsing
+  - `internal/compression/toml_compressor.go` -- TOML line-based compressor with section/comment preservation, multi-line state machine
+  - `internal/compression/fallback.go` -- Fallback passthrough compressor with `IsFallback()` helper
+  - `internal/compression/json_compressor_test.go` -- JSON compressor tests (30+ tests, 3 benchmarks)
+  - `internal/compression/yaml_compressor_test.go` -- YAML compressor tests (29 tests, 2 benchmarks)
+  - `internal/compression/toml_compressor_test.go` -- TOML compressor tests (27 tests, 2 benchmarks)
+  - `internal/compression/fallback_test.go` -- Fallback compressor tests (15 tests)
+  - `testdata/compression/json/{package,tsconfig,simple}.json` -- JSON test fixtures
+  - `testdata/compression/yaml/{docker-compose,github-workflow,simple}.yml` -- YAML test fixtures
+  - `testdata/compression/toml/{cargo,pyproject,simple}.toml` -- TOML test fixtures
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
