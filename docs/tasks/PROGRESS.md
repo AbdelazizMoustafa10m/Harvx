@@ -433,183 +433,59 @@
 
 ---
 
-### T-051: Directory Tree Builder (In-Memory Tree + Rendering)
-
-- **Status:** Completed
-- **Date:** 2026-02-24
-- **What was built:**
-  - `TreeNode` nested struct with `BuildTree` (flat path list → in-memory tree) and `RenderTree` (Unicode box-drawing output with emoji indicators)
-  - Directory collapsing: single-child directory chains merge into combined paths (e.g., `src/utils/helpers/`)
-  - Sorting: directories before files, both alphabetically case-insensitive
-  - `TreeRenderOpts` with `MaxDepth` (truncates with `...`), `ShowSize`, and `ShowTokens` metadata annotations
-  - Human-readable size formatting (B, KB, MB, GB)
-- **Files created/modified:**
-  - `internal/output/tree.go` -- TreeNode, FileEntry, TreeRenderOpts types; BuildTree, RenderTree, collapseTree, sortTree, humanizeSize functions
-  - `internal/output/tree_test.go` -- 27 unit tests + 4 golden tests + 3 benchmarks covering hierarchy, sorting, collapsing, depth limits, metadata, Unicode, edge cases
-  - `internal/output/testdata/golden/tree-basic.golden` -- Golden test: basic tree rendering
-  - `internal/output/testdata/golden/tree-with-metadata.golden` -- Golden test: size and token annotations
-  - `internal/output/testdata/golden/tree-collapsed.golden` -- Golden test: collapsed directory chains
-  - `internal/output/testdata/golden/tree-depth-limited.golden` -- Golden test: MaxDepth=2 truncation
-  - `testdata/expected-output/tree-basic.txt` -- Reference output: basic tree
-  - `testdata/expected-output/tree-with-metadata.txt` -- Reference output: metadata annotations
-  - `testdata/expected-output/tree-collapsed.txt` -- Reference output: collapsed dirs
-  - `testdata/expected-output/tree-depth-limited.txt` -- Reference output: depth limit
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-052: Markdown Output Renderer with Go Templates
+### Phase 6: Output & Rendering (T-051 to T-058)
 
 - **Status:** Completed
 - **Date:** 2026-02-25
-- **What was built:**
-  - `Renderer` interface with `Render(ctx, w, data)` for format dispatch
-  - `RenderData` and `FileRenderEntry` structs holding all pipeline output for rendering
-  - `MarkdownRenderer` implementation using Go `text/template` with streaming output to `io.Writer`
-  - Template system with named sub-templates: header, summary, tree, files, changeSummary composed via `markdown-root`
-  - `template.FuncMap` helpers: formatBytes, formatNumber, languageFromExt (60+ extensions), addLineNumbers, escapeTripleBackticks, tierLabel, sortedKeys
-  - Line numbers support via `ShowLineNumbers` flag with right-aligned numbering
-  - Conditional change summary section (diff mode) with added/modified/deleted file lists
-  - Deterministic output: same input always produces byte-identical output
-- **Files created/modified:**
-  - `internal/output/renderer.go` -- Renderer interface, RenderData, FileRenderEntry, DiffSummaryData types
-  - `internal/output/markdown.go` -- MarkdownRenderer implementation with context cancellation support
-  - `internal/output/templates.go` -- Markdown template constants (header, summary, tree, files, changeSummary, root) and FuncMap
-  - `internal/output/helpers.go` -- languageFromExt (60+ ext map), formatBytes, formatNumber, addLineNumbers, repeatString, tierLabel, escapeTripleBackticks
-  - `internal/output/helpers_test.go` -- 60+ unit tests for all helper functions
-  - `internal/output/markdown_test.go` -- 25 unit tests + 2 golden tests + 2 benchmarks covering all acceptance criteria
-  - `internal/output/testdata/golden/markdown-basic.golden` -- Golden test: basic Markdown rendering
-  - `internal/output/testdata/golden/markdown-line-numbers.golden` -- Golden test: line-numbered rendering
-  - `testdata/expected-output/markdown-basic.md` -- Reference output: basic Markdown
-  - `testdata/expected-output/markdown-line-numbers.md` -- Reference output: line numbers
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- **Tasks Completed:** 8 tasks
 
-### T-053: XML Output Renderer for Claude Target Preset
+#### Features Implemented
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `XMLRenderer` implementing `Renderer` interface, producing Claude-optimized XML with semantic tags (`<repository>`, `<metadata>`, `<file_summary>`, `<directory_structure>`, `<files>`, `<statistics>`)
-  - CDATA section wrapping for file content and directory tree with proper `]]>` splitting across CDATA boundaries
-  - `xmlEscapeAttr` for safe XML attribute/element encoding of user data (paths, project names, error messages)
-  - XML template system with 7 named sub-templates using `text/template` (not `encoding/xml`)
-  - `<file>` elements with `path`, `tokens`, `tier`, `size`, `language`, `compressed` attributes
-  - Line numbers support within CDATA content via `--line-numbers` flag
-  - Optional `<change_summary>` section for diff mode with added/modified/deleted file lists
-  - Well-formed XML output validated by `encoding/xml` decoder in tests
-  - Deterministic output: same input always produces byte-identical output
-- **Files created/modified:**
-  - `internal/output/xml.go` -- XMLRenderer struct, wrapCDATA, xmlEscapeAttr functions
-  - `internal/output/templates.go` -- XML template constants (xmlHeaderTmpl, xmlSummaryTmpl, xmlTreeTmpl, xmlFilesTmpl, xmlStatisticsTmpl, xmlChangeSummaryTmpl, xmlRootTmpl) and xmlFuncMap
-  - `internal/output/xml_test.go` -- 28+ unit tests + 3 golden tests + 2 benchmarks covering well-formedness, CDATA edge cases, special chars, section ordering
-  - `internal/output/testdata/golden/xml-basic.golden` -- Golden test: basic XML rendering
-  - `internal/output/testdata/golden/xml-line-numbers.golden` -- Golden test: line-numbered XML rendering
-  - `internal/output/testdata/golden/xml-cdata-edge.golden` -- Golden test: CDATA edge case with ]]> splitting
-  - `testdata/expected-output/xml-basic.xml` -- Reference output: basic XML
-  - `testdata/expected-output/xml-cdata-edge.xml` -- Reference output: CDATA edge cases
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Directory Tree Builder | T-051 | `BuildTree`/`RenderTree` with Unicode box-drawing, directory collapsing, depth limits, and size/token annotations |
+| Markdown Renderer | T-052 | `MarkdownRenderer` via `text/template` with streaming `io.Writer`, line numbers, conditional diff section, and 60+ language extension map |
+| XML Renderer | T-053 | `XMLRenderer` producing Claude-optimized XML with CDATA wrapping, `]]>` boundary splitting, and safe attribute escaping |
+| Content Hashing | T-054 | `ContentHasher` (XXH3 64-bit over sorted file collections) and `IncrementalHasher` (`io.Writer`) for streaming hash during output |
+| Output Writer & Format Dispatch | T-055 | `OutputWriter` orchestrating renderer, hasher, and destination; atomic file writes; stdout mode with `io.MultiWriter`; 3-tier path resolution |
+| Output Splitter | T-056 | `Splitter` with greedy bin-packing respecting tier boundaries and file atomicity; `--split` CLI flag; `PartPath` with `.part-NNN` insertion |
+| Metadata JSON Sidecar | T-057 | `OutputMetadata` structs with snake_case JSON; `GenerateMetadata`/`WriteMetadata` with atomic write; `--output-metadata` CLI flag |
+| Pipeline Integration | T-058 | `RenderOutput` orchestration function converting `[]pipeline.FileDescriptor` to rendered output; golden test infrastructure with `HARVX_UPDATE_GOLDEN=1` |
 
-### T-054: Content Hashing (XXH3) and Deterministic Output
+#### Key Technical Decisions
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `ContentHasher` with `ComputeContentHash` computing deterministic XXH3 64-bit hash over sorted file collections using `zeebo/xxh3`
-  - `IncrementalHasher` implementing `io.Writer` for streaming hash computation during output writing
-  - `FormatHash` producing 16-character zero-padded lowercase hex string for output headers
-  - `FileHashEntry` type with path + null byte separator convention preventing path/content boundary collisions
-  - Defensive input copy before sorting to avoid mutating caller's slice
-  - Case-sensitive byte-order sorting for platform-independent determinism
-- **Files created/modified:**
-  - `internal/output/hash.go` -- ContentHasher, IncrementalHasher, FileHashEntry, FormatHash
-  - `internal/output/hash_test.go` -- 29 unit tests + 3 benchmarks covering determinism, order independence, stability, null byte separation, Unicode paths, empty inputs, incremental equivalence
-  - `go.mod` -- Added `github.com/zeebo/xxh3 v1.1.0` dependency
-  - `go.sum` -- Updated with xxh3 and klauspost/cpuid transitive dependencies
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+1. **`text/template` for XML renderer** -- preserves exact whitespace control; avoids `encoding/xml`'s automatic escaping that would corrupt CDATA sections
+2. **Atomic file writes (temp → sync → close → rename)** -- prevents partial or corrupt output files on error in both `OutputWriter` and `WriteMetadata`
+3. **Null byte separators in XXH3 hash** -- prevents path/content boundary collisions; case-sensitive byte-order sort ensures platform-independent determinism
+4. **Greedy bin-packing with 15% overflow tolerance** -- keeps same-tier files from the same top-level directory together while respecting token budgets and file atomicity
+5. **`*float64` for `BudgetUsedPercent`** -- serializes as JSON `null` when no token budget is configured, distinguishing "zero usage" from "no budget"
 
-### T-055: Output Writer, File Path Resolution, and Stdout Support
+#### Key Files Reference
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `OutputWriter` orchestration layer coordinating renderer, content hasher, and output destination (file or stdout)
-  - `OutputOpts` and `OutputResult` structs for write configuration and structured results
-  - Atomic file writes: `os.CreateTemp` → render → `Sync` → `Close` → `os.Rename` with deferred cleanup on error
-  - Stdout mode with `io.MultiWriter` for simultaneous streaming and XXH3 hash computation
-  - Format dispatch factory (`NewRenderer`) returning `MarkdownRenderer` or `XMLRenderer`
-  - Output path resolution with 3-tier precedence: CLI flag → profile config → default path
-  - Automatic file extension appending (`.md`/`.xml`) when path has no extension
-  - `countingWriter` helper for tracking bytes written during streaming
-- **Files created/modified:**
-  - `internal/output/writer.go` -- OutputWriter, OutputOpts, OutputResult, countingWriter, Write/writeStdout/writeFile methods
-  - `internal/output/writer_test.go` -- 20+ unit tests covering stdout/file modes, atomic writes, hash consistency, path resolution, error cases
-  - `internal/output/format.go` -- Format constants, NewRenderer factory, ExtensionForFormat, DefaultOutputPath, ResolveOutputPath
-  - `internal/output/format_test.go` -- Table-driven tests for renderer factory, extension mapping, path resolution
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Purpose | Location |
+| ------- | -------- |
+| `Renderer` interface, `RenderData`, `FileRenderEntry`, `DiffSummaryData` | `internal/output/renderer.go` |
+| `TreeNode`, `FileEntry`, `TreeRenderOpts`; `BuildTree`, `RenderTree` | `internal/output/tree.go` |
+| `MarkdownRenderer` with context cancellation support | `internal/output/markdown.go` |
+| `XMLRenderer`, `wrapCDATA`, `xmlEscapeAttr` | `internal/output/xml.go` |
+| Markdown and XML template constants and `FuncMap`s | `internal/output/templates.go` |
+| `languageFromExt`, `formatBytes`, `addLineNumbers`, `tierLabel` helpers | `internal/output/helpers.go` |
+| `ContentHasher`, `IncrementalHasher`, `FileHashEntry`, `FormatHash` | `internal/output/hash.go` |
+| `OutputWriter`, `OutputOpts`, `OutputResult`, `countingWriter` | `internal/output/writer.go` |
+| Format constants, `NewRenderer` factory, `ResolveOutputPath` | `internal/output/format.go` |
+| `Splitter`, `SplitOpts`, `PartData`, `PartResult`, `PartPath`, `WriteSplit` | `internal/output/splitter.go` |
+| `OutputMetadata`, `Statistics`, `FileStats`; `GenerateMetadata`, `WriteMetadata` | `internal/output/metadata.go` |
+| `OutputConfig`, `RenderOutput` pipeline orchestration | `internal/output/pipeline.go` |
+| Golden test helpers (`loadGoldenFile`, `compareGolden`, `writeGoldenFile`) | `internal/output/testutil_test.go` |
+| `--split` and `--output-metadata` CLI flag registration | `internal/config/flags.go` |
+| Golden test fixture files | `testdata/golden-fixtures/` |
+| Golden test reference outputs | `internal/output/testdata/golden/` |
 
-### T-056: Output Splitter (Multi-Part File Generation)
+#### Verification
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `Splitter` with greedy bin-packing algorithm that assigns files to parts respecting tier boundaries and file atomicity (no file split across parts)
-  - `PartData` and `PartResult` types for per-part render data and metadata
-  - `SplitOpts` configuration with tokens-per-part budget, format, and overhead estimation
-  - Directory coherence: soft preference to keep same-tier files from the same top-level directory together (15% overflow tolerance)
-  - Part 1 includes directory tree and file summary; Parts 2+ include minimal header referencing Part 1
-  - `PartPath` helper inserting `.part-NNN` before file extension with 3-digit zero-padding
-  - `WriteSplit` method on `OutputWriter` orchestrating multi-part rendering (file and stdout modes)
-  - `--split` CLI flag (int, default 0 = disabled) with validation rejecting negative values
-  - Oversized single files get their own part with `slog.Warn`
-  - Single-part passthrough when all files fit (no `.part-NNN` suffix)
-- **Files created/modified:**
-  - `internal/output/splitter.go` -- Splitter, SplitOpts, PartData, PartResult, SplitOutputOpts, Split, WriteSplit, PartPath, assignFilesToParts, buildPartRenderData
-  - `internal/output/splitter_test.go` -- 60 unit tests + 3 benchmarks covering all acceptance criteria, edge cases, XML/Markdown, stdout/file modes
-  - `internal/output/writer.go` -- Added Parts []PartResult field to OutputResult
-  - `internal/config/flags.go` -- Added Split int field to FlagValues, --split flag registration, validation
-  - `internal/config/flags_test.go` -- 4 tests for --split flag (default, explicit, negative rejected, zero valid)
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
 
-### T-057: Metadata JSON Sidecar Generation
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `OutputMetadata`, `Statistics`, `FileStats` structs with snake_case JSON tags for machine-readable sidecar output
-  - `GenerateMetadata` function assembling metadata from `RenderData` + `OutputResult` with sorted files, string-keyed tier maps, budget percentage calculation, and guaranteed non-nil maps
-  - `WriteMetadata` with atomic file write (temp file → sync → close → rename) producing pretty-printed 2-space-indented JSON
-  - `MetadataSidecarPath` helper returning `<output-path>.meta.json`
-  - `--output-metadata` CLI flag wired into `OutputWriter.Write` to trigger sidecar generation after main output
-  - `BudgetUsedPercent` as `*float64` serializing as `null` when no token budget is set
-- **Files created/modified:**
-  - `internal/output/metadata.go` -- OutputMetadata, Statistics, FileStats, MetadataOpts structs; GenerateMetadata, WriteMetadata, MetadataSidecarPath functions
-  - `internal/output/metadata_test.go` -- 32 unit tests + 2 benchmarks covering all acceptance criteria, edge cases (empty files, nil maps, 10K+ files, multiple dots, round-trip)
-  - `internal/output/writer.go` -- Added OutputMetadata, Target, MaxTokens, GenerationTimeMs fields to OutputOpts; metadata sidecar generation in Write method
-  - `internal/config/flags.go` -- Added OutputMetadata bool field to FlagValues, --output-metadata flag registration
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-058: Output Pipeline Integration and Golden Tests
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `OutputConfig` struct aggregating all output-related settings: format, target, output path, stdout flag, split size, line numbers, metadata, tree depth, tree metadata, project name, profile name, tokenizer name, timestamp, max tokens, generation time, diff summary, custom writer
-  - `RenderOutput(ctx, cfg, files)` orchestration function: converts `[]pipeline.FileDescriptor` to internal types, builds tree, computes content hash, assembles `RenderData`, dispatches to correct renderer (Markdown/XML), writes output (file or stdout), optionally splits into multiple parts, optionally generates metadata sidecar
-  - Internal conversion helpers: `toFileRenderEntries`, `toFileEntries`, `toFileHashEntries` with language inference from file extension and error message extraction
-  - Aggregation helpers: `computeTierCounts`, `computeTotalTokens`, `computeTotalRedactions`, `computeTopFiles` (top N by token count descending, defensive copy before sort)
-  - Golden test helpers in `testutil_test.go`: `loadGoldenFile`, `compareGolden`, `writeGoldenFile` with `HARVX_UPDATE_GOLDEN=1` env var and first-run auto-generation
-  - 5 golden fixture files in `testdata/golden-fixtures/` with known content for deterministic tests
-  - 5 golden tests: Markdown basic, Markdown with line numbers, XML basic, Markdown with diff, metadata sidecar
-  - 13 integration tests: Markdown/XML render, same content hash across formats, stdout==file, correct OutputResult, zero files, single file, all options enabled, content hash changes, adding file changes hash, cancelled context, default timestamp, diff summary, tree depth limit
-  - 1 split integration test verifying multi-part output with file existence checks
-  - 10 unit tests for conversion and aggregation helpers
-- **Files created/modified:**
-  - `internal/output/pipeline.go` -- OutputConfig struct, RenderOutput function, renderSingle, renderSplit, conversion and aggregation helpers
-  - `internal/output/pipeline_test.go` -- 29 tests: 10 unit tests, 13 integration tests, 5 golden tests, 1 split test
-  - `internal/output/testutil_test.go` -- Golden test helpers: updateGolden, loadGoldenFile, compareGolden, writeGoldenFile
-  - `testdata/golden-fixtures/go.mod` -- Sample fixture (tier 0, config)
-  - `testdata/golden-fixtures/README.md` -- Sample fixture (tier 4, docs)
-  - `testdata/golden-fixtures/cmd/main.go` -- Sample fixture (tier 1, source)
-  - `testdata/golden-fixtures/internal/handler.go` -- Sample fixture (tier 1, source)
-  - `testdata/golden-fixtures/internal/handler_test.go` -- Sample fixture (tier 3, test)
-  - `docs/tasks/PROGRESS.md` -- Updated with T-058 completion
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+---
 
