@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 86 |
+| Completed | 87 |
 | In Progress | 0 |
-| Not Started | 9 |
+| Not Started | 8 |
 
 ---
 
@@ -790,4 +790,21 @@
   - `internal/cli/interactive.go` -- Added smartDefaultHint, IsNoArgsInvocation, osArgsProvider; enhanced ShouldLaunchInteractive; added smartDefault hint to runInteractive
   - `internal/cli/interactive_test.go` -- Added tests for no-args invocation, smart default with args
   - `internal/cli/root.go` -- Updated RunE to pass smartDefault bool to runInteractive
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-087: TUI Integration Testing & Pipeline Wiring
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - Comprehensive integration test suite (20 scenarios) exercising full TUI lifecycle: navigation, file toggling, profile switching, overlay flows, clipboard export, help overlay, window resize, error handling, goroutine leak detection
+  - Test infrastructure helpers (`teatest_helpers_test.go`) for programmatic TUI testing: `sendKey`, `sendMsg`, `drainCmds`, `buildTestTree`, `mustNewModelWithTree`, `assertViewContains`
+  - `NewWithRoot` constructor in filetree package for injecting pre-built tree structures in tests without filesystem access
+  - End-to-end flow verification: launch → navigate → toggle → stats update → generate/preview/save/export → quit
+  - Error condition testing: nil tree navigation, permission errors, clipboard unavailable, pipeline generation errors
+  - Goroutine leak detection with `runtime.NumGoroutine()` before/after comparison
+- **Files created/modified:**
+  - `internal/tui/integration_test.go` -- 20 integration test scenarios covering all TUI flows
+  - `internal/tui/teatest_helpers_test.go` -- Test helpers: sendKey, sendMsg, drainCmds, buildTestTree, mustNewModelWithTree, assertViewContains
+  - `internal/tui/filetree/model.go` -- Added NewWithRoot constructor for test tree injection
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

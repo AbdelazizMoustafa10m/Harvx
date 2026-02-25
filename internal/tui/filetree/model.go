@@ -41,6 +41,21 @@ func New(rootDir string, ignorer discovery.Ignorer) Model {
 	}
 }
 
+// NewWithRoot creates a Model with a pre-built root node. This is useful for
+// testing where you want to provide a known tree structure without filesystem
+// access. The root must not be nil.
+func NewWithRoot(root *Node, rootDir string) Model {
+	m := Model{
+		root:    root,
+		rootDir: rootDir,
+		loading: make(map[string]bool),
+		logger:  slog.Default().With("component", "filetree"),
+		ready:   true,
+	}
+	m.refreshVisible()
+	return m
+}
+
 // Init returns a command to scan top-level entries in the root directory.
 func (m Model) Init() tea.Cmd {
 	return loadTopLevelCmd(m.rootDir, m.ignorer)
