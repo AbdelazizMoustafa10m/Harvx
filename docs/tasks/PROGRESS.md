@@ -553,330 +553,97 @@
 
 ---
 
-### T-066: Core Pipeline as Go Library API
+### Phase 8: Workflows (T-066 to T-078)
 
 - **Status:** Completed
 - **Date:** 2026-02-25
-- **What was built:**
-  - `Pipeline` struct with `Run(ctx, RunOptions) (*RunResult, error)` method as the core processing engine
-  - 7 stage service interfaces: `DiscoveryService`, `RelevanceService`, `TokenizerService`, `BudgetService`, `RedactionService`, `CompressionService`, `RenderService`
-  - Functional options pattern: `WithDiscovery`, `WithRelevance`, `WithTokenizer`, `WithBudget`, `WithRedactor`, `WithCompressor`, `WithRenderer`
-  - `RunOptions` with stage selection (`StageSelection`), git ref support, path filtering, and max token overrides
-  - `RunResult` with aggregate stats (`RunStats`), per-stage timing (`StageTimings`), content hash, and exit code
-  - Composable stage selection: `NewStageSelection()`, `DiscoveryOnly()`, `DiscoveryAndRelevance()`
-  - Custom JSON serialization for `StageTimings` with human-readable duration strings and full roundtrip support
-  - Pipeline threads `context.Context` through all stages for cancellation support
-  - Renamed existing CLI function to `RunLegacy` for backward compatibility
-- **Files created/modified:**
-  - `internal/pipeline/interfaces.go` -- Stage service interfaces and supporting types (DiscoveryOptions, BudgetResult, RenderOptions, DiffSummaryEntry)
-  - `internal/pipeline/options.go` -- PipelineOption type and 7 With* functional option constructors
-  - `internal/pipeline/result.go` -- RunOptions, StageSelection, RunResult, RunStats, StageTimings with JSON serialization
-  - `internal/pipeline/pipeline.go` -- Pipeline struct, NewPipeline constructor, Run method with 6-stage orchestration, legacy RunLegacy function
-  - `internal/pipeline/run_test.go` -- 26 unit tests with mock stages covering all acceptance criteria
-  - `internal/pipeline/result_test.go` -- 8 tests for result types, JSON roundtrip, and stage selection constructors
-  - `internal/pipeline/pipeline_test.go` -- Updated existing tests to use RunLegacy
-  - `internal/cli/generate.go` -- Updated to call RunLegacy
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- **Tasks Completed:** 13 tasks
 
-### T-067: Clean Stdout Mode, Structured Exit Codes, and Non-Interactive Defaults
+#### Features Implemented
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `OutputMode` struct with `StdoutMode`, `IsPiped`, `StderrIsPiped` fields for output routing decisions
-  - `DetectPipe(*os.File) bool` using `os.ModeCharDevice` check for terminal vs pipe detection
-  - `DetectOutputMode(stdoutFlag bool) OutputMode` combining `--stdout` flag, `HARVX_STDOUT` env var, and live pipe detection
-  - `ShouldSuppressProgress()` method: suppresses progress when stdout is piped (normal mode) or stderr is piped (stdout mode)
-  - `ShouldDisableColor()` method: disables ANSI color when stderr is piped
-  - `MessageWriter()` method: always returns `os.Stderr` for user-facing messages
-  - `HARVX_STDOUT=true` env var support in `applyEnvOverrides`
-  - Mutual exclusion validation: `--stdout` and `--output` are mutually exclusive (when `--output` is explicitly set)
-  - Exit codes returned from pipeline library via `RunResult.ExitCode`, translated to `os.Exit` at CLI boundary in `cmd/harvx/main.go`
-  - `--yes` flag accepted as no-op (non-interactive is default), `--stdout` flag already registered
-- **Files created/modified:**
-  - `internal/cli/output.go` -- OutputMode type, DetectPipe, DetectOutputMode, ShouldSuppressProgress, ShouldDisableColor, MessageWriter
-  - `internal/cli/output_test.go` -- 20 unit tests covering pipe detection, output mode detection, progress suppression, color disable, message writer
-  - `internal/config/flags.go` -- HARVX_STDOUT env var support and --stdout/--output mutual exclusion validation
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Pipeline library API | T-066 | `Pipeline.Run()` with 7 stage service interfaces, functional options (`With*`), `RunResult`/`RunStats`/`StageTimings` with JSON serialization |
+| Output routing & exit codes | T-067 | `OutputMode` pipe detection via `os.ModeCharDevice`, `--stdout`/`HARVX_STDOUT`, `RunResult.ExitCode` propagated to `os.Exit` at CLI boundary |
+| JSON preview metadata | T-068 | `PreviewResult` struct, `BuildPreviewResult`, `--json` flag on `harvx preview`, `PreviewStages` selection helper |
+| Assert-include coverage checks | T-069 | `CheckAssertInclude` with doublestar globs, `AssertionError` type, comprehensive `HARVX_*` env var overrides with `parseBoolEnv` |
+| Repo brief command | T-070 | `harvx brief` generating stable 1–4K token artifact: README, invariants, ADRs, build commands, module map, token budget enforcement |
+| Review slice command | T-071 | `harvx review-slice --base --head` with multi-language import parser (Go/TS/JS/Python), bounded neighbor discovery, budget enforcement |
+| Module slice command | T-072 | `harvx slice --path` for targeted module context, multiple paths, reuses review-slice neighbor/budget infrastructure |
+| Workspace command | T-073 | `harvx workspace` with `.harvx/workspace.toml` manifest, `DiscoverWorkspaceConfig`, `ValidateWorkspace`, `workspace init` subcommand |
+| Session bootstrap docs | T-074 | Guides (session-bootstrap, review-pipeline, workspace-setup), hooks template, CLAUDE.md template, persona recipes |
+| Verify command | T-075 | `harvx verify` faithfulness checking: MATCH/REDACTION_DIFF/COMPRESSION_DIFF/UNEXPECTED_DIFF/FILE_CHANGED, `--sample`, unified diff snippets |
+| Quality evaluation | T-076 | `harvx quality`/`qa` golden questions harness, coverage analysis, `quality init`, CI-friendly `--json` output |
+| MCP server | T-077 | `harvx mcp serve` stdio transport with `brief`/`slice`/`review_slice` tools, typed `mcp.AddTool[In, Out]`, graceful SIGINT/SIGTERM shutdown |
+| Integration test suite | T-078 | 40 end-to-end tests via compiled binary: all workflow commands, env var overrides, exit codes, determinism, performance bounds |
 
-### T-068: JSON Preview Output and Metadata Sidecar
+#### Key Technical Decisions
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `PreviewResult` struct in `internal/pipeline/result.go` with JSON struct tags matching the specified schema (11 fields: `total_files`, `total_tokens`, `tokenizer`, `tiers`, `redactions`, `estimated_time_ms`, `content_hash`, `profile`, `budget_utilization_percent`, `files_truncated`, `files_omitted`)
-  - `BuildPreviewResult(result *RunResult, profile string, maxTokens int) *PreviewResult` function that converts pipeline `RunResult` into `PreviewResult` with tier key conversion (`map[int]int` to `map[string]int`), budget percentage calculation (`*float64`, nil when no budget), and content hash as lowercase hex
-  - `PreviewStages() *StageSelection` helper returning discovery+relevance+tokenization stage selection for preview mode
-  - `--json` local flag on `harvx preview` command that outputs machine-readable JSON to stdout via `json.MarshalIndent`
-  - `PreviewJSON bool` field in `FlagValues` struct for future use by `brief` and `review-slice` commands
-  - Full pipeline integration: `runPreviewJSON` builds a pipeline, runs with preview stages, and produces valid JSON even when services are not wired or errors occur
-  - `writePreviewJSON` helper using `cmd.OutOrStdout()` for testability
-  - `buildPreviewPipelineOptions` stub for future service wiring
-- **Files created/modified:**
-  - `internal/pipeline/result.go` -- Added `PreviewResult` struct, `BuildPreviewResult` function, `PreviewStages` helper
-  - `internal/pipeline/result_test.go` -- 11 new tests: JSON schema compliance, roundtrip, budget null, string keys, basic conversion, no budget, zero result, budget utilization table-driven, content hash hex, tier conversion, preview stages
-  - `internal/config/flags.go` -- Added `PreviewJSON bool` field to `FlagValues`
-  - `internal/cli/preview.go` -- Added `--json` flag, `runPreviewJSON`, `writePreviewJSON`, `buildPreviewPipelineOptions`; updated help text with `--json` example
-  - `internal/cli/preview_test.go` -- 10 new tests: flag registration, exits zero, schema validation, struct deserialization, max-tokens integration, null budget, pretty-printing, flag variable setting, stdout routing, help text
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+1. **Functional options for pipeline stages** -- `PipelineOption` / `With*` constructors allow test doubles without interface indirection at call sites; `RunLegacy` preserves backward compatibility for the existing `generate` command
+2. **Pipe detection via `os.ModeCharDevice`** -- `DetectPipe` auto-suppresses progress output and ANSI color when stdout/stderr are piped, eliminating need for explicit `--quiet` in scripts
+3. **XXH3 content hashing on all outputs** -- deterministic byte-identical output enables prompt caching across commits; hash changes only when content changes
+4. **doublestar glob engine for `assert-include`** -- consistent with relevance tier patterns; avoids regex complexity for path matching on untrusted input
+5. **Direct workflow calls in MCP tool handlers** -- no subprocess spawning; each invocation gets independent state making handlers inherently thread-safe
+6. **Compiled binary via `TestMain` for integration tests** -- exercises real CLI flag registration, cobra wiring, and exit codes rather than unit-testing internals in isolation
 
-### T-069: Assert-Include Coverage Checks and Environment Variable Overrides
+#### Key Files Reference
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `CheckAssertInclude` function for verifying critical files are present in pipeline output via `--assert-include` glob patterns
-  - `AssertionError` and `AssertionFailure` types with descriptive multi-failure error messages including pattern, file count, and remediation suggestions
-  - `--assert-include` repeatable CLI flag using doublestar glob engine (same as relevance tier patterns)
-  - `AssertInclude []string` field on `Profile` struct with TOML config support (`assert_include` key)
-  - Profile inheritance merge support for `assert_include` via `mergeSlice`
-  - Enhanced `applyEnvOverrides` with comprehensive `HARVX_*` env var support: `HARVX_PROFILE`, `HARVX_MAX_TOKENS` (int), `HARVX_TOKENIZER`, `HARVX_COMPRESS` (flexible bool), `HARVX_REDACT` (inverted bool), `HARVX_STDOUT` (flexible bool)
-  - `parseBoolEnv` helper accepting `true/1/yes/false/0/no` (case-insensitive) for boolean env vars
-  - Invalid env var values produce `slog.Warn` messages (e.g., "HARVX_MAX_TOKENS must be a positive integer")
-- **Files created/modified:**
-  - `internal/pipeline/assert.go` -- AssertionFailure, AssertionError, CheckAssertInclude with doublestar matching
-  - `internal/pipeline/assert_test.go` -- 18 tests: empty patterns, single match/fail, multiple patterns, glob wildcards, error message format, errors.As unwrapping, profile+CLI merge
-  - `internal/config/types.go` -- Added AssertInclude field to Profile struct
-  - `internal/config/flags.go` -- Added AssertIncludes field, --assert-include flag, enhanced applyEnvOverrides, parseBoolEnv helper
-  - `internal/config/env_test.go` -- 13 new tests: parseBoolEnv (20 cases), env var overrides for profile/max-tokens/tokenizer/compress/redact/stdout, CLI flag precedence
-  - `internal/config/merge.go` -- Added AssertInclude to mergeProfile
-  - `internal/config/resolver.go` -- Added assert_include to flattenProfileRaw, profileToFlatMap, flatMapToProfile
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Purpose | Location |
+| ------- | -------- |
+| Stage interfaces and supporting types | `internal/pipeline/interfaces.go` |
+| Functional option constructors | `internal/pipeline/options.go` |
+| `RunOptions`, `RunResult`, `RunStats`, `StageTimings`, `PreviewResult` | `internal/pipeline/result.go` |
+| `Pipeline` struct, `Run`, `RunLegacy` | `internal/pipeline/pipeline.go` |
+| `CheckAssertInclude`, `AssertionError` | `internal/pipeline/assert.go` |
+| `OutputMode`, `DetectPipe`, `DetectOutputMode` | `internal/cli/output.go` |
+| `FlagValues`, `applyEnvOverrides`, `parseBoolEnv`, `--assert-include` | `internal/config/flags.go` |
+| `Profile` struct (all new fields: `AssertInclude`, `BriefMaxTokens`, `SliceMaxTokens`, `SliceDepth`) | `internal/config/types.go` |
+| Profile merge logic | `internal/config/merge.go` |
+| Profile flatten/resolve | `internal/config/resolver.go` |
+| Workspace manifest types, discovery, validation | `internal/config/workspace.go` |
+| Golden questions types, discovery, validation | `internal/config/quality.go` |
+| Brief generation: section discovery, budget, rendering | `internal/workflows/brief.go` |
+| Module map generation (50+ known dirs) | `internal/workflows/module_map.go` |
+| Makefile/package.json/go.mod/Cargo/pyproject extractors | `internal/workflows/section_extractor.go` |
+| Multi-language import parser (Go/TS/JS/Python) | `internal/workflows/imports.go` |
+| Bounded neighbor discovery | `internal/workflows/neighbors.go` |
+| `GenerateReviewSlice`, budget enforcement, rendering | `internal/workflows/review_slice.go` |
+| `GenerateModuleSlice`, `isModuleFile` | `internal/workflows/slice.go` |
+| `GenerateWorkspace`, Markdown+XML renderers | `internal/workflows/workspace.go` |
+| `ParseOutput`, Markdown+XML extractors | `internal/workflows/output_parser.go` |
+| `VerifyOutput`, redaction detection, simple diff | `internal/workflows/verify.go` |
+| `EvaluateQuality`, coverage analysis | `internal/workflows/quality.go` |
+| MCP server creation and lifecycle | `internal/server/mcp.go` |
+| MCP tool input/output types and handlers | `internal/server/tools.go` |
+| `harvx brief` Cobra command | `internal/cli/brief.go` |
+| `harvx review-slice` Cobra command | `internal/cli/review_slice.go` |
+| `harvx slice` Cobra command | `internal/cli/slice.go` |
+| `harvx workspace` / `workspace init` Cobra commands | `internal/cli/workspace.go` |
+| `harvx verify` Cobra command | `internal/cli/verify.go` |
+| `harvx quality` / `quality init` Cobra commands | `internal/cli/quality.go` |
+| `harvx mcp serve` Cobra command | `internal/cli/mcp.go` |
+| Integration test infrastructure (binary build, helpers) | `tests/integration/setup_test.go` |
+| Workflow end-to-end tests | `tests/integration/workflow_test.go` |
+| Pipeline composition tests | `tests/integration/pipeline_test.go` |
+| Env var override tests | `tests/integration/env_test.go` |
+| Exit code validation tests | `tests/integration/exitcode_test.go` |
+| Determinism and performance tests | `tests/integration/determinism_test.go` |
+| Session bootstrap guide | `docs/guides/session-bootstrap.md` |
+| Review pipeline guide | `docs/guides/review-pipeline.md` |
+| Workspace setup guide | `docs/guides/workspace-setup.md` |
+| Golden questions methodology | `docs/guides/golden-questions.md` |
+| MCP integration guide | `docs/guides/mcp-integration.md` |
+| Lean CLAUDE.md template | `docs/templates/CLAUDE.md` |
+| Claude Code hooks reference | `docs/templates/hooks.json` |
+| Sample golden questions TOML | `docs/templates/golden-questions.toml` |
+| LLM A/B evaluation shell script | `docs/templates/evaluate.sh` |
 
-### T-070: Repo Brief Command (`harvx brief`)
+#### Verification
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `harvx brief` Cobra subcommand generating a stable, deterministic Repo Brief artifact (~1-4K tokens) with project-wide invariants
-  - Brief generation workflow discovering README, invariants (CLAUDE.md, CONVENTIONS.md), architecture docs/ADRs, build commands, config info, review rules, and module map
-  - Section extraction for Makefile targets, package.json scripts, go.mod info, Cargo.toml package section, pyproject.toml project section
-  - Automatic module map generation from top-level directories with 50+ known directory descriptions and content-based inference fallback
-  - Token budget enforcement truncating lower-priority sections first (module map → review rules → config → build → architecture → invariants → README)
-  - `--json` flag for machine-readable metadata (token count, content hash, files included, section names, max tokens)
-  - `--target claude` producing XML-formatted output with `<repo-brief>` wrapper and XML comment header
-  - `--assert-include` coverage checks on brief source files
-  - `--stdout` and `-o` output routing with brief-specific default filename (`harvx-brief.md`)
-  - Content-addressed output via XXH3 hash enabling prompt caching across commits
-  - `BriefMaxTokens` profile configuration field (default: 4000 tokens)
-  - Deterministic output: sorted paths, fixed section order, stable rendering
-- **Files created/modified:**
-  - `internal/workflows/brief.go` -- Brief generation logic: section discovery, budget enforcement, Markdown/XML rendering, content hashing
-  - `internal/workflows/brief_test.go` -- 30 unit tests: all sections, determinism (5-run), missing README/architecture, empty repo, token budget, Claude XML, assert-include, README variants/priority, content hash changes
-  - `internal/workflows/module_map.go` -- ModuleMapEntry type, GenerateModuleMap (50+ known dirs), describeDirectory, inferDescription, RenderModuleMap
-  - `internal/workflows/module_map_test.go` -- 15 tests: known directories, hidden dirs, content inference (Go/TS/Py/Rust/MD), empty dir, deterministic order, render format
-  - `internal/workflows/section_extractor.go` -- ExtractMakefileTargets, ExtractPackageJSONScripts, ExtractGoModInfo, ExtractCargoTomlInfo, ExtractPyprojectInfo
-  - `internal/workflows/section_extractor_test.go` -- 20 tests: Makefile targets (standard, empty, deps, dedup, hyphens), package.json scripts (standard, no scripts, invalid, sorted, complex), go.mod, Cargo.toml, pyproject.toml, TOML value extraction
-  - `internal/cli/brief.go` -- Cobra command registration, --json flag, runBrief, resolveBriefMaxTokens, buildBriefTokenCounter, writeBriefJSON, writeBriefOutput
-  - `internal/cli/brief_test.go` -- 13 CLI tests: command registration, properties, --json flag, global flag inheritance, stdout/JSON exit zero, JSON schema, determinism, Claude XML, metadata values, help text
-  - `internal/config/types.go` -- Added BriefMaxTokens field to Profile struct
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+- `go test -tags integration` pass (40/40)
 
-### T-071: Review Slice Command (`harvx review-slice`)
+---
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `harvx review-slice --base <ref> --head <ref>` Cobra subcommand generating a PR-specific context slice with changed files and bounded neighborhood
-  - Multi-language import parser (Go, TypeScript/JavaScript, Python) for neighborhood discovery via regex-based heuristic parsing
-  - Bounded neighborhood discovery finding related test files, importer files, and same-directory neighbors with configurable depth
-  - Review slice generation workflow with git diff integration, token budget enforcement (changed files always prioritized), and deterministic output
-  - Markdown and XML (Claude-optimized) rendering with code fences, language detection, and content hashing
-  - `--json` flag for machine-readable metadata (token count, content hash, file lists, max tokens, refs)
-  - `--base`/`--head` required flags, `--stdout`, `-o`, `--target`, `--assert-include`, `--profile` support
-  - `SliceMaxTokens` (default: 20000) and `SliceDepth` (default: 1) profile configuration fields with merge/resolver support
-  - Empty slice handling when no files changed between refs
-  - Budget enforcement: changed files always included first, neighbors added greedily until budget reached
-- **Files created/modified:**
-  - `internal/workflows/imports.go` -- Multi-language import parser: ParseImports, parseGoImports, parseJSImports, parsePythonImports
-  - `internal/workflows/imports_test.go` -- 73 test cases: Go/JS/TS/Python parsing, dedup/sort, normalize, relative imports
-  - `internal/workflows/neighbors.go` -- DiscoverNeighbors, findRelatedTests, findImporters, findTestCandidates, resolveImportToPath
-  - `internal/workflows/neighbors_test.go` -- Neighbor discovery tests: depth control, test file/importer detection, filtering
-  - `internal/workflows/review_slice.go` -- GenerateReviewSlice, collectRepoFiles, buildSliceFiles, enforceSliceBudget, renderSlice, discoverNeighbors
-  - `internal/workflows/review_slice_test.go` -- 88 test cases: validation, budget, rendering, language detection, neighbor discovery
-  - `internal/cli/review_slice.go` -- Cobra command: --base/--head/--json flags, resolveSliceConfig, writeReviewSliceJSON, writeReviewSliceOutput
-  - `internal/cli/review_slice_test.go` -- 15 test functions: registration, flags, required flags, help text, JSON output, config resolution
-  - `internal/config/types.go` -- Added SliceMaxTokens, SliceDepth fields to Profile struct
-  - `internal/config/merge.go` -- Added SliceMaxTokens, SliceDepth to mergeProfile
-  - `internal/config/resolver.go` -- Added slice_max_tokens, slice_depth to flattenProfileRaw, profileToFlatMap, flatMapToProfile
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-072: Module Slice Command (`harvx slice`)
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `harvx slice --path <module>` Cobra subcommand generating targeted context about specific modules or directories
-  - Module slice workflow: discovers files under specified paths, finds neighbors (imports, tests) via depth-bounded discovery, applies token budget (module files always prioritized)
-  - Supports multiple `--path` flags for slicing multiple modules simultaneously
-  - Markdown and XML (Claude-optimized) rendering with code fences, language detection, and XXH3 content hashing
-  - `--json` flag for machine-readable metadata (token count, content hash, file lists, max tokens, paths)
-  - `--stdout`, `-o`, `--target`, `--assert-include`, `--profile`, `--max-tokens`, `--compress` flag support
-  - `isModuleFile` matching handles both directory prefixes (with `/` separator to prevent false positives) and exact single-file paths
-  - Deterministic output: sorted paths, stable rendering, content-addressed via XXH3 hash
-  - Reuses `collectRepoFiles`, `buildSliceFiles`, `enforceSliceBudget`, `discoverNeighbors`, `resolveSliceConfig`, `buildSliceTokenCounter` from review-slice
-- **Files created/modified:**
-  - `internal/workflows/slice.go` -- GenerateModuleSlice, ModuleSliceOptions/Result/JSON types, isModuleFile, renderModuleSlice (Markdown + XML)
-  - `internal/workflows/slice_test.go` -- 23+ test cases: validation, single dir/file, multiple paths, neighbors, budget, determinism, formats, assert-include, edge cases
-  - `internal/cli/slice.go` -- Cobra command: --path/--json flags, runSlice, writeSliceJSON, writeSliceOutput
-  - `internal/cli/slice_test.go` -- 11 test functions: registration, flags, required flags, help text, JSON output, global flag inheritance
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-073: Workspace Manifest Config and Command (`harvx workspace`)
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `.harvx/workspace.toml` manifest parsing using BurntSushi/toml with unknown-key warnings for forward compatibility
-  - `WorkspaceConfig`, `WorkspaceManifest`, `WorkspaceRepo` types with TOML struct tags matching PRD Section 5.11.3 schema
-  - `DiscoverWorkspaceConfig` auto-detection walking up parent directories, stopping at `.git` boundary or maxSearchDepth (20)
-  - `ValidateWorkspace` producing warnings (not errors) for missing repo paths, unknown integration targets, duplicate repo names
-  - `ExpandPath` resolving `~` to `$HOME` and relative paths relative to workspace.toml location
-  - `GenerateWorkspaceInit` producing valid starter TOML with placeholder entries
-  - `harvx workspace` command rendering manifests as Markdown or XML with repo list, integration graph, shared schemas
-  - `--deep` mode including top-level directory listings per repo (max 30 entries, hidden files skipped)
-  - `--json` flag for machine-readable metadata (name, description, repo count, token count, content hash, warnings)
-  - `--target claude` producing XML output with `<workspace>`, `<repo>`, `<integrations>`, `<shared-schemas>` tags
-  - `harvx workspace init` generating `.harvx/workspace.toml` with overwrite protection via `--yes`
-  - `--stdout`, `-o`, `--target` output routing with `harvx-workspace.md` default filename
-  - Deterministic output: repos sorted by name, integration edges sorted, shared schemas sorted, XXH3 content hash
-- **Files created/modified:**
-  - `internal/config/workspace.go` -- WorkspaceConfig/WorkspaceManifest/WorkspaceRepo types, LoadWorkspaceConfig, DiscoverWorkspaceConfig, ValidateWorkspace, ExpandPath, GenerateWorkspaceInit
-  - `internal/config/workspace_test.go` -- 30 tests: TOML parsing, auto-detection, validation warnings, path expansion, init generation
-  - `internal/workflows/workspace.go` -- GenerateWorkspace, WorkspaceOptions/Result/JSON types, Markdown+XML renderers, integration edges, shared schemas, directory listings
-  - `internal/workflows/workspace_test.go` -- 28 tests: rendering, determinism, XML mode, deep mode, path existence, content hashing, helper functions
-  - `internal/cli/workspace.go` -- Cobra command: workspace + workspace init subcommands, --json/--deep flags, output routing
-  - `internal/cli/workspace_test.go` -- 11 tests: registration, flags, JSON output, stdout output, missing config, init creation, init overwrite, global flag inheritance
-  - `testdata/config/workspace.toml` -- Test fixture with 3 repos demonstrating all fields
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-074: Session Bootstrap Documentation and Claude Code Hooks Integration
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - Session bootstrap guide with Claude Code `SessionStart` hook configuration, `--target claude` XML rendering documentation, performance guidance, and troubleshooting
-  - Review pipeline guide with shell script examples, GitHub Actions CI workflow, environment variable reference, and JSON metadata usage for automation
-  - Workspace setup guide for multi-repo session bootstrap with manifest schema documentation and hook integration examples
-  - Lean CLAUDE.md template under 500 tokens with rules-only philosophy and Harvx dynamic context reference
-  - Reference `hooks.json` template with valid JSON structure for Claude Code hooks
-  - Three persona-specific recipes: quick context (Alex), pipeline review (Zizo), CI integration (Jordan)
-  - Validation test suite verifying JSON validity, token budget, command references, YAML structure, and file existence
-- **Files created/modified:**
-  - `docs/guides/session-bootstrap.md` -- Session bootstrap guide with hook config, target claude docs, troubleshooting
-  - `docs/guides/review-pipeline.md` -- End-to-end review pipeline with shell script and GitHub Actions examples
-  - `docs/guides/workspace-setup.md` -- Multi-repo workspace documentation with manifest schema and hook integration
-  - `docs/templates/CLAUDE.md` -- Lean baseline template under 500 tokens
-  - `docs/templates/hooks.json` -- Reference Claude Code hooks configuration (valid JSON)
-  - `docs/recipes/quick-context.md` -- Alex persona: quick chat context recipes
-  - `docs/recipes/pipeline-review.md` -- Zizo persona: pipeline integration recipes
-  - `docs/recipes/ci-integration.md` -- Jordan persona: CI/CD setup with GitHub Actions
-  - `internal/cli/docs_test.go` -- 5 test functions validating documentation completeness and correctness
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-075: Verify Command and Faithfulness Checking (`harvx verify`)
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `harvx verify` Cobra subcommand comparing packed output to original source files for faithfulness checking
-  - Output file parser supporting both Markdown and XML formats with auto-detection, extracting file blocks (path, content, metadata)
-  - Verification workflow with 5 status types: MATCH, REDACTION_DIFF, COMPRESSION_DIFF, UNEXPECTED_DIFF, FILE_CHANGED
-  - `--sample <n>` flag for reproducible random sampling using FNV-1a hash seed with Fisher-Yates shuffle (default: 10 files)
-  - `--path <file>` repeatable flag for verifying specific files
-  - `--json` flag for structured JSON output suitable for CI pipelines
-  - `--profile` support for resolving correct output path and settings
-  - Budget reporting from `.meta.json` sidecar: tokenizer, total tokens, budget utilization %, compressed files, redactions
-  - Human-readable report with [PASS]/[WARN] labels, aligned file paths, and unified diff snippets for unexpected differences
-  - Exit code 0 when all files pass, exit code 2 (partial) when any have unexpected differences
-  - Redaction detection heuristic: line-by-line comparison identifying `[REDACTED:type]` placeholder substitutions
-  - Simple line-based diff with configurable max lines (default: 10) for debugging unexpected differences
-  - Trailing newline normalization for robust content comparison across output formats
-- **Files created/modified:**
-  - `internal/workflows/output_parser.go` -- ParseOutput, ParseMarkdownOutput, ParseXMLOutput with CDATA unwrap and backtick unescape
-  - `internal/workflows/output_parser_test.go` -- 30+ tests: format detection, single/multi file extraction, compressed/redaction metadata, CDATA split, XML entities
-  - `internal/workflows/verify.go` -- VerifyOutput workflow, file selection, verification logic, redaction detection, simple diff, budget info
-  - `internal/workflows/verify_test.go` -- 14+ tests: exact match, redaction diff, compression diff, unexpected diff, file changed, sampling, reproducibility, paths, budget info
-  - `internal/cli/verify.go` -- Cobra command: --sample/--path/--json flags, human-readable report, JSON output, budget line
-  - `internal/cli/verify_test.go` -- 9 tests: registration, properties, flags, global flag inheritance, help, status labels, formatNumber, pluralS
-  - `testdata/expected-output/verify-pass.md` -- Test fixture with matching output (3 files)
-  - `testdata/expected-output/verify-fail.md` -- Test fixture with intentional mismatch in config.go
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-076: Golden Questions Harness and Quality Evaluation Framework
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - Golden questions TOML types (`GoldenQuestion`, `GoldenQuestionsConfig`) with BurntSushi/toml parsing, unknown-key warnings, validation, and auto-discovery
-  - `harvx quality` command (alias: `qa`) evaluating critical file coverage against golden questions using doublestar glob matching
-  - `harvx quality init` subcommand generating starter `.harvx/golden-questions.toml` with 3 example questions
-  - Coverage analysis workflow walking repo files, matching critical_files patterns, computing per-question and aggregate coverage
-  - `--json` flag for structured CI-friendly output, `--questions` flag for custom questions path
-  - Human-readable report with `[PASS]`/`[MISS]` labels and coverage summary
-  - Evaluation methodology guide, starter TOML template, and shell script template for LLM A/B testing
-  - 5 recognized categories: architecture, configuration, security, conventions, integration
-- **Files created/modified:**
-  - `internal/config/quality.go` -- GoldenQuestion, GoldenQuestionsConfig types, LoadGoldenQuestions, ValidateGoldenQuestions, DiscoverGoldenQuestions, GenerateGoldenQuestionsInit
-  - `internal/config/quality_test.go` -- 16 tests: TOML parsing, validation, discovery, init generation, categories, uniqueness
-  - `internal/workflows/quality.go` -- QualityOptions, QuestionResult, QualityResult, EvaluateQuality, evaluateQuestion, patternMatchesAny
-  - `internal/workflows/quality_test.go` -- 20 tests: full coverage, partial coverage, glob patterns, empty files, auto-discovery, sorting, hidden dirs
-  - `internal/cli/quality.go` -- Cobra quality/qa command, quality init subcommand, --json/--questions/--output/--yes flags
-  - `internal/cli/quality_test.go` -- 9 tests: registration, alias, flags, init flags, help, status labels, global flag inheritance
-  - `docs/guides/golden-questions.md` -- Evaluation methodology documentation with writing tips, CI workflow, scoring guide
-  - `docs/templates/golden-questions.toml` -- Starter template with 5 example questions across all categories
-  - `docs/templates/evaluate.sh` -- Shell script template for LLM A/B evaluation (diff-only vs Harvx context)
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-077: MCP Server v1.1 (`harvx mcp serve`)
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `harvx mcp serve` command starting an MCP server over stdio transport for coding agents
-  - Three MCP tools: `brief` (repo brief), `slice` (module context), `review_slice` (PR context)
-  - Typed tool handlers with auto-derived JSON Schema via `mcp.AddTool[In, Out]` generic function
-  - Each tool calls workflow functions directly (no subprocess spawning), thread-safe via independent state per invocation
-  - Signal handling (SIGINT/SIGTERM) for graceful shutdown, all logging to stderr
-  - Tool annotations with `ReadOnlyHint: true` signaling read-only filesystem access
-  - `nonNilSlice` helper preventing JSON null in structured MCP output
-  - MCP integration guide with Codex CLI and Claude Code configuration examples
-- **Files created/modified:**
-  - `internal/server/mcp.go` -- MCP server creation (NewMCPServer), lifecycle (Serve), signal handling
-  - `internal/server/tools.go` -- Tool input/output types, registerTools, makeBriefHandler, makeSliceHandler, makeReviewSliceHandler
-  - `internal/server/mcp_test.go` -- 5 tests: server creation, default config, profile config, config fields, multiple instances
-  - `internal/server/tools_test.go` -- 30 tests: handler creation, brief/slice/review-slice invocations, input validation, concurrent invocations, context cancellation, nonNilSlice helper
-  - `internal/cli/mcp.go` -- Cobra mcp command with serve subcommand, runMCPServe function
-  - `docs/guides/mcp-integration.md` -- Setup guide for Codex CLI and Claude Code, tool documentation, troubleshooting
-  - `go.mod` -- Added github.com/modelcontextprotocol/go-sdk v1.3.1 dependency
-  - `go.sum` -- Updated with MCP SDK transitive dependencies
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-078: Workflow Integration Tests and End-to-End Pipeline Validation
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - Comprehensive integration test suite (40 tests) validating all workflow commands end-to-end via compiled binary execution
-  - Test infrastructure: `TestMain` binary compilation, `runHarvx`/`runHarvxInDir` helpers, `setupGitRepo`/`setupGitRepoWithChange` for git-dependent tests, `copyDir` recursive copy
-  - Workflow tests: brief (generation, stdout, JSON, Claude XML), slice (module context), review-slice (git diff), workspace (manifest), verify (faithfulness), preview (JSON), version (JSON)
-  - Pipeline composition tests: brief-to-file + verify chain, stdout piping, multiple slice paths, markdown/XML format validation
-  - Environment variable override tests: HARVX_MAX_TOKENS, HARVX_STDOUT, HARVX_VERBOSE, HARVX_QUIET, HARVX_LOG_FORMAT, CLI flag precedence over env vars
-  - Exit code validation: success (0), invalid flags (1), assert-include pass/fail, missing required flags
-  - Determinism tests: content hash identity, byte-identical output, preview JSON stability
-  - Performance tests: brief < 5s, preview < 2s
-  - Enhanced sample-repo fixtures: Go source with imports, auth middleware package, Makefile, harvx.toml profiles, .harvx/workspace.toml
-- **Files created/modified:**
-  - `tests/integration/setup_test.go` -- Test infrastructure with binary build, execution helpers, git repo setup
-  - `tests/integration/workflow_test.go` -- 12 full workflow pipeline tests
-  - `tests/integration/pipeline_test.go` -- 7 pipeline composition tests
-  - `tests/integration/env_test.go` -- 6 environment variable override tests
-  - `tests/integration/exitcode_test.go` -- 8 exit code validation tests
-  - `tests/integration/determinism_test.go` -- 6 determinism and performance tests
-  - `testdata/sample-repo/src/main.go` -- Go source with imports for neighbor discovery
-  - `testdata/sample-repo/src/auth/middleware.go` -- Auth middleware for slice/review-slice testing
-  - `testdata/sample-repo/src/auth/middleware_test.go` -- Test file for test discovery
-  - `testdata/sample-repo/Makefile` -- Makefile with build/test/lint targets for brief extraction
-  - `testdata/sample-repo/harvx.toml` -- Test profile configuration (default, test, xml-test)
-  - `testdata/sample-repo/.harvx/workspace.toml` -- Test workspace configuration
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go test -tags integration` ✓ (40/40 pass)
