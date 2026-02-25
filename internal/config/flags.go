@@ -131,6 +131,11 @@ func ValidateFlags(fv *FlagValues, cmd *cobra.Command) error {
 		return fmt.Errorf("--verbose and --quiet are mutually exclusive")
 	}
 
+	// Mutual exclusion: --stdout and --output
+	if fv.Stdout && cmd.Flags().Changed("output") {
+		return fmt.Errorf("--stdout and --output are mutually exclusive")
+	}
+
 	// Mutual exclusion warning: --no-redact and --fail-on-redaction
 	// --no-redact takes precedence; warn the user.
 	if fv.NoRedact && fv.FailOnRedaction {
@@ -247,6 +252,11 @@ func applyEnvOverrides(fv *FlagValues, cmd *cobra.Command) {
 	// HARVX_FAIL_ON_REDACTION=1 enables CI enforcement mode
 	if os.Getenv("HARVX_FAIL_ON_REDACTION") == "1" && !cmd.Flags().Changed("fail-on-redaction") {
 		fv.FailOnRedaction = true
+	}
+
+	// HARVX_STDOUT=true routes output to stdout
+	if os.Getenv("HARVX_STDOUT") == "true" && !cmd.Flags().Changed("stdout") {
+		fv.Stdout = true
 	}
 }
 

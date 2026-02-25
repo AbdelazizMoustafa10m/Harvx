@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 69 |
+| Completed | 70 |
 | In Progress | 0 |
-| Not Started | 26 |
+| Not Started | 25 |
 
 ---
 
@@ -576,5 +576,26 @@
   - `internal/pipeline/result_test.go` -- 8 tests for result types, JSON roundtrip, and stage selection constructors
   - `internal/pipeline/pipeline_test.go` -- Updated existing tests to use RunLegacy
   - `internal/cli/generate.go` -- Updated to call RunLegacy
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-067: Clean Stdout Mode, Structured Exit Codes, and Non-Interactive Defaults
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `OutputMode` struct with `StdoutMode`, `IsPiped`, `StderrIsPiped` fields for output routing decisions
+  - `DetectPipe(*os.File) bool` using `os.ModeCharDevice` check for terminal vs pipe detection
+  - `DetectOutputMode(stdoutFlag bool) OutputMode` combining `--stdout` flag, `HARVX_STDOUT` env var, and live pipe detection
+  - `ShouldSuppressProgress()` method: suppresses progress when stdout is piped (normal mode) or stderr is piped (stdout mode)
+  - `ShouldDisableColor()` method: disables ANSI color when stderr is piped
+  - `MessageWriter()` method: always returns `os.Stderr` for user-facing messages
+  - `HARVX_STDOUT=true` env var support in `applyEnvOverrides`
+  - Mutual exclusion validation: `--stdout` and `--output` are mutually exclusive (when `--output` is explicitly set)
+  - Exit codes returned from pipeline library via `RunResult.ExitCode`, translated to `os.Exit` at CLI boundary in `cmd/harvx/main.go`
+  - `--yes` flag accepted as no-op (non-interactive is default), `--stdout` flag already registered
+- **Files created/modified:**
+  - `internal/cli/output.go` -- OutputMode type, DetectPipe, DetectOutputMode, ShouldSuppressProgress, ShouldDisableColor, MessageWriter
+  - `internal/cli/output_test.go` -- 20 unit tests covering pipe detection, output mode detection, progress suppression, color disable, message writer
+  - `internal/config/flags.go` -- HARVX_STDOUT env var support and --stdout/--output mutual exclusion validation
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
