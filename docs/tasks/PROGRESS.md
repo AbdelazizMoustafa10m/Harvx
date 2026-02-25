@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 76 |
+| Completed | 77 |
 | In Progress | 0 |
-| Not Started | 19 |
+| Not Started | 18 |
 
 ---
 
@@ -750,3 +750,26 @@
   - `testdata/config/workspace.toml` -- Test fixture with 3 repos demonstrating all fields
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-074: Session Bootstrap Documentation and Claude Code Hooks Integration
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - Session bootstrap guide with Claude Code `SessionStart` hook configuration, `--target claude` XML rendering documentation, performance guidance, and troubleshooting
+  - Review pipeline guide with shell script examples, GitHub Actions CI workflow, environment variable reference, and JSON metadata usage for automation
+  - Workspace setup guide for multi-repo session bootstrap with manifest schema documentation and hook integration examples
+  - Lean CLAUDE.md template under 500 tokens with rules-only philosophy and Harvx dynamic context reference
+  - Reference `hooks.json` template with valid JSON structure for Claude Code hooks
+  - Three persona-specific recipes: quick context (Alex), pipeline review (Zizo), CI integration (Jordan)
+  - Validation test suite verifying JSON validity, token budget, command references, YAML structure, and file existence
+- **Files created/modified:**
+  - `docs/guides/session-bootstrap.md` -- Session bootstrap guide with hook config, target claude docs, troubleshooting
+  - `docs/guides/review-pipeline.md` -- End-to-end review pipeline with shell script and GitHub Actions examples
+  - `docs/guides/workspace-setup.md` -- Multi-repo workspace documentation with manifest schema and hook integration
+  - `docs/templates/CLAUDE.md` -- Lean baseline template under 500 tokens
+  - `docs/templates/hooks.json` -- Reference Claude Code hooks configuration (valid JSON)
+  - `docs/recipes/quick-context.md` -- Alex persona: quick chat context recipes
+  - `docs/recipes/pipeline-review.md` -- Zizo persona: pipeline integration recipes
+  - `docs/recipes/ci-integration.md` -- Jordan persona: CI/CD setup with GitHub Actions
+  - `internal/cli/docs_test.go` -- 5 test functions validating documentation completeness and correctness
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
