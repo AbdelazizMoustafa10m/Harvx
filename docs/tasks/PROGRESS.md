@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 65 |
+| Completed | 66 |
 | In Progress | 0 |
-| Not Started | 30 |
+| Not Started | 29 |
 
 ---
 
@@ -554,5 +554,23 @@
 - **Files created/modified:**
   - `internal/diff/compare.go` -- CompareStates function and DiffResult type with O(n) two-pass algorithm
   - `internal/diff/compare_test.go` -- 30+ unit tests, integration tests, and benchmark
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-063: Git-Aware Diffing
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `GitDiffer` struct with git CLI interaction for change detection between refs
+  - `GetCurrentBranch`, `GetHeadSHA`, `ValidateRef`, `GetChangedFiles`, `GetChangedFilesSince` methods using `exec.CommandContext` with `context.Context` for cancellation
+  - `GitFileChange` struct with `GitChangeType` enum (Added/Modified/Deleted/Renamed)
+  - `BuildDiffResultFromGit` converting git changes to standard `DiffResult` (renames mapped to delete+add)
+  - `parseNameStatus` parser for `git diff --name-status` output (A, M, D, R<score>, C<score>)
+  - Sentinel errors `ErrGitNotFound`, `ErrNotGitRepo`, `ErrInvalidRef` with proper wrapping
+  - 30+ unit tests using real git repos in `t.TempDir()`, integration test with multi-commit history, context cancellation test
+- **Files created/modified:**
+  - `internal/diff/git.go` -- GitDiffer implementation with git CLI interaction, parseNameStatus, BuildDiffResultFromGit
+  - `internal/diff/git_test.go` -- 30+ tests covering all acceptance criteria
+  - `internal/diff/errors.go` -- Added ErrGitNotFound, ErrNotGitRepo, ErrInvalidRef sentinel errors
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
