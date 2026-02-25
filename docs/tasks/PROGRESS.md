@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 72 |
+| Completed | 73 |
 | In Progress | 0 |
-| Not Started | 23 |
+| Not Started | 22 |
 
 ---
 
@@ -641,5 +641,34 @@
   - `internal/config/env_test.go` -- 13 new tests: parseBoolEnv (20 cases), env var overrides for profile/max-tokens/tokenizer/compress/redact/stdout, CLI flag precedence
   - `internal/config/merge.go` -- Added AssertInclude to mergeProfile
   - `internal/config/resolver.go` -- Added assert_include to flattenProfileRaw, profileToFlatMap, flatMapToProfile
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-070: Repo Brief Command (`harvx brief`)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `harvx brief` Cobra subcommand generating a stable, deterministic Repo Brief artifact (~1-4K tokens) with project-wide invariants
+  - Brief generation workflow discovering README, invariants (CLAUDE.md, CONVENTIONS.md), architecture docs/ADRs, build commands, config info, review rules, and module map
+  - Section extraction for Makefile targets, package.json scripts, go.mod info, Cargo.toml package section, pyproject.toml project section
+  - Automatic module map generation from top-level directories with 50+ known directory descriptions and content-based inference fallback
+  - Token budget enforcement truncating lower-priority sections first (module map → review rules → config → build → architecture → invariants → README)
+  - `--json` flag for machine-readable metadata (token count, content hash, files included, section names, max tokens)
+  - `--target claude` producing XML-formatted output with `<repo-brief>` wrapper and XML comment header
+  - `--assert-include` coverage checks on brief source files
+  - `--stdout` and `-o` output routing with brief-specific default filename (`harvx-brief.md`)
+  - Content-addressed output via XXH3 hash enabling prompt caching across commits
+  - `BriefMaxTokens` profile configuration field (default: 4000 tokens)
+  - Deterministic output: sorted paths, fixed section order, stable rendering
+- **Files created/modified:**
+  - `internal/workflows/brief.go` -- Brief generation logic: section discovery, budget enforcement, Markdown/XML rendering, content hashing
+  - `internal/workflows/brief_test.go` -- 30 unit tests: all sections, determinism (5-run), missing README/architecture, empty repo, token budget, Claude XML, assert-include, README variants/priority, content hash changes
+  - `internal/workflows/module_map.go` -- ModuleMapEntry type, GenerateModuleMap (50+ known dirs), describeDirectory, inferDescription, RenderModuleMap
+  - `internal/workflows/module_map_test.go` -- 15 tests: known directories, hidden dirs, content inference (Go/TS/Py/Rust/MD), empty dir, deterministic order, render format
+  - `internal/workflows/section_extractor.go` -- ExtractMakefileTargets, ExtractPackageJSONScripts, ExtractGoModInfo, ExtractCargoTomlInfo, ExtractPyprojectInfo
+  - `internal/workflows/section_extractor_test.go` -- 20 tests: Makefile targets (standard, empty, deps, dedup, hyphens), package.json scripts (standard, no scripts, invalid, sorted, complex), go.mod, Cargo.toml, pyproject.toml, TOML value extraction
+  - `internal/cli/brief.go` -- Cobra command registration, --json flag, runBrief, resolveBriefMaxTokens, buildBriefTokenCounter, writeBriefJSON, writeBriefOutput
+  - `internal/cli/brief_test.go` -- 13 CLI tests: command registration, properties, --json flag, global flag inheritance, stdout/JSON exit zero, JSON schema, determinism, Claude XML, metadata values, help text
+  - `internal/config/types.go` -- Added BriefMaxTokens field to Profile struct
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
