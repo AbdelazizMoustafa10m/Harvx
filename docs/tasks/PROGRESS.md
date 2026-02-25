@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 66 |
+| Completed | 67 |
 | In Progress | 0 |
-| Not Started | 29 |
+| Not Started | 28 |
 
 ---
 
@@ -572,5 +572,31 @@
   - `internal/diff/git.go` -- GitDiffer implementation with git CLI interaction, parseNameStatus, BuildDiffResultFromGit
   - `internal/diff/git_test.go` -- 30+ tests covering all acceptance criteria
   - `internal/diff/errors.go` -- Added ErrGitNotFound, ErrNotGitRepo, ErrInvalidRef sentinel errors
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-064: `harvx diff` Subcommand and `--diff-only` Flag
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `harvx diff` Cobra subcommand with `--since`, `--base`, `--head` local flags for git-based diffing
+  - Three diff modes: cache-based (no flags), `--since <ref>` (git ref), `--base/--head` (PR review)
+  - `DetermineDiffMode` function with mutual exclusion validation (`--since` vs `--base/--head`)
+  - `RunDiff` dispatcher routing to `runCacheDiff`, `runSinceDiff`, or `runBaseHeadDiff`
+  - `FormatChangeSummary` producing human-readable change summary with counts and file paths (+ ~ - prefixes)
+  - Lightweight `walkDir` for cache-based snapshot building (skips hidden dirs, vendor, node_modules, etc.)
+  - `buildCurrentSnapshot` scanning directory tree and hashing files with XXH3
+  - `--diff-only` persistent flag on root command for filtering generate output to changed files only
+  - `--profile` persistent flag on root command for selecting cached state profile
+  - Helpful error message when no cached state exists (exits 0, not 1)
+  - Read-only behavior: `harvx diff` never saves state to cache
+  - 30+ unit tests covering all acceptance criteria
+- **Files created/modified:**
+  - `internal/diff/diff.go` -- High-level diff orchestration: DiffMode, DiffOptions, DiffOutput, RunDiff, FormatChangeSummary, DetermineDiffMode, walkDir, buildCurrentSnapshot
+  - `internal/diff/diff_test.go` -- 30+ unit tests: mode selection, mutual exclusion, summary formatting, RunDiff error cases, git integration tests, walkDir tests, isSkippedDir, state save behavior, snapshot building
+  - `internal/cli/diff.go` -- Cobra subcommand registration with --since/--base/--head flags, runDiff handler
+  - `internal/cli/diff_test.go` -- CLI tests: command registration, flag presence, help output, inherited flags, no-cache helpful message
+  - `internal/config/flags.go` -- Added DiffOnly and Profile fields to FlagValues, registered --diff-only and --profile persistent flags
+  - `internal/cli/root_test.go` -- Added diff-only to boolean flags test, --diff-only and --profile to help output test
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

@@ -57,6 +57,10 @@ type FlagValues struct {
 
 	// Metadata sidecar flag (T-057)
 	OutputMetadata bool // Generate .meta.json sidecar alongside output
+
+	// Diff flags (T-064)
+	DiffOnly bool   // Output only changed files since last run
+	Profile  string // Profile name for config and state caching
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -102,6 +106,10 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 
 	// Metadata sidecar flag (T-057)
 	pf.BoolVar(&fv.OutputMetadata, "output-metadata", false, "Generate .meta.json sidecar file alongside output")
+
+	// Diff flags (T-064)
+	pf.BoolVar(&fv.DiffOnly, "diff-only", false, "Output only changed files since last run")
+	pf.StringVar(&fv.Profile, "profile", "default", "Profile name for config and state caching")
 
 	return fv
 }

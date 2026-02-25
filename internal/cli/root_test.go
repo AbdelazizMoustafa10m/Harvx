@@ -86,6 +86,7 @@ func TestRootCommandHasBooleanFlags(t *testing.T) {
 		"fail-on-redaction",
 		"yes",
 		"clear-cache",
+		"diff-only",
 	}
 	for _, name := range boolFlags {
 		t.Run(name, func(t *testing.T) {
@@ -161,6 +162,7 @@ func TestExecuteHelpShowsAllFlags(t *testing.T) {
 		"--verbose", "--quiet", "--yes", "--clear-cache",
 		"--tokenizer", "--max-tokens", "--truncation-strategy",
 		"--token-count", "--top-files",
+		"--diff-only", "--profile",
 	}
 	for _, flag := range expectedFlags {
 		assert.Contains(t, output, flag, "help output should show %s flag", flag)
