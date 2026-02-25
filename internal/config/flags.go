@@ -67,6 +67,9 @@ type FlagValues struct {
 
 	// Assert-include patterns (T-069)
 	AssertIncludes []string // --assert-include glob patterns for coverage checks
+
+	// Interactive TUI flag (T-079)
+	Interactive bool // Launch interactive TUI instead of headless generation
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -117,6 +120,9 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 	// Diff flags (T-064)
 	pf.BoolVar(&fv.DiffOnly, "diff-only", false, "Output only changed files since last run")
 	pf.StringVar(&fv.Profile, "profile", "default", "Profile name for config and state caching")
+
+	// Interactive TUI flag (T-079)
+	pf.BoolVarP(&fv.Interactive, "interactive", "i", false, "Launch interactive TUI for file selection")
 
 	return fv
 }

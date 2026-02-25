@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 81 |
+| Completed | 82 |
 | In Progress | 0 |
-| Not Started | 14 |
+| Not Started | 13 |
 
 ---
 
@@ -646,4 +646,29 @@
 - `go test -tags integration` pass (40/40)
 
 ---
+
+### T-079: Bubble Tea Application Scaffold & Elm Architecture
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - Root Bubble Tea `Model` with `Init`/`Update`/`View` implementing Elm architecture
+  - Sub-models for file tree, stats panel, profile selector, and help overlay (stubs for future tasks)
+  - Message types for inter-component TUI communication (`FileToggledMsg`, `TokenCountUpdatedMsg`, `ProfileChangedMsg`, `GenerateRequestedMsg`, `ErrorMsg`, `WindowSizeMsg`)
+  - Key binding definitions using `charmbracelet/bubbles/key` with `KeyMap` implementing `help.KeyMap`
+  - `--interactive`/`-i` CLI flag with smart default detection (auto-launch when no `harvx.toml` and TTY attached)
+  - TUI launch logic with `tea.WithAltScreen()` and `tea.WithMouseCellMotion()`
+  - Global key handling: `q`/`Esc` quit, `?` help toggle, `Enter` generate, `Tab` profile switch
+  - Window resize propagation to all sub-models
+- **Files created/modified:**
+  - `internal/tui/messages.go` -- TUI message types for inter-component communication
+  - `internal/tui/keys.go` -- KeyMap with default key bindings and help.KeyMap interface
+  - `internal/tui/app.go` -- Root Bubble Tea model with Elm architecture, sub-models, and multi-panel layout
+  - `internal/tui/app_test.go` -- 22 unit tests for constructor, key handling, message routing, view rendering
+  - `internal/cli/interactive.go` -- TUI launch logic and smart default detection
+  - `internal/cli/interactive_test.go` -- 8 tests for smart default and config tree detection
+  - `internal/cli/root.go` -- Wired --interactive flag into root RunE with smart default
+  - `internal/config/flags.go` -- Added Interactive bool field and --interactive/-i flag binding
+  - `internal/cli/generate_test.go` -- Updated test to pass --interactive=false for headless mode
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

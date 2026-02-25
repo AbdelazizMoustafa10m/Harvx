@@ -51,8 +51,20 @@ context file optimized for large language models like Claude, ChatGPT, and other
 
 		return nil
 	},
-	// When no subcommand is given, delegate to the generate command.
+	// When no subcommand is given, check for interactive mode or delegate to generate.
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if ShouldLaunchInteractive(cmd, flagValues) {
+			// Resolve config for the TUI.
+			resolved, err := config.Resolve(config.ResolveOptions{
+				TargetDir:   flagValues.Dir,
+				ProfileName: flagValues.Profile,
+			})
+			if err != nil {
+				return fmt.Errorf("resolving config for TUI: %w", err)
+			}
+			p := pipeline.NewPipeline()
+			return runInteractive(cmd, resolved, p)
+		}
 		return runGenerate(cmd, args)
 	},
 }
