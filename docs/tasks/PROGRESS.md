@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 61 |
+| Completed | 62 |
 | In Progress | 0 |
-| Not Started | 34 |
+| Not Started | 33 |
 
 ---
 
@@ -488,4 +488,21 @@
 - `go test ./...` pass
 
 ---
+
+### T-059: State Snapshot Types and JSON Serialization
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `StateSnapshot` and `FileState` structs with snake_case JSON tags for persisting project state between runs
+  - Custom JSON marshaling: deterministic output with sorted file map keys; `ContentHash` (uint64) serialized as hex string
+  - `NewStateSnapshot` constructor, `AddFile` method, `ParseStateSnapshot` deserializer with schema version validation
+  - `ErrUnsupportedVersion` sentinel error for version mismatch detection via `errors.Is`
+  - 25 unit tests covering round-trips, golden fixtures, edge cases (empty snapshot, large hash, malformed JSON, missing fields)
+- **Files created/modified:**
+  - `internal/diff/state.go` -- StateSnapshot and FileState types, constructors, deterministic JSON serialization
+  - `internal/diff/state_test.go` -- 25 unit tests with table-driven patterns and golden fixture validation
+  - `testdata/state/valid_snapshot.json` -- Golden test fixture for populated snapshot
+  - `testdata/state/empty_snapshot.json` -- Golden test fixture for empty snapshot
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

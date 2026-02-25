@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "profile_name": "default",
+  "generated_at": "2026-02-25T10:00:00Z",
+  "git_branch": "main",
+  "git_head_sha": "abc123",
+  "root_dir": "/home/user/project",
+  "files": {
+    "README.md": {
+      "size": 256,
+      "content_hash": "ff",
+      "modified_time": "2026-02-20T12:00:00Z"
+    },
+    "src/main.go": {
+      "size": 1024,
+      "content_hash": "deadbeef",
+      "modified_time": "2026-02-25T09:00:00Z"
+    }
+  }
+}
