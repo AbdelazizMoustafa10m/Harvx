@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 75 |
+| Completed | 76 |
 | In Progress | 0 |
-| Not Started | 20 |
+| Not Started | 19 |
 
 ---
 
@@ -720,5 +720,33 @@
   - `internal/workflows/slice_test.go` -- 23+ test cases: validation, single dir/file, multiple paths, neighbors, budget, determinism, formats, assert-include, edge cases
   - `internal/cli/slice.go` -- Cobra command: --path/--json flags, runSlice, writeSliceJSON, writeSliceOutput
   - `internal/cli/slice_test.go` -- 11 test functions: registration, flags, required flags, help text, JSON output, global flag inheritance
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-073: Workspace Manifest Config and Command (`harvx workspace`)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `.harvx/workspace.toml` manifest parsing using BurntSushi/toml with unknown-key warnings for forward compatibility
+  - `WorkspaceConfig`, `WorkspaceManifest`, `WorkspaceRepo` types with TOML struct tags matching PRD Section 5.11.3 schema
+  - `DiscoverWorkspaceConfig` auto-detection walking up parent directories, stopping at `.git` boundary or maxSearchDepth (20)
+  - `ValidateWorkspace` producing warnings (not errors) for missing repo paths, unknown integration targets, duplicate repo names
+  - `ExpandPath` resolving `~` to `$HOME` and relative paths relative to workspace.toml location
+  - `GenerateWorkspaceInit` producing valid starter TOML with placeholder entries
+  - `harvx workspace` command rendering manifests as Markdown or XML with repo list, integration graph, shared schemas
+  - `--deep` mode including top-level directory listings per repo (max 30 entries, hidden files skipped)
+  - `--json` flag for machine-readable metadata (name, description, repo count, token count, content hash, warnings)
+  - `--target claude` producing XML output with `<workspace>`, `<repo>`, `<integrations>`, `<shared-schemas>` tags
+  - `harvx workspace init` generating `.harvx/workspace.toml` with overwrite protection via `--yes`
+  - `--stdout`, `-o`, `--target` output routing with `harvx-workspace.md` default filename
+  - Deterministic output: repos sorted by name, integration edges sorted, shared schemas sorted, XXH3 content hash
+- **Files created/modified:**
+  - `internal/config/workspace.go` -- WorkspaceConfig/WorkspaceManifest/WorkspaceRepo types, LoadWorkspaceConfig, DiscoverWorkspaceConfig, ValidateWorkspace, ExpandPath, GenerateWorkspaceInit
+  - `internal/config/workspace_test.go` -- 30 tests: TOML parsing, auto-detection, validation warnings, path expansion, init generation
+  - `internal/workflows/workspace.go` -- GenerateWorkspace, WorkspaceOptions/Result/JSON types, Markdown+XML renderers, integration edges, shared schemas, directory listings
+  - `internal/workflows/workspace_test.go` -- 28 tests: rendering, determinism, XML mode, deep mode, path existence, content hashing, helper functions
+  - `internal/cli/workspace.go` -- Cobra command: workspace + workspace init subcommands, --json/--deep flags, output routing
+  - `internal/cli/workspace_test.go` -- 11 tests: registration, flags, JSON output, stdout output, missing config, init creation, init overwrite, global flag inheritance
+  - `testdata/config/workspace.toml` -- Test fixture with 3 repos demonstrating all fields
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
