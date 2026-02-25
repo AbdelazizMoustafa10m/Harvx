@@ -63,6 +63,14 @@ type Profile struct {
 	// with exit code 1. Used for CI coverage checks.
 	AssertInclude []string `toml:"assert_include"`
 
+	// SliceMaxTokens is the token budget for the Review Slice artifact.
+	// Controls the maximum size of output from `harvx review-slice`. Default: 20000.
+	SliceMaxTokens int `toml:"slice_max_tokens"`
+
+	// SliceDepth controls the neighborhood discovery depth for review-slice.
+	// 0 = no neighbors (changed files only), 1 = direct imports only (default).
+	SliceDepth int `toml:"slice_depth"`
+
 	// Relevance holds tier-based file sorting configuration. Each tier is
 	// a list of glob patterns that match files assigned to that tier.
 	Relevance RelevanceConfig `toml:"relevance"`

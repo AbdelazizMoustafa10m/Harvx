@@ -291,7 +291,7 @@ func flattenProfileRaw(raw map[string]interface{}) map[string]any {
 	}
 
 	// Integer fields: BurntSushi/toml decodes TOML integers as int64 in raw maps.
-	for _, intKey := range []string{"max_tokens", "brief_max_tokens"} {
+	for _, intKey := range []string{"max_tokens", "brief_max_tokens", "slice_max_tokens", "slice_depth"} {
 		if v, ok := raw[intKey]; ok {
 			switch n := v.(type) {
 			case int64:
@@ -385,6 +385,8 @@ func profileToFlatMap(p *Profile) map[string]any {
 		"format":      p.Format,
 		"max_tokens":       p.MaxTokens,
 		"brief_max_tokens": p.BriefMaxTokens,
+		"slice_max_tokens": p.SliceMaxTokens,
+		"slice_depth":      p.SliceDepth,
 		"tokenizer":        p.Tokenizer,
 		"compression": p.Compression,
 		"redaction":   p.Redaction,
@@ -415,6 +417,8 @@ func flatMapToProfile(k *koanf.Koanf) *Profile {
 		Format:         k.String("format"),
 		MaxTokens:      k.Int("max_tokens"),
 		BriefMaxTokens: k.Int("brief_max_tokens"),
+		SliceMaxTokens: k.Int("slice_max_tokens"),
+		SliceDepth:     k.Int("slice_depth"),
 		Tokenizer:      k.String("tokenizer"),
 		Compression: k.Bool("compression"),
 		Redaction:   k.Bool("redaction"),

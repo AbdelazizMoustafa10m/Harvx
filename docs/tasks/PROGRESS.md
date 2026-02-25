@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 73 |
+| Completed | 74 |
 | In Progress | 0 |
-| Not Started | 22 |
+| Not Started | 21 |
 
 ---
 
@@ -670,5 +670,34 @@
   - `internal/cli/brief.go` -- Cobra command registration, --json flag, runBrief, resolveBriefMaxTokens, buildBriefTokenCounter, writeBriefJSON, writeBriefOutput
   - `internal/cli/brief_test.go` -- 13 CLI tests: command registration, properties, --json flag, global flag inheritance, stdout/JSON exit zero, JSON schema, determinism, Claude XML, metadata values, help text
   - `internal/config/types.go` -- Added BriefMaxTokens field to Profile struct
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-071: Review Slice Command (`harvx review-slice`)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `harvx review-slice --base <ref> --head <ref>` Cobra subcommand generating a PR-specific context slice with changed files and bounded neighborhood
+  - Multi-language import parser (Go, TypeScript/JavaScript, Python) for neighborhood discovery via regex-based heuristic parsing
+  - Bounded neighborhood discovery finding related test files, importer files, and same-directory neighbors with configurable depth
+  - Review slice generation workflow with git diff integration, token budget enforcement (changed files always prioritized), and deterministic output
+  - Markdown and XML (Claude-optimized) rendering with code fences, language detection, and content hashing
+  - `--json` flag for machine-readable metadata (token count, content hash, file lists, max tokens, refs)
+  - `--base`/`--head` required flags, `--stdout`, `-o`, `--target`, `--assert-include`, `--profile` support
+  - `SliceMaxTokens` (default: 20000) and `SliceDepth` (default: 1) profile configuration fields with merge/resolver support
+  - Empty slice handling when no files changed between refs
+  - Budget enforcement: changed files always included first, neighbors added greedily until budget reached
+- **Files created/modified:**
+  - `internal/workflows/imports.go` -- Multi-language import parser: ParseImports, parseGoImports, parseJSImports, parsePythonImports
+  - `internal/workflows/imports_test.go` -- 73 test cases: Go/JS/TS/Python parsing, dedup/sort, normalize, relative imports
+  - `internal/workflows/neighbors.go` -- DiscoverNeighbors, findRelatedTests, findImporters, findTestCandidates, resolveImportToPath
+  - `internal/workflows/neighbors_test.go` -- Neighbor discovery tests: depth control, test file/importer detection, filtering
+  - `internal/workflows/review_slice.go` -- GenerateReviewSlice, collectRepoFiles, buildSliceFiles, enforceSliceBudget, renderSlice, discoverNeighbors
+  - `internal/workflows/review_slice_test.go` -- 88 test cases: validation, budget, rendering, language detection, neighbor discovery
+  - `internal/cli/review_slice.go` -- Cobra command: --base/--head/--json flags, resolveSliceConfig, writeReviewSliceJSON, writeReviewSliceOutput
+  - `internal/cli/review_slice_test.go` -- 15 test functions: registration, flags, required flags, help text, JSON output, config resolution
+  - `internal/config/types.go` -- Added SliceMaxTokens, SliceDepth fields to Profile struct
+  - `internal/config/merge.go` -- Added SliceMaxTokens, SliceDepth to mergeProfile
+  - `internal/config/resolver.go` -- Added slice_max_tokens, slice_depth to flattenProfileRaw, profileToFlatMap, flatMapToProfile
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
