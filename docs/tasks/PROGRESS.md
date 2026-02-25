@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 79 |
+| Completed | 80 |
 | In Progress | 0 |
-| Not Started | 16 |
+| Not Started | 15 |
 
 ---
 
@@ -826,4 +826,28 @@
   - `docs/guides/golden-questions.md` -- Evaluation methodology documentation with writing tips, CI workflow, scoring guide
   - `docs/templates/golden-questions.toml` -- Starter template with 5 example questions across all categories
   - `docs/templates/evaluate.sh` -- Shell script template for LLM A/B evaluation (diff-only vs Harvx context)
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-077: MCP Server v1.1 (`harvx mcp serve`)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `harvx mcp serve` command starting an MCP server over stdio transport for coding agents
+  - Three MCP tools: `brief` (repo brief), `slice` (module context), `review_slice` (PR context)
+  - Typed tool handlers with auto-derived JSON Schema via `mcp.AddTool[In, Out]` generic function
+  - Each tool calls workflow functions directly (no subprocess spawning), thread-safe via independent state per invocation
+  - Signal handling (SIGINT/SIGTERM) for graceful shutdown, all logging to stderr
+  - Tool annotations with `ReadOnlyHint: true` signaling read-only filesystem access
+  - `nonNilSlice` helper preventing JSON null in structured MCP output
+  - MCP integration guide with Codex CLI and Claude Code configuration examples
+- **Files created/modified:**
+  - `internal/server/mcp.go` -- MCP server creation (NewMCPServer), lifecycle (Serve), signal handling
+  - `internal/server/tools.go` -- Tool input/output types, registerTools, makeBriefHandler, makeSliceHandler, makeReviewSliceHandler
+  - `internal/server/mcp_test.go` -- 5 tests: server creation, default config, profile config, config fields, multiple instances
+  - `internal/server/tools_test.go` -- 30 tests: handler creation, brief/slice/review-slice invocations, input validation, concurrent invocations, context cancellation, nonNilSlice helper
+  - `internal/cli/mcp.go` -- Cobra mcp command with serve subcommand, runMCPServe function
+  - `docs/guides/mcp-integration.md` -- Setup guide for Codex CLI and Claude Code, tool documentation, troubleshooting
+  - `go.mod` -- Added github.com/modelcontextprotocol/go-sdk v1.3.1 dependency
+  - `go.sum` -- Updated with MCP SDK transitive dependencies
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
