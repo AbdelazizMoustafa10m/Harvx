@@ -1,0 +1,8 @@
+[workspace]
+name = "sample-workspace"
+description = "Test workspace for integration tests"
+
+[[workspace.repos]]
+name = "sample-repo"
+path = "."
+description = "The main sample repository"

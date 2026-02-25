@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 80 |
+| Completed | 81 |
 | In Progress | 0 |
-| Not Started | 15 |
+| Not Started | 14 |
 
 ---
 
@@ -851,3 +851,32 @@
   - `go.mod` -- Added github.com/modelcontextprotocol/go-sdk v1.3.1 dependency
   - `go.sum` -- Updated with MCP SDK transitive dependencies
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-078: Workflow Integration Tests and End-to-End Pipeline Validation
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - Comprehensive integration test suite (40 tests) validating all workflow commands end-to-end via compiled binary execution
+  - Test infrastructure: `TestMain` binary compilation, `runHarvx`/`runHarvxInDir` helpers, `setupGitRepo`/`setupGitRepoWithChange` for git-dependent tests, `copyDir` recursive copy
+  - Workflow tests: brief (generation, stdout, JSON, Claude XML), slice (module context), review-slice (git diff), workspace (manifest), verify (faithfulness), preview (JSON), version (JSON)
+  - Pipeline composition tests: brief-to-file + verify chain, stdout piping, multiple slice paths, markdown/XML format validation
+  - Environment variable override tests: HARVX_MAX_TOKENS, HARVX_STDOUT, HARVX_VERBOSE, HARVX_QUIET, HARVX_LOG_FORMAT, CLI flag precedence over env vars
+  - Exit code validation: success (0), invalid flags (1), assert-include pass/fail, missing required flags
+  - Determinism tests: content hash identity, byte-identical output, preview JSON stability
+  - Performance tests: brief < 5s, preview < 2s
+  - Enhanced sample-repo fixtures: Go source with imports, auth middleware package, Makefile, harvx.toml profiles, .harvx/workspace.toml
+- **Files created/modified:**
+  - `tests/integration/setup_test.go` -- Test infrastructure with binary build, execution helpers, git repo setup
+  - `tests/integration/workflow_test.go` -- 12 full workflow pipeline tests
+  - `tests/integration/pipeline_test.go` -- 7 pipeline composition tests
+  - `tests/integration/env_test.go` -- 6 environment variable override tests
+  - `tests/integration/exitcode_test.go` -- 8 exit code validation tests
+  - `tests/integration/determinism_test.go` -- 6 determinism and performance tests
+  - `testdata/sample-repo/src/main.go` -- Go source with imports for neighbor discovery
+  - `testdata/sample-repo/src/auth/middleware.go` -- Auth middleware for slice/review-slice testing
+  - `testdata/sample-repo/src/auth/middleware_test.go` -- Test file for test discovery
+  - `testdata/sample-repo/Makefile` -- Makefile with build/test/lint targets for brief extraction
+  - `testdata/sample-repo/harvx.toml` -- Test profile configuration (default, test, xml-test)
+  - `testdata/sample-repo/.harvx/workspace.toml` -- Test workspace configuration
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go test -tags integration` ✓ (40/40 pass)
