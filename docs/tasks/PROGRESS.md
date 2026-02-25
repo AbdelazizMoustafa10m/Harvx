@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 64 |
+| Completed | 65 |
 | In Progress | 0 |
-| Not Started | 31 |
+| Not Started | 30 |
 
 ---
 
@@ -538,5 +538,21 @@
   - `internal/diff/errors.go` -- Sentinel errors: ErrBranchMismatch, ErrNoState, ErrInvalidVersion
   - `internal/diff/cache.go` -- StateCache with atomic read/write/clear operations and profile name sanitization
   - `internal/diff/cache_test.go` -- 25 unit tests with table-driven patterns and concurrency tests
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-062: State Comparison Engine (Added/Modified/Deleted Detection)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `DiffResult` struct with `Added`, `Modified`, `Deleted` (sorted string slices) and `Unchanged` count
+  - `CompareStates(previous, current *StateSnapshot) *DiffResult` O(n) two-pass comparison engine using hash-map lookups
+  - `HasChanges()`, `TotalChanged()`, `Summary()` convenience methods on `DiffResult`
+  - Nil-safe: nil previous treated as empty (all added), nil current treated as empty (all deleted)
+  - 30+ unit tests covering all edge cases: both empty, one empty, identical, mixed scenario, sorting, nil snapshots
+  - Benchmark for 10,000-file snapshots verifying sub-millisecond performance
+- **Files created/modified:**
+  - `internal/diff/compare.go` -- CompareStates function and DiffResult type with O(n) two-pass algorithm
+  - `internal/diff/compare_test.go` -- 30+ unit tests, integration tests, and benchmark
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

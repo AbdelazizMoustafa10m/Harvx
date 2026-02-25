@@ -37,7 +37,7 @@ func TestCompareStates(t *testing.T) {
 		wantUnchanged int
 	}{
 		{
-			name:          "both empty",
+			name:          "both empty snapshots",
 			previous:      newEmptySnapshot(t),
 			current:       newEmptySnapshot(t),
 			wantAdded:     nil,
@@ -46,7 +46,7 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 0,
 		},
 		{
-			name:     "previous empty current has files",
+			name:     "previous empty current has 3 files",
 			previous: newEmptySnapshot(t),
 			current: snapshotWithFiles(t, map[string]FileState{
 				"alpha.go": {Size: 100, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
@@ -59,7 +59,7 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 0,
 		},
 		{
-			name: "previous has files current empty",
+			name: "previous has 3 files current empty",
 			previous: snapshotWithFiles(t, map[string]FileState{
 				"alpha.go": {Size: 100, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
 				"beta.go":  {Size: 200, ContentHash: 0x2, ModifiedTime: "2026-01-01T00:00:00Z"},
@@ -89,7 +89,7 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 3,
 		},
 		{
-			name: "mixed scenario",
+			name: "mixed scenario 2 added 3 modified 1 deleted 4 unchanged",
 			previous: snapshotWithFiles(t, map[string]FileState{
 				// unchanged (4 files)
 				"keep1.go": {Size: 100, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
@@ -123,7 +123,7 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 4,
 		},
 		{
-			name:     "sorted output",
+			name: "added paths sorted alphabetically",
 			previous: newEmptySnapshot(t),
 			current: snapshotWithFiles(t, map[string]FileState{
 				"z.go": {Size: 10, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
@@ -136,7 +136,37 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 0,
 		},
 		{
-			name:     "nil previous",
+			name: "modified paths sorted alphabetically",
+			previous: snapshotWithFiles(t, map[string]FileState{
+				"z.go": {Size: 10, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
+				"a.go": {Size: 20, ContentHash: 0x2, ModifiedTime: "2026-01-01T00:00:00Z"},
+				"m.go": {Size: 30, ContentHash: 0x3, ModifiedTime: "2026-01-01T00:00:00Z"},
+			}),
+			current: snapshotWithFiles(t, map[string]FileState{
+				"z.go": {Size: 10, ContentHash: 0x10, ModifiedTime: "2026-01-02T00:00:00Z"},
+				"a.go": {Size: 20, ContentHash: 0x20, ModifiedTime: "2026-01-02T00:00:00Z"},
+				"m.go": {Size: 30, ContentHash: 0x30, ModifiedTime: "2026-01-02T00:00:00Z"},
+			}),
+			wantAdded:     nil,
+			wantModified:  []string{"a.go", "m.go", "z.go"},
+			wantDeleted:   nil,
+			wantUnchanged: 0,
+		},
+		{
+			name: "deleted paths sorted alphabetically",
+			previous: snapshotWithFiles(t, map[string]FileState{
+				"z.go": {Size: 10, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
+				"a.go": {Size: 20, ContentHash: 0x2, ModifiedTime: "2026-01-01T00:00:00Z"},
+				"m.go": {Size: 30, ContentHash: 0x3, ModifiedTime: "2026-01-01T00:00:00Z"},
+			}),
+			current:       newEmptySnapshot(t),
+			wantAdded:     nil,
+			wantModified:  nil,
+			wantDeleted:   []string{"a.go", "m.go", "z.go"},
+			wantUnchanged: 0,
+		},
+		{
+			name:     "nil previous treated as empty",
 			previous: nil,
 			current: snapshotWithFiles(t, map[string]FileState{
 				"file1.go": {Size: 100, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
@@ -149,7 +179,7 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 0,
 		},
 		{
-			name: "nil current",
+			name: "nil current treated as empty",
 			previous: snapshotWithFiles(t, map[string]FileState{
 				"file1.go": {Size: 100, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
 				"file2.go": {Size: 200, ContentHash: 0x2, ModifiedTime: "2026-01-01T00:00:00Z"},
@@ -162,9 +192,18 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 0,
 		},
 		{
-			name: "same path different hash",
+			name:          "both nil no changes",
+			previous:      nil,
+			current:       nil,
+			wantAdded:     nil,
+			wantModified:  nil,
+			wantDeleted:   nil,
+			wantUnchanged: 0,
+		},
+		{
+			name: "same path different hash classified as modified",
 			previous: snapshotWithFiles(t, map[string]FileState{
-				"config.toml": {Size: 100, ContentHash: 0xold, ModifiedTime: "2026-01-01T00:00:00Z"},
+				"config.toml": {Size: 100, ContentHash: 0x1234, ModifiedTime: "2026-01-01T00:00:00Z"},
 			}),
 			current: snapshotWithFiles(t, map[string]FileState{
 				"config.toml": {Size: 150, ContentHash: 0xfeed, ModifiedTime: "2026-01-02T00:00:00Z"},
@@ -175,7 +214,7 @@ func TestCompareStates(t *testing.T) {
 			wantUnchanged: 0,
 		},
 		{
-			name: "same path same hash",
+			name: "same path same hash classified as unchanged",
 			previous: snapshotWithFiles(t, map[string]FileState{
 				"config.toml": {Size: 100, ContentHash: 0xbeef, ModifiedTime: "2026-01-01T00:00:00Z"},
 			}),
@@ -202,6 +241,66 @@ func TestCompareStates(t *testing.T) {
 			assert.Equal(t, tt.wantUnchanged, result.Unchanged, "Unchanged mismatch")
 		})
 	}
+}
+
+func TestCompareStates_HasChanges_Integration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("identical snapshots return HasChanges false", func(t *testing.T) {
+		t.Parallel()
+
+		snap := snapshotWithFiles(t, map[string]FileState{
+			"main.go": {Size: 100, ContentHash: 0xabc, ModifiedTime: "2026-01-01T00:00:00Z"},
+			"util.go": {Size: 200, ContentHash: 0xdef, ModifiedTime: "2026-01-01T00:00:00Z"},
+		})
+		// Use the same file content for both snapshots.
+		other := snapshotWithFiles(t, map[string]FileState{
+			"main.go": {Size: 100, ContentHash: 0xabc, ModifiedTime: "2026-01-01T00:00:00Z"},
+			"util.go": {Size: 200, ContentHash: 0xdef, ModifiedTime: "2026-01-01T00:00:00Z"},
+		})
+
+		result := CompareStates(snap, other)
+		assert.False(t, result.HasChanges(), "identical snapshots should have no changes")
+		assert.Equal(t, 2, result.Unchanged)
+	})
+
+	t.Run("any added file makes HasChanges true", func(t *testing.T) {
+		t.Parallel()
+
+		prev := newEmptySnapshot(t)
+		curr := snapshotWithFiles(t, map[string]FileState{
+			"new.go": {Size: 50, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
+		})
+
+		result := CompareStates(prev, curr)
+		assert.True(t, result.HasChanges())
+	})
+
+	t.Run("any modified file makes HasChanges true", func(t *testing.T) {
+		t.Parallel()
+
+		prev := snapshotWithFiles(t, map[string]FileState{
+			"f.go": {Size: 100, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
+		})
+		curr := snapshotWithFiles(t, map[string]FileState{
+			"f.go": {Size: 100, ContentHash: 0x2, ModifiedTime: "2026-01-01T00:00:00Z"},
+		})
+
+		result := CompareStates(prev, curr)
+		assert.True(t, result.HasChanges())
+	})
+
+	t.Run("any deleted file makes HasChanges true", func(t *testing.T) {
+		t.Parallel()
+
+		prev := snapshotWithFiles(t, map[string]FileState{
+			"old.go": {Size: 100, ContentHash: 0x1, ModifiedTime: "2026-01-01T00:00:00Z"},
+		})
+		curr := newEmptySnapshot(t)
+
+		result := CompareStates(prev, curr)
+		assert.True(t, result.HasChanges())
+	})
 }
 
 func TestDiffResult_HasChanges(t *testing.T) {
@@ -234,7 +333,7 @@ func TestDiffResult_HasChanges(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "all empty",
+			name: "all empty with unchanged",
 			diff: DiffResult{
 				Unchanged: 10,
 			},
@@ -286,7 +385,7 @@ func TestDiffResult_TotalChanged(t *testing.T) {
 			want: 3,
 		},
 		{
-			name: "mixed",
+			name: "mixed categories",
 			diff: DiffResult{
 				Added:    []string{"a.go", "b.go"},
 				Modified: []string{"c.go", "d.go", "e.go"},
@@ -326,7 +425,7 @@ func TestDiffResult_Summary(t *testing.T) {
 			want: "0 added, 0 modified, 0 deleted (0 unchanged)",
 		},
 		{
-			name: "mixed",
+			name: "mixed scenario",
 			diff: DiffResult{
 				Added:     []string{"a.go", "b.go"},
 				Modified:  []string{"c.go", "d.go", "e.go"},
@@ -376,8 +475,8 @@ func TestDiffResult_Summary(t *testing.T) {
 func BenchmarkCompareStates_10000Files(b *testing.B) {
 	const totalFiles = 10000
 	const numModified = 50
-	const numAdded = 25
-	const numDeleted = 25
+	const numAdded = 50
+	const numDeleted = 50
 
 	// Build previous snapshot with totalFiles files.
 	previous := buildSnapshot(b, totalFiles)
