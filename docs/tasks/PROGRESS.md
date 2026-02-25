@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 74 |
+| Completed | 75 |
 | In Progress | 0 |
-| Not Started | 21 |
+| Not Started | 20 |
 
 ---
 
@@ -699,5 +699,26 @@
   - `internal/config/types.go` -- Added SliceMaxTokens, SliceDepth fields to Profile struct
   - `internal/config/merge.go` -- Added SliceMaxTokens, SliceDepth to mergeProfile
   - `internal/config/resolver.go` -- Added slice_max_tokens, slice_depth to flattenProfileRaw, profileToFlatMap, flatMapToProfile
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-072: Module Slice Command (`harvx slice`)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `harvx slice --path <module>` Cobra subcommand generating targeted context about specific modules or directories
+  - Module slice workflow: discovers files under specified paths, finds neighbors (imports, tests) via depth-bounded discovery, applies token budget (module files always prioritized)
+  - Supports multiple `--path` flags for slicing multiple modules simultaneously
+  - Markdown and XML (Claude-optimized) rendering with code fences, language detection, and XXH3 content hashing
+  - `--json` flag for machine-readable metadata (token count, content hash, file lists, max tokens, paths)
+  - `--stdout`, `-o`, `--target`, `--assert-include`, `--profile`, `--max-tokens`, `--compress` flag support
+  - `isModuleFile` matching handles both directory prefixes (with `/` separator to prevent false positives) and exact single-file paths
+  - Deterministic output: sorted paths, stable rendering, content-addressed via XXH3 hash
+  - Reuses `collectRepoFiles`, `buildSliceFiles`, `enforceSliceBudget`, `discoverNeighbors`, `resolveSliceConfig`, `buildSliceTokenCounter` from review-slice
+- **Files created/modified:**
+  - `internal/workflows/slice.go` -- GenerateModuleSlice, ModuleSliceOptions/Result/JSON types, isModuleFile, renderModuleSlice (Markdown + XML)
+  - `internal/workflows/slice_test.go` -- 23+ test cases: validation, single dir/file, multiple paths, neighbors, budget, determinism, formats, assert-include, edge cases
+  - `internal/cli/slice.go` -- Cobra command: --path/--json flags, runSlice, writeSliceJSON, writeSliceOutput
+  - `internal/cli/slice_test.go` -- 11 test functions: registration, flags, required flags, help text, JSON output, global flag inheritance
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
