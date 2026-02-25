@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 77 |
+| Completed | 78 |
 | In Progress | 0 |
-| Not Started | 18 |
+| Not Started | 17 |
 
 ---
 
@@ -772,4 +772,33 @@
   - `docs/recipes/pipeline-review.md` -- Zizo persona: pipeline integration recipes
   - `docs/recipes/ci-integration.md` -- Jordan persona: CI/CD setup with GitHub Actions
   - `internal/cli/docs_test.go` -- 5 test functions validating documentation completeness and correctness
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-075: Verify Command and Faithfulness Checking (`harvx verify`)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `harvx verify` Cobra subcommand comparing packed output to original source files for faithfulness checking
+  - Output file parser supporting both Markdown and XML formats with auto-detection, extracting file blocks (path, content, metadata)
+  - Verification workflow with 5 status types: MATCH, REDACTION_DIFF, COMPRESSION_DIFF, UNEXPECTED_DIFF, FILE_CHANGED
+  - `--sample <n>` flag for reproducible random sampling using FNV-1a hash seed with Fisher-Yates shuffle (default: 10 files)
+  - `--path <file>` repeatable flag for verifying specific files
+  - `--json` flag for structured JSON output suitable for CI pipelines
+  - `--profile` support for resolving correct output path and settings
+  - Budget reporting from `.meta.json` sidecar: tokenizer, total tokens, budget utilization %, compressed files, redactions
+  - Human-readable report with [PASS]/[WARN] labels, aligned file paths, and unified diff snippets for unexpected differences
+  - Exit code 0 when all files pass, exit code 2 (partial) when any have unexpected differences
+  - Redaction detection heuristic: line-by-line comparison identifying `[REDACTED:type]` placeholder substitutions
+  - Simple line-based diff with configurable max lines (default: 10) for debugging unexpected differences
+  - Trailing newline normalization for robust content comparison across output formats
+- **Files created/modified:**
+  - `internal/workflows/output_parser.go` -- ParseOutput, ParseMarkdownOutput, ParseXMLOutput with CDATA unwrap and backtick unescape
+  - `internal/workflows/output_parser_test.go` -- 30+ tests: format detection, single/multi file extraction, compressed/redaction metadata, CDATA split, XML entities
+  - `internal/workflows/verify.go` -- VerifyOutput workflow, file selection, verification logic, redaction detection, simple diff, budget info
+  - `internal/workflows/verify_test.go` -- 14+ tests: exact match, redaction diff, compression diff, unexpected diff, file changed, sampling, reproducibility, paths, budget info
+  - `internal/cli/verify.go` -- Cobra command: --sample/--path/--json flags, human-readable report, JSON output, budget line
+  - `internal/cli/verify_test.go` -- 9 tests: registration, properties, flags, global flag inheritance, help, status labels, formatNumber, pluralS
+  - `testdata/expected-output/verify-pass.md` -- Test fixture with matching output (3 files)
+  - `testdata/expected-output/verify-fail.md` -- Test fixture with intentional mismatch in config.go
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
