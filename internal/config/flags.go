@@ -61,6 +61,9 @@ type FlagValues struct {
 	// Diff flags (T-064)
 	DiffOnly bool   // Output only changed files since last run
 	Profile  string // Profile name for config and state caching
+
+	// Preview/workflow JSON output flag (T-068)
+	PreviewJSON bool // Output machine-readable JSON to stdout (preview, brief, review-slice)
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command

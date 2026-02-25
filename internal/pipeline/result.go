@@ -3,6 +3,7 @@ package pipeline
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -200,4 +201,97 @@ func (st *StageTimings) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("parsing total duration: %w", err)
 	}
 	return nil
+}
+
+// PreviewResult is the JSON output for `harvx preview --json`.
+// It provides machine-readable pipeline metadata for orchestration scripts
+// and CI pipelines that need to make programmatic decisions based on Harvx's
+// analysis without parsing human-readable text.
+type PreviewResult struct {
+	// TotalFiles is the number of files included after filtering.
+	TotalFiles int `json:"total_files"`
+
+	// TotalTokens is the sum of tokens across all included files.
+	TotalTokens int `json:"total_tokens"`
+
+	// Tokenizer is the tokenizer encoding name (e.g., "cl100k_base", "o200k_base").
+	Tokenizer string `json:"tokenizer"`
+
+	// Tiers maps tier number (as string key) to the count of files in that tier.
+	// String keys are used because JSON object keys must be strings.
+	Tiers map[string]int `json:"tiers"`
+
+	// Redactions is the total number of secrets redacted across all files.
+	Redactions int `json:"redactions"`
+
+	// EstimatedTimeMs is the actual pipeline execution time in milliseconds.
+	EstimatedTimeMs int64 `json:"estimated_time_ms"`
+
+	// ContentHash is the XXH3 hash of all processed content, formatted as
+	// lowercase hexadecimal.
+	ContentHash string `json:"content_hash"`
+
+	// Profile is the config profile name used for the run.
+	Profile string `json:"profile"`
+
+	// BudgetUtilizationPercent is the percentage of the token budget used.
+	// Nil when no budget (MaxTokens == 0) is set, serialized as JSON null.
+	BudgetUtilizationPercent *float64 `json:"budget_utilization_percent"`
+
+	// FilesTruncated is the number of files that were truncated to fit the budget.
+	FilesTruncated int `json:"files_truncated"`
+
+	// FilesOmitted is the number of files skipped during discovery (ignored,
+	// binary, oversized, etc.).
+	FilesOmitted int `json:"files_omitted"`
+}
+
+// BuildPreviewResult converts a RunResult into a PreviewResult for JSON output.
+// The profile parameter is the config profile name. The maxTokens parameter is
+// the token budget (0 means no budget). When maxTokens is 0,
+// BudgetUtilizationPercent is set to nil (JSON null).
+func BuildPreviewResult(result *RunResult, profile string, maxTokens int) *PreviewResult {
+	// Convert TierBreakdown map[int]int to map[string]int for JSON string keys.
+	tiers := make(map[string]int, len(result.Stats.TierBreakdown))
+	for tier, count := range result.Stats.TierBreakdown {
+		tiers[strconv.Itoa(tier)] = count
+	}
+
+	// Budget utilization: nil when no budget is set.
+	var budgetPct *float64
+	if maxTokens > 0 {
+		pct := (float64(result.Stats.TotalTokens) / float64(maxTokens)) * 100
+		budgetPct = &pct
+	}
+
+	// Content hash as lowercase hex.
+	contentHash := fmt.Sprintf("%x", result.ContentHash)
+
+	// Estimated time from actual pipeline duration.
+	estimatedTimeMs := result.Timings.Total.Milliseconds()
+
+	return &PreviewResult{
+		TotalFiles:               result.Stats.TotalFiles,
+		TotalTokens:              result.Stats.TotalTokens,
+		Tokenizer:                result.Stats.TokenizerName,
+		Tiers:                    tiers,
+		Redactions:               result.Stats.RedactionCount,
+		EstimatedTimeMs:          estimatedTimeMs,
+		ContentHash:              contentHash,
+		Profile:                  profile,
+		BudgetUtilizationPercent: budgetPct,
+		FilesTruncated:           0, // Populated from BudgetResult when budget stage runs.
+		FilesOmitted:             result.Stats.DiscoverySkipped,
+	}
+}
+
+// PreviewStages returns a StageSelection configured for preview mode:
+// discovery, relevance, and tokenization are enabled. Budget, redaction,
+// compression, and rendering are disabled for speed.
+func PreviewStages() *StageSelection {
+	return &StageSelection{
+		Discovery: true,
+		Relevance: true,
+		Tokenize:  true,
+	}
 }

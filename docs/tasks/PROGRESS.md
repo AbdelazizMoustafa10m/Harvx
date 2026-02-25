@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 70 |
+| Completed | 71 |
 | In Progress | 0 |
-| Not Started | 25 |
+| Not Started | 24 |
 
 ---
 
@@ -597,5 +597,26 @@
   - `internal/cli/output.go` -- OutputMode type, DetectPipe, DetectOutputMode, ShouldSuppressProgress, ShouldDisableColor, MessageWriter
   - `internal/cli/output_test.go` -- 20 unit tests covering pipe detection, output mode detection, progress suppression, color disable, message writer
   - `internal/config/flags.go` -- HARVX_STDOUT env var support and --stdout/--output mutual exclusion validation
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-068: JSON Preview Output and Metadata Sidecar
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `PreviewResult` struct in `internal/pipeline/result.go` with JSON struct tags matching the specified schema (11 fields: `total_files`, `total_tokens`, `tokenizer`, `tiers`, `redactions`, `estimated_time_ms`, `content_hash`, `profile`, `budget_utilization_percent`, `files_truncated`, `files_omitted`)
+  - `BuildPreviewResult(result *RunResult, profile string, maxTokens int) *PreviewResult` function that converts pipeline `RunResult` into `PreviewResult` with tier key conversion (`map[int]int` to `map[string]int`), budget percentage calculation (`*float64`, nil when no budget), and content hash as lowercase hex
+  - `PreviewStages() *StageSelection` helper returning discovery+relevance+tokenization stage selection for preview mode
+  - `--json` local flag on `harvx preview` command that outputs machine-readable JSON to stdout via `json.MarshalIndent`
+  - `PreviewJSON bool` field in `FlagValues` struct for future use by `brief` and `review-slice` commands
+  - Full pipeline integration: `runPreviewJSON` builds a pipeline, runs with preview stages, and produces valid JSON even when services are not wired or errors occur
+  - `writePreviewJSON` helper using `cmd.OutOrStdout()` for testability
+  - `buildPreviewPipelineOptions` stub for future service wiring
+- **Files created/modified:**
+  - `internal/pipeline/result.go` -- Added `PreviewResult` struct, `BuildPreviewResult` function, `PreviewStages` helper
+  - `internal/pipeline/result_test.go` -- 11 new tests: JSON schema compliance, roundtrip, budget null, string keys, basic conversion, no budget, zero result, budget utilization table-driven, content hash hex, tier conversion, preview stages
+  - `internal/config/flags.go` -- Added `PreviewJSON bool` field to `FlagValues`
+  - `internal/cli/preview.go` -- Added `--json` flag, `runPreviewJSON`, `writePreviewJSON`, `buildPreviewPipelineOptions`; updated help text with `--json` example
+  - `internal/cli/preview_test.go` -- 10 new tests: flag registration, exits zero, schema validation, struct deserialization, max-tokens integration, null budget, pretty-printing, flag variable setting, stdout routing, help text
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
