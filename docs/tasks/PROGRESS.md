@@ -489,137 +489,67 @@
 
 ---
 
-### T-059: State Snapshot Types and JSON Serialization
+### Phase 7: State & Diff (T-059 to T-065)
 
 - **Status:** Completed
 - **Date:** 2026-02-25
-- **What was built:**
-  - `StateSnapshot` and `FileState` structs with snake_case JSON tags for persisting project state between runs
-  - Custom JSON marshaling: deterministic output with sorted file map keys; `ContentHash` (uint64) serialized as hex string
-  - `NewStateSnapshot` constructor, `AddFile` method, `ParseStateSnapshot` deserializer with schema version validation
-  - `ErrUnsupportedVersion` sentinel error for version mismatch detection via `errors.Is`
-  - 25 unit tests covering round-trips, golden fixtures, edge cases (empty snapshot, large hash, malformed JSON, missing fields)
-- **Files created/modified:**
-  - `internal/diff/state.go` -- StateSnapshot and FileState types, constructors, deterministic JSON serialization
-  - `internal/diff/state_test.go` -- 25 unit tests with table-driven patterns and golden fixture validation
-  - `testdata/state/valid_snapshot.json` -- Golden test fixture for populated snapshot
-  - `testdata/state/empty_snapshot.json` -- Golden test fixture for empty snapshot
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- **Tasks Completed:** 7 tasks
 
-### T-060: Content Hashing with XXH3
+#### Features Implemented
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `Hasher` interface with `HashBytes([]byte) uint64` and `HashString(string) uint64` methods for swappable hash implementations
-  - `XXH3Hasher` struct implementing `Hasher` via `zeebo/xxh3` v1.1.0 with compile-time interface check
-  - `HashFile(path) (uint64, error)` using streaming `io.Copy` through `xxh3.New()` hasher (32KB chunks, bounded memory)
-  - `HashFileDescriptors([]pipeline.FileDescriptor) error` populating `ContentHash` in place; Content string takes precedence over AbsPath disk read
-  - 20 unit tests covering determinism, empty input, consistency between HashBytes/HashString, file hashing, FileDescriptor hashing (content, disk, mixed, errors, empty slice)
-  - 5 benchmarks: HashBytes at 1KB/64KB/1MB, HashString at 1KB, HashFile at 1MB
-- **Files created:**
-  - `internal/diff/hasher.go` -- Hasher interface definition
-  - `internal/diff/xxh3.go` -- XXH3Hasher implementation with HashFile and HashFileDescriptors
-  - `internal/diff/xxh3_test.go` -- 20 unit tests and 5 benchmarks
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| State snapshot types | T-059 | `StateSnapshot` and `FileState` structs with deterministic JSON serialization, schema version validation, and `ErrUnsupportedVersion` sentinel |
+| Content hashing | T-060 | `Hasher` interface and `XXH3Hasher` implementation via `zeebo/xxh3`; `HashFile` streaming reader and `HashFileDescriptors` batch helper |
+| State cache persistence | T-061 | `StateCache` with atomic read/write/clear via `os.CreateTemp`+`os.Rename`; profile name sanitization; `ErrBranchMismatch`, `ErrNoState`, `ErrInvalidVersion` sentinels |
+| State comparison engine | T-062 | `CompareStates` O(n) two-pass algorithm producing `DiffResult` with sorted `Added`/`Modified`/`Deleted` slices; nil-safe; `HasChanges`, `TotalChanged`, `Summary` helpers |
+| Git-aware diffing | T-063 | `GitDiffer` with `GetChangedFiles`, `GetChangedFilesSince`, `BuildDiffResultFromGit`; `parseNameStatus` for `git diff --name-status`; `ErrGitNotFound`, `ErrNotGitRepo`, `ErrInvalidRef` sentinels |
+| `harvx diff` subcommand | T-064 | Cobra subcommand with `--since`/`--base`/`--head` flags; `DetermineDiffMode` mutual-exclusion validation; `RunDiff` dispatcher; `FormatChangeSummary`; `--diff-only` and `--profile` persistent root flags |
+| Cache subcommands & change summary | T-065 | `harvx cache clear` and `harvx cache show` (table/JSON); `RenderChangeSummary` in Markdown and XML; `NewDiffSummaryData` converter; `--clear-cache` wired in `PersistentPreRunE` |
 
-### T-061: State Cache Persistence (Read/Write)
+#### Key Technical Decisions
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `StateCache` struct with `SaveState`, `LoadState`, `ClearState`, `ClearAllState`, `HasState`, `GetStatePath` methods for profile-scoped state persistence
-  - Atomic file writes via `os.CreateTemp` + `os.Rename` pattern with Windows fallback; auto-creates `.harvx/state/` directory
-  - Branch mismatch detection: `ErrBranchMismatch` sentinel error when cached state's `GitBranch` differs from current branch
-  - Profile name sanitization: only `[a-zA-Z0-9_-]` allowed, others replaced with `_`; empty names default to `"default"`
-  - Sentinel errors `ErrBranchMismatch`, `ErrNoState`, `ErrInvalidVersion` for typed error handling
-  - 25 unit tests covering round-trips, directory creation, overwrites, branch mismatch, idempotent clears, concurrent reads, atomic writes, file permissions
-- **Files created/modified:**
-  - `internal/diff/errors.go` -- Sentinel errors: ErrBranchMismatch, ErrNoState, ErrInvalidVersion
-  - `internal/diff/cache.go` -- StateCache with atomic read/write/clear operations and profile name sanitization
-  - `internal/diff/cache_test.go` -- 25 unit tests with table-driven patterns and concurrency tests
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+1. **Deterministic JSON via sorted map keys** -- `StateSnapshot.Files` is a `map[string]FileState`; custom marshaler sorts keys before encoding to guarantee byte-identical output across runs
+2. **Atomic cache writes via rename** -- `os.CreateTemp` + `os.Rename` prevents torn reads on crash; Windows fallback handles cross-device rename errors
+3. **O(n) two-pass comparison** -- `CompareStates` uses hash-map lookups rather than nested loops; verified sub-millisecond on 10,000-file snapshots
+4. **Git CLI over libgit2** -- `exec.CommandContext` with `context.Context` keeps CGO disabled and allows cancellation; no C dependency
+5. **Three diff modes** -- cache-based, `--since <ref>`, and `--base/--head` PR review; `DetermineDiffMode` validates mutual exclusion at parse time
 
-### T-062: State Comparison Engine (Added/Modified/Deleted Detection)
+#### Key Files Reference
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `DiffResult` struct with `Added`, `Modified`, `Deleted` (sorted string slices) and `Unchanged` count
-  - `CompareStates(previous, current *StateSnapshot) *DiffResult` O(n) two-pass comparison engine using hash-map lookups
-  - `HasChanges()`, `TotalChanged()`, `Summary()` convenience methods on `DiffResult`
-  - Nil-safe: nil previous treated as empty (all added), nil current treated as empty (all deleted)
-  - 30+ unit tests covering all edge cases: both empty, one empty, identical, mixed scenario, sorting, nil snapshots
-  - Benchmark for 10,000-file snapshots verifying sub-millisecond performance
-- **Files created/modified:**
-  - `internal/diff/compare.go` -- CompareStates function and DiffResult type with O(n) two-pass algorithm
-  - `internal/diff/compare_test.go` -- 30+ unit tests, integration tests, and benchmark
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Purpose | Location |
+| ------- | -------- |
+| StateSnapshot and FileState types, JSON serialization | `internal/diff/state.go` |
+| StateSnapshot unit tests and golden fixture validation | `internal/diff/state_test.go` |
+| Hasher interface | `internal/diff/hasher.go` |
+| XXH3Hasher, HashFile, HashFileDescriptors | `internal/diff/xxh3.go` |
+| XXH3 unit tests and benchmarks | `internal/diff/xxh3_test.go` |
+| Sentinel errors (all diff package errors) | `internal/diff/errors.go` |
+| StateCache atomic read/write/clear | `internal/diff/cache.go` |
+| StateCache unit and concurrency tests | `internal/diff/cache_test.go` |
+| CompareStates and DiffResult | `internal/diff/compare.go` |
+| Comparison unit tests and benchmark | `internal/diff/compare_test.go` |
+| GitDiffer, parseNameStatus, BuildDiffResultFromGit | `internal/diff/git.go` |
+| Git integration tests with real repos | `internal/diff/git_test.go` |
+| DiffMode, DiffOptions, RunDiff, FormatChangeSummary, walkDir | `internal/diff/diff.go` |
+| Diff orchestration unit and integration tests | `internal/diff/diff_test.go` |
+| `harvx diff` Cobra subcommand | `internal/cli/diff.go` |
+| diff CLI tests | `internal/cli/diff_test.go` |
+| `harvx cache` / `cache clear` / `cache show` Cobra commands | `internal/cli/cache.go` |
+| Cache subcommand tests | `internal/cli/cache_test.go` |
+| Root command with --clear-cache PersistentPreRunE | `internal/cli/root.go` |
+| DiffOnly and Profile fields, --diff-only / --profile flags | `internal/config/flags.go` |
+| RenderChangeSummary (Markdown/XML), NewDiffSummaryData | `internal/output/change_summary.go` |
+| Change summary rendering tests | `internal/output/change_summary_test.go` |
+| DiffSummaryData with Unchanged field | `internal/output/renderer.go` |
+| Golden fixture: populated snapshot | `testdata/state/valid_snapshot.json` |
+| Golden fixture: empty snapshot | `testdata/state/empty_snapshot.json` |
 
-### T-063: Git-Aware Diffing
+#### Verification
 
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `GitDiffer` struct with git CLI interaction for change detection between refs
-  - `GetCurrentBranch`, `GetHeadSHA`, `ValidateRef`, `GetChangedFiles`, `GetChangedFilesSince` methods using `exec.CommandContext` with `context.Context` for cancellation
-  - `GitFileChange` struct with `GitChangeType` enum (Added/Modified/Deleted/Renamed)
-  - `BuildDiffResultFromGit` converting git changes to standard `DiffResult` (renames mapped to delete+add)
-  - `parseNameStatus` parser for `git diff --name-status` output (A, M, D, R<score>, C<score>)
-  - Sentinel errors `ErrGitNotFound`, `ErrNotGitRepo`, `ErrInvalidRef` with proper wrapping
-  - 30+ unit tests using real git repos in `t.TempDir()`, integration test with multi-commit history, context cancellation test
-- **Files created/modified:**
-  - `internal/diff/git.go` -- GitDiffer implementation with git CLI interaction, parseNameStatus, BuildDiffResultFromGit
-  - `internal/diff/git_test.go` -- 30+ tests covering all acceptance criteria
-  - `internal/diff/errors.go` -- Added ErrGitNotFound, ErrNotGitRepo, ErrInvalidRef sentinel errors
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
 
-### T-064: `harvx diff` Subcommand and `--diff-only` Flag
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `harvx diff` Cobra subcommand with `--since`, `--base`, `--head` local flags for git-based diffing
-  - Three diff modes: cache-based (no flags), `--since <ref>` (git ref), `--base/--head` (PR review)
-  - `DetermineDiffMode` function with mutual exclusion validation (`--since` vs `--base/--head`)
-  - `RunDiff` dispatcher routing to `runCacheDiff`, `runSinceDiff`, or `runBaseHeadDiff`
-  - `FormatChangeSummary` producing human-readable change summary with counts and file paths (+ ~ - prefixes)
-  - Lightweight `walkDir` for cache-based snapshot building (skips hidden dirs, vendor, node_modules, etc.)
-  - `buildCurrentSnapshot` scanning directory tree and hashing files with XXH3
-  - `--diff-only` persistent flag on root command for filtering generate output to changed files only
-  - `--profile` persistent flag on root command for selecting cached state profile
-  - Helpful error message when no cached state exists (exits 0, not 1)
-  - Read-only behavior: `harvx diff` never saves state to cache
-  - 30+ unit tests covering all acceptance criteria
-- **Files created/modified:**
-  - `internal/diff/diff.go` -- High-level diff orchestration: DiffMode, DiffOptions, DiffOutput, RunDiff, FormatChangeSummary, DetermineDiffMode, walkDir, buildCurrentSnapshot
-  - `internal/diff/diff_test.go` -- 30+ unit tests: mode selection, mutual exclusion, summary formatting, RunDiff error cases, git integration tests, walkDir tests, isSkippedDir, state save behavior, snapshot building
-  - `internal/cli/diff.go` -- Cobra subcommand registration with --since/--base/--head flags, runDiff handler
-  - `internal/cli/diff_test.go` -- CLI tests: command registration, flag presence, help output, inherited flags, no-cache helpful message
-  - `internal/config/flags.go` -- Added DiffOnly and Profile fields to FlagValues, registered --diff-only and --profile persistent flags
-  - `internal/cli/root_test.go` -- Added diff-only to boolean flags test, --diff-only and --profile to help output test
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-065: Cache Subcommands and Change Summary Rendering
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `harvx cache` parent command with `cache clear` and `cache show` subcommands for managing persistent state
-  - `harvx cache clear` clears all cached state or a specific profile's state; friendly message when no cache exists
-  - `harvx cache show` lists cached profiles with metadata (timestamp, branch, HEAD SHA, file count) in table or JSON format
-  - `RenderChangeSummary` function producing formatted change summaries in both Markdown and XML formats
-  - `NewDiffSummaryData` converter from `diff.DiffResult` to output-layer `DiffSummaryData`
-  - `--clear-cache` handler wired in root command's `PersistentPreRunE` to clear state before pipeline runs
-  - Added `Unchanged int` field to `DiffSummaryData` for complete change summary rendering
-  - 30+ unit tests for cache subcommands covering clear/show/JSON/table/edge cases
-  - 10+ unit tests for change summary rendering covering Markdown/XML/nil/empty/escaping
-- **Files created/modified:**
-  - `internal/cli/cache.go` -- Cobra commands: cache, cache clear, cache show with table/JSON output
-  - `internal/cli/cache_test.go` -- 30 test functions for cache subcommands
-  - `internal/output/change_summary.go` -- RenderChangeSummary (Markdown/XML), NewDiffSummaryData converter
-  - `internal/output/change_summary_test.go` -- 10+ tests for change summary rendering
-  - `internal/output/renderer.go` -- Added Unchanged field to DiffSummaryData
-  - `internal/cli/root.go` -- Wired --clear-cache handler via handleClearCache function
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+---
 
