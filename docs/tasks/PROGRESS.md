@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 68 |
+| Completed | 69 |
 | In Progress | 0 |
-| Not Started | 27 |
+| Not Started | 26 |
 
 ---
 
@@ -552,4 +552,29 @@
 - `go test ./...` pass
 
 ---
+
+### T-066: Core Pipeline as Go Library API
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `Pipeline` struct with `Run(ctx, RunOptions) (*RunResult, error)` method as the core processing engine
+  - 7 stage service interfaces: `DiscoveryService`, `RelevanceService`, `TokenizerService`, `BudgetService`, `RedactionService`, `CompressionService`, `RenderService`
+  - Functional options pattern: `WithDiscovery`, `WithRelevance`, `WithTokenizer`, `WithBudget`, `WithRedactor`, `WithCompressor`, `WithRenderer`
+  - `RunOptions` with stage selection (`StageSelection`), git ref support, path filtering, and max token overrides
+  - `RunResult` with aggregate stats (`RunStats`), per-stage timing (`StageTimings`), content hash, and exit code
+  - Composable stage selection: `NewStageSelection()`, `DiscoveryOnly()`, `DiscoveryAndRelevance()`
+  - Custom JSON serialization for `StageTimings` with human-readable duration strings and full roundtrip support
+  - Pipeline threads `context.Context` through all stages for cancellation support
+  - Renamed existing CLI function to `RunLegacy` for backward compatibility
+- **Files created/modified:**
+  - `internal/pipeline/interfaces.go` -- Stage service interfaces and supporting types (DiscoveryOptions, BudgetResult, RenderOptions, DiffSummaryEntry)
+  - `internal/pipeline/options.go` -- PipelineOption type and 7 With* functional option constructors
+  - `internal/pipeline/result.go` -- RunOptions, StageSelection, RunResult, RunStats, StageTimings with JSON serialization
+  - `internal/pipeline/pipeline.go` -- Pipeline struct, NewPipeline constructor, Run method with 6-stage orchestration, legacy RunLegacy function
+  - `internal/pipeline/run_test.go` -- 26 unit tests with mock stages covering all acceptance criteria
+  - `internal/pipeline/result_test.go` -- 8 tests for result types, JSON roundtrip, and stage selection constructors
+  - `internal/pipeline/pipeline_test.go` -- Updated existing tests to use RunLegacy
+  - `internal/cli/generate.go` -- Updated to call RunLegacy
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

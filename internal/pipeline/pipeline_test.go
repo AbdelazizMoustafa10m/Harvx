@@ -48,7 +48,7 @@ func TestRun_NoRedactFlag(t *testing.T) {
 	}
 
 	stderr := captureStderr(t, func() {
-		err := Run(context.Background(), cfg)
+		err := RunLegacy(context.Background(), cfg)
 		require.NoError(t, err)
 	})
 
@@ -71,7 +71,7 @@ func TestRun_RedactionEnabledByDefault(t *testing.T) {
 	}
 
 	stderr := captureStderr(t, func() {
-		err := Run(context.Background(), cfg)
+		err := RunLegacy(context.Background(), cfg)
 		require.NoError(t, err)
 	})
 
@@ -94,7 +94,7 @@ func TestRun_FailOnRedaction_NoSecretsFound(t *testing.T) {
 	}
 
 	captureStderr(t, func() {
-		err := Run(context.Background(), cfg)
+		err := RunLegacy(context.Background(), cfg)
 		require.NoError(t, err)
 	})
 }
@@ -222,7 +222,7 @@ func TestRun_FailOnRedaction_WithSecretsInFile(t *testing.T) {
 
 	var runErr error
 	captureStderr(t, func() {
-		runErr = Run(context.Background(), cfg)
+		runErr = RunLegacy(context.Background(), cfg)
 	})
 
 	// The pipeline currently doesn't run file discovery yet, so there will be
@@ -259,7 +259,7 @@ func TestRun_NoRedact_WinsOverFailOnRedaction(t *testing.T) {
 	captureStderr(t, func() {
 		// Even with FailOnRedaction=true, NoRedact=true means redaction is
 		// disabled. The pipeline must not return a redaction error.
-		err := Run(context.Background(), cfg)
+		err := RunLegacy(context.Background(), cfg)
 		require.NoError(t, err, "--no-redact must take precedence over --fail-on-redaction")
 	})
 }

@@ -31,5 +31,5 @@ func init() {
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
-	return pipeline.Run(cmd.Context(), flagValues)
+	return pipeline.RunLegacy(cmd.Context(), flagValues)
 }
