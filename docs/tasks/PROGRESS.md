@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 84 |
+| Completed | 85 |
 | In Progress | 0 |
-| Not Started | 11 |
+| Not Started | 10 |
 
 ---
 
@@ -735,4 +735,37 @@
 - **Files modified:**
   - `internal/tui/app.go` -- Replaced statsPanelModel stub with stats.Model; updated New constructor to create stats.New with config options; forwarded FileToggledMsg/ProfileChangedMsg/TokenCountUpdatedMsg to stats; added default case for stats-internal messages
   - `internal/tui/app_test.go` -- Updated tests to use stats.Model accessors instead of unexported fields; added stats import; updated FileToggledMsg test to expect debounce cmd
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-083: Profile Selector & Action Keybindings
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `internal/tui/profile/` package with `Model` implementing `tea.Model` for Tab/Shift+Tab profile cycling with wraparound
+  - `RenderHeader` styled profile display with distinct purple background, target label, and index indicator (e.g., `Profile: finvault | Target: claude (2/3)`)
+  - Action keybindings in root model Update: Enter (generate), p (preview), s (save-as-profile), e (export to clipboard), q/Esc (quit)
+  - Overlay system (`overlayModel`) with three states: generating (spinner), previewing (stats summary), saving profile (text input)
+  - Toast message component with auto-dismiss after 2 seconds using generation-counter pattern to prevent stale dismissals
+  - Clipboard abstraction via `Clipboarder` interface with `noopClipboard` default and `ErrClipboardUnavailable` sentinel
+  - TOML serialization (`serializeSelectionToTOML`, `appendProfileToFile`) for save-as-profile flow with sorted deterministic output
+  - Full action handler chain: generate runs pipeline in `tea.Cmd` goroutine, preview shows overlay with tier breakdown, save prompts for name then writes TOML, export writes selected paths to clipboard
+  - Status bar at bottom with profile name and key hints; toast replaces status bar when visible
+  - `go.mod`/`go.sum` updated with `atotto/clipboard` transitive dependency from `bubbles/textinput`
+- **Files created/modified:**
+  - `internal/tui/profile/model.go` -- Profile selector Model with New, Next, Prev, Current, Count accessors
+  - `internal/tui/profile/view.go` -- RenderHeader with lipgloss styling for profile name, target, index
+  - `internal/tui/profile/model_test.go` -- 13 tests for constructor, cycling, Update, RenderHeader
+  - `internal/tui/overlay.go` -- Overlay model with spinner, text input, preview states and centered rendering
+  - `internal/tui/toast.go` -- Toast model with show/dismiss/view and 2s auto-dismiss
+  - `internal/tui/actions.go` -- Action handlers for generate, preview, save, export, clipboard
+  - `internal/tui/actions_test.go` -- 10 tests for all action handlers
+  - `internal/tui/clipboard.go` -- Clipboarder interface, noopClipboard, ErrClipboardUnavailable
+  - `internal/tui/serialize.go` -- TOML serialization and file append for save-as-profile
+  - `internal/tui/serialize_test.go` -- 6 tests for serialization and file operations
+  - `internal/tui/keys.go` -- Added Preview, Save, Export, ProfileTab, ProfileBackTab bindings
+  - `internal/tui/app.go` -- Wired profile selector, overlay, toast, all action handlers, status bar
+  - `internal/tui/app_test.go` -- 30+ tests covering actions, overlays, toasts, profile cycling
+  - `go.mod` -- Added atotto/clipboard transitive dependency
+  - `go.sum` -- Updated checksums
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
