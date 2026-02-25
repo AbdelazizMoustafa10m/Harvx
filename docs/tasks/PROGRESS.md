@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 63 |
+| Completed | 64 |
 | In Progress | 0 |
-| Not Started | 32 |
+| Not Started | 31 |
 
 ---
 
@@ -521,5 +521,22 @@
   - `internal/diff/hasher.go` -- Hasher interface definition
   - `internal/diff/xxh3.go` -- XXH3Hasher implementation with HashFile and HashFileDescriptors
   - `internal/diff/xxh3_test.go` -- 20 unit tests and 5 benchmarks
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-061: State Cache Persistence (Read/Write)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `StateCache` struct with `SaveState`, `LoadState`, `ClearState`, `ClearAllState`, `HasState`, `GetStatePath` methods for profile-scoped state persistence
+  - Atomic file writes via `os.CreateTemp` + `os.Rename` pattern with Windows fallback; auto-creates `.harvx/state/` directory
+  - Branch mismatch detection: `ErrBranchMismatch` sentinel error when cached state's `GitBranch` differs from current branch
+  - Profile name sanitization: only `[a-zA-Z0-9_-]` allowed, others replaced with `_`; empty names default to `"default"`
+  - Sentinel errors `ErrBranchMismatch`, `ErrNoState`, `ErrInvalidVersion` for typed error handling
+  - 25 unit tests covering round-trips, directory creation, overwrites, branch mismatch, idempotent clears, concurrent reads, atomic writes, file permissions
+- **Files created/modified:**
+  - `internal/diff/errors.go` -- Sentinel errors: ErrBranchMismatch, ErrNoState, ErrInvalidVersion
+  - `internal/diff/cache.go` -- StateCache with atomic read/write/clear operations and profile name sanitization
+  - `internal/diff/cache_test.go` -- 25 unit tests with table-driven patterns and concurrency tests
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
