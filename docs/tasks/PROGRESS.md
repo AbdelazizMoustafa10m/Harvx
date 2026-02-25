@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 82 |
+| Completed | 83 |
 | In Progress | 0 |
-| Not Started | 13 |
+| Not Started | 12 |
 
 ---
 
@@ -671,4 +671,34 @@
   - `internal/config/flags.go` -- Added Interactive bool field and --interactive/-i flag binding
   - `internal/cli/generate_test.go` -- Updated test to pass --interactive=false for headless mode
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-080: File Tree Data Model & Keyboard Navigation
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `internal/tui/filetree/` package with Node tree data model, Model implementing Bubble Tea sub-model, keyboard navigation, viewport scrolling, lazy directory loading, and placeholder view rendering
+  - `Node` struct with tri-state inclusion (`Included`/`Excluded`/`Partial`), recursive toggle propagation, `propagateUp` ancestor recalculation, `VisibleNodes`, `FindByPath`, `IncludedFiles`, `SortChildren` (dirs first, then alphabetical)
+  - `Model` with cursor management, scroll offset, lazy directory loading via `DirLoadedMsg`, and integration with `discovery.Ignorer` for filtering and `discovery.IsBinary` for binary detection
+  - Keyboard navigation: `up/k`, `down/j`, `right/l` (expand), `left/h` (collapse/jump to parent), `space` (toggle), `enter` (expand/collapse), `pgup`, `pgdown`, `home/g`, `end/G`
+  - Lazy loading: `loadTopLevelCmd` scans root on `Init()`, `loadDirCmd` scans subdirectories on first expand, both filter via `Ignorer` and skip binary files
+  - `internal/tui/tuimsg/` package for shared message types to avoid circular imports between `tui` and `filetree` packages
+  - Updated root model (`app.go`) to replace stub `fileTreeModel` with real `filetree.Model`, forward key events and `DirLoadedMsg` to filetree, and init with file tree scan command
+  - Changed Generate key binding from `enter` to `ctrl+g` to avoid conflict with filetree's Enter expand/collapse behavior
+- **Files created:**
+  - `internal/tui/filetree/node.go` -- Node type, InclusionState, tri-state toggle/propagation, tree traversal helpers
+  - `internal/tui/filetree/model.go` -- File tree Bubble Tea sub-model with cursor, scroll, lazy loading state
+  - `internal/tui/filetree/update.go` -- Key event handling, directory expand/collapse, toggle, DirLoadedMsg processing
+  - `internal/tui/filetree/view.go` -- Placeholder text rendering with indentation, inclusion indicators, cursor
+  - `internal/tui/filetree/lazy.go` -- Lazy directory scanning with ignore/binary filtering, DirLoadedMsg type
+  - `internal/tui/filetree/node_test.go` -- 16 tests for Node operations, tri-state propagation, tree traversal
+  - `internal/tui/filetree/model_test.go` -- 26 tests for navigation, expand/collapse, toggle, DirLoaded, scroll, view
+  - `internal/tui/filetree/lazy_test.go` -- 11 tests for directory scanning, filtering, binary exclusion, lazy loading commands
+  - `internal/tui/tuimsg/messages.go` -- Shared message types (FileToggledMsg, TokenCountUpdatedMsg, etc.)
+- **Files modified:**
+  - `internal/tui/app.go` -- Replaced stub fileTreeModel with filetree.Model; added Options struct; forwarded key events and DirLoadedMsg
+  - `internal/tui/messages.go` -- Changed to type aliases re-exporting from tuimsg package
+  - `internal/tui/keys.go` -- Changed Generate binding from enter to ctrl+g
+  - `internal/tui/app_test.go` -- Updated tests for new filetree integration, ctrl+g binding, and removed old stub test
+- **Verification:** `go build` pass  `go vet` pass  `go test` pass
 

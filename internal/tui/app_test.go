@@ -61,7 +61,8 @@ func TestModel_Init(t *testing.T) {
 	require.NoError(t, err)
 
 	cmd := m.Init()
-	assert.Nil(t, cmd, "Init should return nil cmd")
+	// Init now returns a command to scan the root directory.
+	assert.NotNil(t, cmd, "Init should return a cmd to load root directory")
 }
 
 // --- Key handling tests ---
@@ -111,14 +112,14 @@ func TestUpdate_HelpToggle(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-func TestUpdate_EnterProducesGenerateMsg(t *testing.T) {
+func TestUpdate_CtrlGProducesGenerateMsg(t *testing.T) {
 	t.Parallel()
 
 	m := mustNewModel(t)
 	// Make the model ready so it is not in initializing state.
 	m.ready = true
 
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
 	_ = updated.(Model)
 
 	require.NotNil(t, cmd)
@@ -126,14 +127,14 @@ func TestUpdate_EnterProducesGenerateMsg(t *testing.T) {
 	assert.IsType(t, GenerateRequestedMsg{}, msg)
 }
 
-func TestUpdate_EnterSuppressedDuringHelp(t *testing.T) {
+func TestUpdate_CtrlGSuppressedDuringHelp(t *testing.T) {
 	t.Parallel()
 
 	m := mustNewModel(t)
 	m.helpOverlay.visible = true
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	// When help is visible, Enter should not produce a generate command.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	// When help is visible, Ctrl+G should not produce a generate command.
 	// The cmds slice is empty, so tea.Batch returns nil.
 	assert.Nil(t, cmd)
 }
@@ -155,8 +156,8 @@ func TestUpdate_WindowSizeMsg(t *testing.T) {
 	assert.Nil(t, cmd)
 
 	// Verify sub-models received the size update.
-	assert.Equal(t, 38, model.fileTree.height)  // 40 - 2
-	assert.Equal(t, 38, model.statsPanel.height) // 40 - 2
+	assert.Equal(t, 38, model.fileTree.Height()) // 40 - 2
+	assert.Equal(t, 38, model.statsPanel.height)  // 40 - 2
 }
 
 // --- Message routing tests ---
@@ -168,9 +169,10 @@ func TestUpdate_FileToggledMsg(t *testing.T) {
 	msg := FileToggledMsg{Path: "main.go", Included: true}
 
 	updated, cmd := m.Update(msg)
-	model := updated.(Model)
+	_ = updated.(Model)
 
-	assert.True(t, model.fileTree.selected["main.go"])
+	// FileToggledMsg is now forwarded for stats recalculation; the file tree
+	// handles its own toggling internally via the Node tree.
 	assert.Nil(t, cmd)
 }
 
@@ -278,8 +280,8 @@ func TestView_NormalLayout(t *testing.T) {
 	view := m.View()
 	// Should contain the status bar with profile info.
 	assert.Contains(t, view, "Profile: default")
-	// Should contain file tree placeholder.
-	assert.Contains(t, view, "File tree")
+	// Should contain file tree content (loading or empty).
+	assert.Contains(t, view, "Loading file tree")
 	// Should contain stats panel.
 	assert.Contains(t, view, "Stats")
 }
@@ -311,17 +313,6 @@ func TestProfileSelector_Next_MultipleProfiles(t *testing.T) {
 
 	ps = ps.next()
 	assert.Equal(t, "default", ps.current, "should wrap around")
-}
-
-func TestFileTreeModel_HandleToggle(t *testing.T) {
-	t.Parallel()
-
-	ft := newFileTreeModel()
-	ft = ft.handleToggle(FileToggledMsg{Path: "a.go", Included: true})
-	ft = ft.handleToggle(FileToggledMsg{Path: "b.go", Included: false})
-
-	assert.True(t, ft.selected["a.go"])
-	assert.False(t, ft.selected["b.go"])
 }
 
 func TestStatsPanelModel_HandleTokenUpdate(t *testing.T) {

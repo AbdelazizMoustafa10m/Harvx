@@ -25,8 +25,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("?", "toggle help"),
 		),
 		Generate: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "generate"),
+			key.WithKeys("ctrl+g"),
+			key.WithHelp("ctrl+g", "generate"),
 		),
 		ProfileTab: key.NewBinding(
 			key.WithKeys("tab"),

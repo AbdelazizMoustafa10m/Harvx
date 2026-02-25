@@ -9,7 +9,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/harvx/harvx/internal/config"
+	"github.com/harvx/harvx/internal/discovery"
 	"github.com/harvx/harvx/internal/pipeline"
+	"github.com/harvx/harvx/internal/tui/filetree"
 )
 
 // Compile-time interface compliance check.
@@ -20,7 +22,7 @@ var _ tea.Model = Model{}
 // and help overlay, dispatching messages to each in Update.
 type Model struct {
 	// Sub-models for each panel.
-	fileTree        fileTreeModel
+	fileTree        filetree.Model
 	statsPanel      statsPanelModel
 	profileSelector profileSelectorModel
 	helpOverlay     helpOverlayModel
@@ -38,9 +40,18 @@ type Model struct {
 	err      error
 }
 
+// Options holds optional configuration for the root TUI model.
+type Options struct {
+	// RootDir is the directory to browse. Defaults to "." if empty.
+	RootDir string
+
+	// Ignorer filters files from the tree. May be nil for no filtering.
+	Ignorer discovery.Ignorer
+}
+
 // New creates a new root TUI model with the given resolved configuration
 // and pipeline reference. The pipeline must not be nil.
-func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline) (Model, error) {
+func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline, opts ...Options) (Model, error) {
 	if p == nil {
 		return Model{}, fmt.Errorf("tui: pipeline must not be nil")
 	}
@@ -48,21 +59,34 @@ func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline) (Model, error) {
 		return Model{}, fmt.Errorf("tui: config must not be nil")
 	}
 
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	if o.RootDir == "" {
+		o.RootDir = "."
+	}
+
 	return Model{
 		cfg:             cfg,
 		pipeline:        p,
 		keys:            DefaultKeyMap(),
-		fileTree:        newFileTreeModel(),
+		fileTree:        filetree.New(o.RootDir, o.Ignorer),
 		statsPanel:      newStatsPanelModel(),
 		profileSelector: newProfileSelectorModel(cfg.ProfileName),
 		helpOverlay:     newHelpOverlayModel(),
 	}, nil
 }
 
-// Init implements tea.Model. It returns no initial command; the TUI waits for
-// a WindowSizeMsg from the runtime before rendering.
+// Init implements tea.Model. It returns the file tree's init command to begin
+// scanning the root directory.
 func (m Model) Init() tea.Cmd {
-	return nil
+	return m.fileTree.Init()
+}
+
+// FileTree returns the file tree sub-model. This is useful for testing.
+func (m Model) FileTree() filetree.Model {
+	return m.fileTree
 }
 
 // Update implements tea.Model. It handles global key bindings and dispatches
@@ -96,17 +120,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Forward key events to file tree when help is not showing.
+		if !m.helpOverlay.visible {
+			var cmd tea.Cmd
+			m.fileTree, cmd = m.fileTree.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
-		// Propagate to all sub-models.
-		m.fileTree = m.fileTree.updateSize(msg.Width, msg.Height)
+		// Propagate to file tree and stats panel.
+		leftWidth := msg.Width * 60 / 100
+		m.fileTree.SetSize(leftWidth, msg.Height-2)
 		m.statsPanel = m.statsPanel.updateSize(msg.Width, msg.Height)
 		return m, nil
 
+	case filetree.DirLoadedMsg:
+		var cmd tea.Cmd
+		m.fileTree, cmd = m.fileTree.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return m, tea.Batch(cmds...)
+
 	case FileToggledMsg:
-		m.fileTree = m.fileTree.handleToggle(msg)
+		// FileToggledMsg comes from the file tree; forward to stats for recalculation.
 		return m, nil
 
 	case TokenCountUpdatedMsg:
@@ -151,7 +194,10 @@ func (m Model) View() string {
 	rightWidth := m.width - leftWidth - 1 // -1 for separator
 
 	// Compose panels.
-	leftPanel := m.fileTree.view(leftWidth, m.height-2) // -2 for status bar
+	leftStyle := lipgloss.NewStyle().
+		Width(leftWidth).
+		Height(m.height - 2)
+	leftPanel := leftStyle.Render(m.fileTree.View())
 	rightPanel := m.statsPanel.view(rightWidth, m.height-2)
 
 	// Join panels side by side.
@@ -172,7 +218,7 @@ func (m Model) View() string {
 func (m Model) renderStatusBar() string {
 	profile := m.profileSelector.current
 	status := fmt.Sprintf(
-		" Profile: %s | q: quit | ?: help | enter: generate | tab: profile | space: toggle",
+		" Profile: %s | q: quit | ?: help | ctrl+g: generate | tab: profile | space: toggle",
 		profile,
 	)
 
@@ -186,60 +232,8 @@ func (m Model) renderStatusBar() string {
 }
 
 // --- Stub sub-models ---
-// These will be fully implemented in subsequent tasks (T-080 to T-085).
-
-// fileTreeModel is a stub for the file tree panel.
-type fileTreeModel struct {
-	files    []string
-	selected map[string]bool
-	cursor   int
-	width    int
-	height   int
-}
-
-func newFileTreeModel() fileTreeModel {
-	return fileTreeModel{
-		selected: make(map[string]bool),
-	}
-}
-
-func (m fileTreeModel) updateSize(w, h int) fileTreeModel {
-	m.width = w * 60 / 100
-	m.height = h - 2
-	return m
-}
-
-func (m fileTreeModel) handleToggle(msg FileToggledMsg) fileTreeModel {
-	m.selected[msg.Path] = msg.Included
-	return m
-}
-
-func (m fileTreeModel) view(width, height int) string {
-	style := lipgloss.NewStyle().
-		Width(width).
-		Height(height)
-
-	if len(m.files) == 0 {
-		return style.Render("  File tree (loading...)")
-	}
-
-	var b strings.Builder
-	for i, f := range m.files {
-		if i >= height {
-			break
-		}
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
-		check := "[ ]"
-		if m.selected[f] {
-			check = "[x]"
-		}
-		fmt.Fprintf(&b, "%s%s %s\n", prefix, check, f)
-	}
-	return style.Render(b.String())
-}
+// Stats, profile selector, and help overlay remain as stubs.
+// They will be fully implemented in subsequent tasks (T-082 to T-085).
 
 // statsPanelModel is a stub for the stats/token panel.
 type statsPanelModel struct {
