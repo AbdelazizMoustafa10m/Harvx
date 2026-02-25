@@ -10,6 +10,7 @@ import (
 
 	"github.com/harvx/harvx/internal/config"
 	"github.com/harvx/harvx/internal/pipeline"
+	"github.com/harvx/harvx/internal/tui/stats"
 )
 
 func validCfg() *config.ResolvedConfig {
@@ -157,7 +158,7 @@ func TestUpdate_WindowSizeMsg(t *testing.T) {
 
 	// Verify sub-models received the size update.
 	assert.Equal(t, 38, model.fileTree.Height()) // 40 - 2
-	assert.Equal(t, 38, model.statsPanel.height)  // 40 - 2
+	assert.Equal(t, 38, model.statsPanel.Height()) // 40 - 2
 }
 
 // --- Message routing tests ---
@@ -169,11 +170,12 @@ func TestUpdate_FileToggledMsg(t *testing.T) {
 	msg := FileToggledMsg{Path: "main.go", Included: true}
 
 	updated, cmd := m.Update(msg)
-	_ = updated.(Model)
+	model := updated.(Model)
 
-	// FileToggledMsg is now forwarded for stats recalculation; the file tree
-	// handles its own toggling internally via the Node tree.
-	assert.Nil(t, cmd)
+	// FileToggledMsg is forwarded to stats for debounced token recalculation.
+	// The stats panel sets calculating=true and returns a debounce tick cmd.
+	assert.True(t, model.statsPanel.Calculating())
+	assert.NotNil(t, cmd, "should return debounce tick cmd")
 }
 
 func TestUpdate_TokenCountUpdatedMsg(t *testing.T) {
@@ -189,9 +191,9 @@ func TestUpdate_TokenCountUpdatedMsg(t *testing.T) {
 	updated, cmd := m.Update(msg)
 	model := updated.(Model)
 
-	assert.Equal(t, 5000, model.statsPanel.totalTokens)
-	assert.Equal(t, 42, model.statsPanel.fileCount)
-	assert.InDelta(t, 75.5, model.statsPanel.budgetUsed, 0.001)
+	assert.Equal(t, 5000, model.statsPanel.TotalTokens())
+	assert.Equal(t, 42, model.statsPanel.SelectedFiles())
+	assert.InDelta(t, 75.5, model.statsPanel.BudgetUsed(), 0.001)
 	assert.Nil(t, cmd)
 }
 
@@ -318,16 +320,17 @@ func TestProfileSelector_Next_MultipleProfiles(t *testing.T) {
 func TestStatsPanelModel_HandleTokenUpdate(t *testing.T) {
 	t.Parallel()
 
-	sp := newStatsPanelModel()
-	sp = sp.handleTokenUpdate(TokenCountUpdatedMsg{
+	sp := stats.New(stats.Options{MaxTokens: 100000})
+	updated, _ := sp.Update(TokenCountUpdatedMsg{
 		TotalTokens: 1234,
 		FileCount:   10,
 		BudgetUsed:  50.0,
 	})
+	sp = updated.(stats.Model)
 
-	assert.Equal(t, 1234, sp.totalTokens)
-	assert.Equal(t, 10, sp.fileCount)
-	assert.InDelta(t, 50.0, sp.budgetUsed, 0.001)
+	assert.Equal(t, 1234, sp.TotalTokens())
+	assert.Equal(t, 10, sp.SelectedFiles())
+	assert.InDelta(t, 50.0, sp.BudgetUsed(), 0.001)
 }
 
 // --- Helpers ---

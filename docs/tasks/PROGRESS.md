@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 83 |
+| Completed | 84 |
 | In Progress | 0 |
-| Not Started | 12 |
+| Not Started | 11 |
 
 ---
 
@@ -702,3 +702,37 @@
   - `internal/tui/app_test.go` -- Updated tests for new filetree integration, ctrl+g binding, and removed old stub test
 - **Verification:** `go build` pass  `go vet` pass  `go test` pass
 
+### T-082: Stats Panel with Live Token Counting & Budget Bar
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `internal/tui/stats/` package implementing the real-time statistics sidebar panel for the TUI
+  - `Model` implementing `tea.Model` with Init/Update/View lifecycle
+  - Live token count display with thousands separator: `Tokens: 89,420 / 200,000`
+  - Visual budget utilization bar using block characters with color transitions: green (<70%), yellow (70-90%), red (>90%)
+  - File count display: `Files: 342 / 390 selected`
+  - Estimated output size from token count: `Size: ~2.4 MB`
+  - Compression savings display (when enabled): `Compressed: 52% reduction`
+  - Secrets/redaction count with red alert styling when > 0
+  - Tier breakdown table (T0-T5) showing file counts and token totals per tier
+  - Profile info header: `Profile: finvault | Target: claude`
+  - Tokenizer info: `Tokenizer: o200k_base`
+  - Debounced token recalculation at 200ms using generation counter pattern to prevent stale ticks
+  - "calculating..." indicator while recalculation is in progress
+  - Fixed-width configurable panel (default 35 chars) with lipgloss container width capping
+  - Async tree walking via `tea.Cmd` to avoid blocking the Update loop
+  - Integrated with root model: forwarding FileToggledMsg, ProfileChangedMsg, TokenCountUpdatedMsg, and stats-internal messages via default case
+- **Files created:**
+  - `internal/tui/stats/model.go` -- Stats panel Model (tea.Model), Options, New constructor, debounce handlers, accessors
+  - `internal/tui/stats/view.go` -- View rendering: header, budget bar, file count, size, compression, secrets, tier breakdown, tokenizer info
+  - `internal/tui/stats/calculate.go` -- Debounce scheduling, async token counting via tree walking, recalcTickMsg/tokenCountResult types
+  - `internal/tui/stats/format.go` -- FormatThousands, FormatSize, EstimateOutputSize, FormatPercentage, Truncate helpers
+  - `internal/tui/stats/model_test.go` -- 18 tests: Init, Update for all message types, debounce generation, stale tick, token count result, accessors, View content
+  - `internal/tui/stats/view_test.go` -- 7 tests: budget bar rendering, color transitions, narrow bar, block characters, tier breakdown, secrets alert, narrow panel
+  - `internal/tui/stats/calculate_test.go` -- 8 tests: walkTree with various tree configurations, secrets counting, nested dirs, multiple tiers, scheduleDebounce
+  - `internal/tui/stats/format_test.go` -- 5 test groups (table-driven): FormatThousands, FormatSize, EstimateOutputSize, FormatPercentage, Truncate
+- **Files modified:**
+  - `internal/tui/app.go` -- Replaced statsPanelModel stub with stats.Model; updated New constructor to create stats.New with config options; forwarded FileToggledMsg/ProfileChangedMsg/TokenCountUpdatedMsg to stats; added default case for stats-internal messages
+  - `internal/tui/app_test.go` -- Updated tests to use stats.Model accessors instead of unexported fields; added stats import; updated FileToggledMsg test to expect debounce cmd
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

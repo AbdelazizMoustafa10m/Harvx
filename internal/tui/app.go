@@ -12,6 +12,7 @@ import (
 	"github.com/harvx/harvx/internal/discovery"
 	"github.com/harvx/harvx/internal/pipeline"
 	"github.com/harvx/harvx/internal/tui/filetree"
+	"github.com/harvx/harvx/internal/tui/stats"
 )
 
 // Compile-time interface compliance check.
@@ -23,7 +24,7 @@ var _ tea.Model = Model{}
 type Model struct {
 	// Sub-models for each panel.
 	fileTree        filetree.Model
-	statsPanel      statsPanelModel
+	statsPanel      stats.Model
 	profileSelector profileSelectorModel
 	helpOverlay     helpOverlayModel
 
@@ -67,12 +68,23 @@ func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline, opts ...Options) (Mod
 		o.RootDir = "."
 	}
 
+	ft := filetree.New(o.RootDir, o.Ignorer)
+
+	sp := stats.New(stats.Options{
+		MaxTokens:     cfg.Profile.MaxTokens,
+		ProfileName:   cfg.ProfileName,
+		TargetName:    cfg.Profile.Target,
+		TokenizerName: cfg.Profile.Tokenizer,
+		Compression:   cfg.Profile.Compression,
+	})
+	sp.SetTreeRoot(ft.Root())
+
 	return Model{
 		cfg:             cfg,
 		pipeline:        p,
 		keys:            DefaultKeyMap(),
-		fileTree:        filetree.New(o.RootDir, o.Ignorer),
-		statsPanel:      newStatsPanelModel(),
+		fileTree:        ft,
+		statsPanel:      sp,
 		profileSelector: newProfileSelectorModel(cfg.ProfileName),
 		helpOverlay:     newHelpOverlayModel(),
 	}, nil
@@ -136,8 +148,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 		// Propagate to file tree and stats panel.
 		leftWidth := msg.Width * 60 / 100
+		rightWidth := msg.Width - leftWidth - 1
 		m.fileTree.SetSize(leftWidth, msg.Height-2)
-		m.statsPanel = m.statsPanel.updateSize(msg.Width, msg.Height)
+		m.statsPanel.SetSize(rightWidth, msg.Height-2)
 		return m, nil
 
 	case filetree.DirLoadedMsg:
@@ -149,20 +162,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case FileToggledMsg:
-		// FileToggledMsg comes from the file tree; forward to stats for recalculation.
-		return m, nil
+		// FileToggledMsg comes from the file tree; forward to stats for
+		// debounced token recalculation.
+		m.statsPanel.SetTreeRoot(m.fileTree.Root())
+		var statsCmd tea.Cmd
+		var updated tea.Model
+		updated, statsCmd = m.statsPanel.Update(msg)
+		m.statsPanel = updated.(stats.Model)
+		if statsCmd != nil {
+			cmds = append(cmds, statsCmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case TokenCountUpdatedMsg:
-		m.statsPanel = m.statsPanel.handleTokenUpdate(msg)
-		return m, nil
+		var statsCmd tea.Cmd
+		var updated tea.Model
+		updated, statsCmd = m.statsPanel.Update(msg)
+		m.statsPanel = updated.(stats.Model)
+		if statsCmd != nil {
+			cmds = append(cmds, statsCmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case ProfileChangedMsg:
 		m.profileSelector = m.profileSelector.handleChange(msg)
-		return m, nil
+		// Also forward to stats panel.
+		var statsCmd tea.Cmd
+		var updated tea.Model
+		updated, statsCmd = m.statsPanel.Update(msg)
+		m.statsPanel = updated.(stats.Model)
+		if statsCmd != nil {
+			cmds = append(cmds, statsCmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case ErrorMsg:
 		m.err = msg.Err
 		return m, nil
+
+	default:
+		// Forward unrecognised messages to the stats panel. This handles
+		// stats-internal messages (recalcTickMsg, tokenCountResult) that
+		// are returned as tea.Cmd results and re-dispatched by Bubble Tea.
+		var statsCmd tea.Cmd
+		var updated tea.Model
+		updated, statsCmd = m.statsPanel.Update(msg)
+		m.statsPanel = updated.(stats.Model)
+		if statsCmd != nil {
+			cmds = append(cmds, statsCmd)
+		}
+		return m, tea.Batch(cmds...)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -191,14 +240,13 @@ func (m Model) View() string {
 
 	// Calculate panel widths: 60% file tree, 40% stats.
 	leftWidth := m.width * 60 / 100
-	rightWidth := m.width - leftWidth - 1 // -1 for separator
 
 	// Compose panels.
 	leftStyle := lipgloss.NewStyle().
 		Width(leftWidth).
 		Height(m.height - 2)
 	leftPanel := leftStyle.Render(m.fileTree.View())
-	rightPanel := m.statsPanel.view(rightWidth, m.height-2)
+	rightPanel := m.statsPanel.View()
 
 	// Join panels side by side.
 	separator := lipgloss.NewStyle().
@@ -232,48 +280,8 @@ func (m Model) renderStatusBar() string {
 }
 
 // --- Stub sub-models ---
-// Stats, profile selector, and help overlay remain as stubs.
-// They will be fully implemented in subsequent tasks (T-082 to T-085).
-
-// statsPanelModel is a stub for the stats/token panel.
-type statsPanelModel struct {
-	totalTokens int
-	fileCount   int
-	budgetUsed  float64
-	width       int
-	height      int
-}
-
-func newStatsPanelModel() statsPanelModel {
-	return statsPanelModel{}
-}
-
-func (m statsPanelModel) updateSize(w, h int) statsPanelModel {
-	m.width = w - (w * 60 / 100) - 1
-	m.height = h - 2
-	return m
-}
-
-func (m statsPanelModel) handleTokenUpdate(msg TokenCountUpdatedMsg) statsPanelModel {
-	m.totalTokens = msg.TotalTokens
-	m.fileCount = msg.FileCount
-	m.budgetUsed = msg.BudgetUsed
-	return m
-}
-
-func (m statsPanelModel) view(width, height int) string {
-	style := lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		Padding(0, 1)
-
-	content := fmt.Sprintf(
-		"Stats\n-----\nFiles: %d\nTokens: %d\nBudget: %.1f%%",
-		m.fileCount, m.totalTokens, m.budgetUsed,
-	)
-
-	return style.Render(content)
-}
+// Profile selector and help overlay remain as stubs.
+// They will be fully implemented in subsequent tasks (T-083 to T-085).
 
 // profileSelectorModel is a stub for the profile selector.
 type profileSelectorModel struct {
