@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 62 |
+| Completed | 63 |
 | In Progress | 0 |
-| Not Started | 33 |
+| Not Started | 32 |
 
 ---
 
@@ -504,5 +504,22 @@
   - `internal/diff/state_test.go` -- 25 unit tests with table-driven patterns and golden fixture validation
   - `testdata/state/valid_snapshot.json` -- Golden test fixture for populated snapshot
   - `testdata/state/empty_snapshot.json` -- Golden test fixture for empty snapshot
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-060: Content Hashing with XXH3
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `Hasher` interface with `HashBytes([]byte) uint64` and `HashString(string) uint64` methods for swappable hash implementations
+  - `XXH3Hasher` struct implementing `Hasher` via `zeebo/xxh3` v1.1.0 with compile-time interface check
+  - `HashFile(path) (uint64, error)` using streaming `io.Copy` through `xxh3.New()` hasher (32KB chunks, bounded memory)
+  - `HashFileDescriptors([]pipeline.FileDescriptor) error` populating `ContentHash` in place; Content string takes precedence over AbsPath disk read
+  - 20 unit tests covering determinism, empty input, consistency between HashBytes/HashString, file hashing, FileDescriptor hashing (content, disk, mixed, errors, empty slice)
+  - 5 benchmarks: HashBytes at 1KB/64KB/1MB, HashString at 1KB, HashFile at 1MB
+- **Files created:**
+  - `internal/diff/hasher.go` -- Hasher interface definition
+  - `internal/diff/xxh3.go` -- XXH3Hasher implementation with HashFile and HashFileDescriptors
+  - `internal/diff/xxh3_test.go` -- 20 unit tests and 5 benchmarks
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
