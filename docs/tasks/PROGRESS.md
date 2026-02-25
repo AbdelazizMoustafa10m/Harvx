@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 59 |
+| Completed | 60 |
 | In Progress | 0 |
-| Not Started | 36 |
+| Not Started | 35 |
 
 ---
 
@@ -566,5 +566,23 @@
   - `internal/output/writer.go` -- Added Parts []PartResult field to OutputResult
   - `internal/config/flags.go` -- Added Split int field to FlagValues, --split flag registration, validation
   - `internal/config/flags_test.go` -- 4 tests for --split flag (default, explicit, negative rejected, zero valid)
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-057: Metadata JSON Sidecar Generation
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `OutputMetadata`, `Statistics`, `FileStats` structs with snake_case JSON tags for machine-readable sidecar output
+  - `GenerateMetadata` function assembling metadata from `RenderData` + `OutputResult` with sorted files, string-keyed tier maps, budget percentage calculation, and guaranteed non-nil maps
+  - `WriteMetadata` with atomic file write (temp file → sync → close → rename) producing pretty-printed 2-space-indented JSON
+  - `MetadataSidecarPath` helper returning `<output-path>.meta.json`
+  - `--output-metadata` CLI flag wired into `OutputWriter.Write` to trigger sidecar generation after main output
+  - `BudgetUsedPercent` as `*float64` serializing as `null` when no token budget is set
+- **Files created/modified:**
+  - `internal/output/metadata.go` -- OutputMetadata, Statistics, FileStats, MetadataOpts structs; GenerateMetadata, WriteMetadata, MetadataSidecarPath functions
+  - `internal/output/metadata_test.go` -- 32 unit tests + 2 benchmarks covering all acceptance criteria, edge cases (empty files, nil maps, 10K+ files, multiple dots, round-trip)
+  - `internal/output/writer.go` -- Added OutputMetadata, Target, MaxTokens, GenerationTimeMs fields to OutputOpts; metadata sidecar generation in Write method
+  - `internal/config/flags.go` -- Added OutputMetadata bool field to FlagValues, --output-metadata flag registration
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

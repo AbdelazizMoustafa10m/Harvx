@@ -24,6 +24,18 @@ type OutputOpts struct {
 
 	// UseStdout writes to stdout instead of a file when true.
 	UseStdout bool
+
+	// OutputMetadata enables .meta.json sidecar generation when true.
+	OutputMetadata bool
+
+	// Target is the LLM target (e.g., "claude"), used in metadata.
+	Target string
+
+	// MaxTokens is the token budget, used in metadata budget calculation.
+	MaxTokens int
+
+	// GenerationTimeMs is the pipeline generation time in milliseconds.
+	GenerationTimeMs int64
 }
 
 // OutputResult holds the result of a successful write operation.
@@ -97,11 +109,32 @@ func (ow *OutputWriter) Write(ctx context.Context, data *RenderData, opts Output
 		return nil, fmt.Errorf("writing output: creating renderer: %w", err)
 	}
 
+	var result *OutputResult
 	if opts.UseStdout {
-		return ow.writeStdout(ctx, data, renderer)
+		result, err = ow.writeStdout(ctx, data, renderer)
+	} else {
+		result, err = ow.writeFile(ctx, data, renderer, opts)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	return ow.writeFile(ctx, data, renderer, opts)
+	// Write metadata sidecar if enabled and we have a file path.
+	if opts.OutputMetadata && result.Path != "" {
+		meta := GenerateMetadata(MetadataOpts{
+			RenderData:       data,
+			Result:           result,
+			Format:           opts.Format,
+			Target:           opts.Target,
+			MaxTokens:        opts.MaxTokens,
+			GenerationTimeMs: opts.GenerationTimeMs,
+		})
+		if metaErr := WriteMetadata(meta, result.Path); metaErr != nil {
+			return nil, fmt.Errorf("writing metadata sidecar: %w", metaErr)
+		}
+	}
+
+	return result, nil
 }
 
 // writeStdout streams the rendered output to stdout while computing the content

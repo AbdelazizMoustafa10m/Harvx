@@ -54,6 +54,9 @@ type FlagValues struct {
 
 	// Split flag (T-056)
 	Split int // Max tokens per part for multi-part output (0 = disabled)
+
+	// Metadata sidecar flag (T-057)
+	OutputMetadata bool // Generate .meta.json sidecar alongside output
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -96,6 +99,9 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 
 	// Split flag (T-056)
 	pf.IntVar(&fv.Split, "split", 0, "Split output into parts with max tokens per part (0 = disabled)")
+
+	// Metadata sidecar flag (T-057)
+	pf.BoolVar(&fv.OutputMetadata, "output-metadata", false, "Generate .meta.json sidecar file alongside output")
 
 	return fv
 }
