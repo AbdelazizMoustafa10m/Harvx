@@ -22,7 +22,8 @@ func mergeProfile(base, override *Profile) *Profile {
 		Target:    mergeString(base.Target, override.Target),
 
 		// Scalar: int
-		MaxTokens: mergeInt(base.MaxTokens, override.MaxTokens),
+		MaxTokens:      mergeInt(base.MaxTokens, override.MaxTokens),
+		BriefMaxTokens: mergeInt(base.BriefMaxTokens, override.BriefMaxTokens),
 
 		// Scalar: bool -- override always wins (false is meaningful)
 		Compression: override.Compression,

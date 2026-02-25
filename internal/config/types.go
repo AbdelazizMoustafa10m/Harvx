@@ -29,6 +29,10 @@ type Profile struct {
 	// Files are pruned from the output if the total exceeds this limit.
 	MaxTokens int `toml:"max_tokens"`
 
+	// BriefMaxTokens is the token budget for the Repo Brief artifact.
+	// Controls the maximum size of output from `harvx brief`. Default: 4000.
+	BriefMaxTokens int `toml:"brief_max_tokens"`
+
 	// Tokenizer selects the token counting model. Valid values: "cl100k_base", "o200k_base".
 	Tokenizer string `toml:"tokenizer"`
 

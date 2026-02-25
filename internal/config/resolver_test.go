@@ -603,6 +603,93 @@ format = "xml"
 	assert.Contains(t, err.Error(), "nonexistent")
 }
 
+// ── BriefMaxTokens resolution ──────────────────────────────────────────────
+
+// TestResolve_BriefMaxTokens_FromRepoConfig verifies that brief_max_tokens
+// set in a repo config TOML file is correctly loaded into the resolved profile.
+func TestResolve_BriefMaxTokens_FromRepoConfig(t *testing.T) {
+	clearHarvxEnv(t)
+
+	repoDir := t.TempDir()
+	writeTomlFile(t, repoDir, "harvx.toml", `
+[profile.default]
+brief_max_tokens = 8000
+`)
+
+	rc, err := Resolve(ResolveOptions{
+		TargetDir:        repoDir,
+		GlobalConfigPath: filepath.Join(repoDir, "nonexistent.toml"),
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 8000, rc.Profile.BriefMaxTokens,
+		"brief_max_tokens from repo config must be respected")
+	assert.Equal(t, SourceRepo, rc.Sources["brief_max_tokens"])
+}
+
+// TestResolve_BriefMaxTokens_CLIFlagOverridesRepo verifies that a CLI flag
+// for brief_max_tokens takes precedence over the repo config value.
+func TestResolve_BriefMaxTokens_CLIFlagOverridesRepo(t *testing.T) {
+	clearHarvxEnv(t)
+
+	repoDir := t.TempDir()
+	writeTomlFile(t, repoDir, "harvx.toml", `
+[profile.default]
+brief_max_tokens = 4000
+`)
+
+	rc, err := Resolve(ResolveOptions{
+		TargetDir:        repoDir,
+		GlobalConfigPath: filepath.Join(repoDir, "nonexistent.toml"),
+		CLIFlags: map[string]any{
+			"brief_max_tokens": 16000,
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 16000, rc.Profile.BriefMaxTokens,
+		"CLI flag must override repo config for brief_max_tokens")
+	assert.Equal(t, SourceFlag, rc.Sources["brief_max_tokens"])
+}
+
+// TestResolve_BriefMaxTokens_DefaultIsZero verifies that when no config sets
+// brief_max_tokens, it defaults to 0 (the workflow layer applies its own
+// default of 4000 at runtime).
+func TestResolve_BriefMaxTokens_DefaultIsZero(t *testing.T) {
+	clearHarvxEnv(t)
+
+	dir := t.TempDir()
+	rc, err := Resolve(ResolveOptions{
+		TargetDir:        dir,
+		GlobalConfigPath: filepath.Join(dir, "nonexistent.toml"),
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, rc.Profile.BriefMaxTokens,
+		"brief_max_tokens should be 0 by default (workflow applies its own default)")
+}
+
+// TestResolve_BriefMaxTokens_GlobalConfig verifies that brief_max_tokens
+// set in the global config is loaded correctly.
+func TestResolve_BriefMaxTokens_GlobalConfig(t *testing.T) {
+	clearHarvxEnv(t)
+
+	dir := t.TempDir()
+	globalPath := writeTomlFile(t, dir, "global.toml", `
+[profile.default]
+brief_max_tokens = 6000
+`)
+
+	rc, err := Resolve(ResolveOptions{
+		TargetDir:        t.TempDir(),
+		GlobalConfigPath: globalPath,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 6000, rc.Profile.BriefMaxTokens)
+	assert.Equal(t, SourceGlobal, rc.Sources["brief_max_tokens"])
+}
+
 // TestResolve_NonExistentProfile_EnvVar returns an error when HARVX_PROFILE
 // is set to a profile that does not exist in any config file.
 func TestResolve_NonExistentProfile_EnvVar(t *testing.T) {

@@ -291,14 +291,16 @@ func flattenProfileRaw(raw map[string]interface{}) map[string]any {
 	}
 
 	// Integer fields: BurntSushi/toml decodes TOML integers as int64 in raw maps.
-	if v, ok := raw["max_tokens"]; ok {
-		switch n := v.(type) {
-		case int64:
-			flat["max_tokens"] = int(n)
-		case int:
-			flat["max_tokens"] = n
-		default:
-			flat["max_tokens"] = v
+	for _, intKey := range []string{"max_tokens", "brief_max_tokens"} {
+		if v, ok := raw[intKey]; ok {
+			switch n := v.(type) {
+			case int64:
+				flat[intKey] = int(n)
+			case int:
+				flat[intKey] = n
+			default:
+				flat[intKey] = v
+			}
 		}
 	}
 
@@ -381,8 +383,9 @@ func profileToFlatMap(p *Profile) map[string]any {
 	return map[string]any{
 		"output":      p.Output,
 		"format":      p.Format,
-		"max_tokens":  p.MaxTokens,
-		"tokenizer":   p.Tokenizer,
+		"max_tokens":       p.MaxTokens,
+		"brief_max_tokens": p.BriefMaxTokens,
+		"tokenizer":        p.Tokenizer,
 		"compression": p.Compression,
 		"redaction":   p.Redaction,
 		"target":      p.Target,
@@ -408,10 +411,11 @@ func profileToFlatMap(p *Profile) map[string]any {
 // flatMapToProfile converts the current koanf state into a Profile struct.
 func flatMapToProfile(k *koanf.Koanf) *Profile {
 	return &Profile{
-		Output:      k.String("output"),
-		Format:      k.String("format"),
-		MaxTokens:   k.Int("max_tokens"),
-		Tokenizer:   k.String("tokenizer"),
+		Output:         k.String("output"),
+		Format:         k.String("format"),
+		MaxTokens:      k.Int("max_tokens"),
+		BriefMaxTokens: k.Int("brief_max_tokens"),
+		Tokenizer:      k.String("tokenizer"),
 		Compression: k.Bool("compression"),
 		Redaction:   k.Bool("redaction"),
 		Target:      k.String("target"),
