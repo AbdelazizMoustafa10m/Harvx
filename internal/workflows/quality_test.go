@@ -3,6 +3,7 @@ package workflows
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,7 +79,7 @@ critical_files = ["README.md"]
 	for _, q := range result.Questions {
 		assert.True(t, q.Covered, "question %q should be covered", q.ID)
 		assert.Empty(t, q.MissingFiles, "question %q should have no missing files", q.ID)
-		assert.NotEmpty(t, q.FoundFiles, "question %q should have found files", q.ID)
+		assert.NotEmpty(t, q.IncludedFiles, "question %q should have included files", q.ID)
 	}
 }
 
@@ -141,7 +142,7 @@ critical_files = ["README.md"]
 	// auth-flow: token.go found, middleware/auth.go missing.
 	authQ := questionMap["auth-flow"]
 	assert.False(t, authQ.Covered)
-	assert.Contains(t, authQ.FoundFiles, "internal/auth/token.go")
+	assert.Contains(t, authQ.IncludedFiles, "internal/auth/token.go")
 	assert.Contains(t, authQ.MissingFiles, "middleware/auth.go")
 
 	// db-config: config.go missing.
@@ -152,7 +153,7 @@ critical_files = ["README.md"]
 	// readme: README.md found.
 	readmeQ := questionMap["readme"]
 	assert.True(t, readmeQ.Covered)
-	assert.Contains(t, readmeQ.FoundFiles, "README.md")
+	assert.Contains(t, readmeQ.IncludedFiles, "README.md")
 	assert.Empty(t, readmeQ.MissingFiles)
 }
 
@@ -194,7 +195,7 @@ critical_files = []
 	for _, q := range result.Questions {
 		assert.True(t, q.Covered, "question %q with no critical files should be covered", q.ID)
 		assert.Empty(t, q.MissingFiles)
-		assert.Empty(t, q.FoundFiles)
+		assert.Empty(t, q.IncludedFiles)
 	}
 }
 
@@ -257,7 +258,7 @@ critical_files = ["internal/db/*.go"]
 
 	// auth-glob: should match internal/auth/token.go and session.go.
 	assert.True(t, questionMap["auth-glob"].Covered, "internal/auth/**/*.go should match")
-	assert.Contains(t, questionMap["auth-glob"].FoundFiles, "internal/auth/**/*.go")
+	assert.Contains(t, questionMap["auth-glob"].IncludedFiles, "internal/auth/**/*.go")
 
 	// lib-glob: should match lib/utils/helpers.go.
 	assert.True(t, questionMap["lib-glob"].Covered, "lib/** should match")
@@ -294,87 +295,6 @@ func TestEvaluateQuality_EmptyRootDir(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "root directory required")
-}
-
-func TestEvaluateQuality_CategoryStats(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-
-	// Create some files.
-	createRepoFile(t, root, "auth.go", "package main\n")
-	createRepoFile(t, root, "config.go", "package main\n")
-	// security.go intentionally missing.
-
-	tomlContent := `
-[[questions]]
-id = "arch-1"
-question = "Architecture question 1"
-expected_answer = "answer"
-category = "architecture"
-critical_files = ["auth.go"]
-
-[[questions]]
-id = "arch-2"
-question = "Architecture question 2"
-expected_answer = "answer"
-category = "architecture"
-critical_files = ["missing-arch.go"]
-
-[[questions]]
-id = "config-1"
-question = "Config question"
-expected_answer = "answer"
-category = "configuration"
-critical_files = ["config.go"]
-
-[[questions]]
-id = "sec-1"
-question = "Security question 1"
-expected_answer = "answer"
-category = "security"
-critical_files = ["security.go"]
-
-[[questions]]
-id = "sec-2"
-question = "Security question 2"
-expected_answer = "answer"
-category = "security"
-critical_files = ["also-missing.go"]
-`
-
-	questionsPath := filepath.Join(root, ".harvx", "golden-questions.toml")
-	writeGoldenQuestionsTOML(t, questionsPath, tomlContent)
-
-	result, err := EvaluateQuality(QualityOptions{
-		RootDir: root,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, 5, result.TotalQuestions)
-	assert.Equal(t, 2, result.CoveredCount)   // arch-1 and config-1
-	assert.Equal(t, 3, result.UncoveredCount) // arch-2, sec-1, sec-2
-
-	// Verify per-category stats.
-	require.Contains(t, result.ByCategory, "architecture")
-	require.Contains(t, result.ByCategory, "configuration")
-	require.Contains(t, result.ByCategory, "security")
-
-	archStats := result.ByCategory["architecture"]
-	assert.Equal(t, 2, archStats.Total)
-	assert.Equal(t, 1, archStats.Covered)
-	assert.InDelta(t, 50.0, archStats.Percent, 0.01)
-
-	configStats := result.ByCategory["configuration"]
-	assert.Equal(t, 1, configStats.Total)
-	assert.Equal(t, 1, configStats.Covered)
-	assert.InDelta(t, 100.0, configStats.Percent, 0.01)
-
-	secStats := result.ByCategory["security"]
-	assert.Equal(t, 2, secStats.Total)
-	assert.Equal(t, 0, secStats.Covered)
-	assert.InDelta(t, 0.0, secStats.Percent, 0.01)
 }
 
 func TestEvaluateQuality_CoveragePercent(t *testing.T) {
@@ -487,44 +407,21 @@ func TestEvaluateQuality_EmptyQuestionsFile(t *testing.T) {
 	root := t.TempDir()
 
 	// An empty TOML file produces an empty questions list, which should
-	// fail validation with a meaningful error.
+	// return a meaningful result with 0 questions and 100% coverage.
 	questionsPath := filepath.Join(root, ".harvx", "golden-questions.toml")
 	writeGoldenQuestionsTOML(t, questionsPath, "# Empty golden questions file\n")
-
-	_, err := EvaluateQuality(QualityOptions{
-		RootDir: root,
-	})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no questions")
-}
-
-func TestEvaluateQuality_UncategorizedGrouping(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	createRepoFile(t, root, "main.go", "package main\n")
-
-	tomlContent := `
-[[questions]]
-id = "no-cat"
-question = "A question with no category"
-expected_answer = "answer"
-critical_files = ["main.go"]
-`
-
-	questionsPath := filepath.Join(root, ".harvx", "golden-questions.toml")
-	writeGoldenQuestionsTOML(t, questionsPath, tomlContent)
 
 	result, err := EvaluateQuality(QualityOptions{
 		RootDir: root,
 	})
 
 	require.NoError(t, err)
-	require.Contains(t, result.ByCategory, "uncategorized")
-	assert.Equal(t, 1, result.ByCategory["uncategorized"].Total)
-	assert.Equal(t, 1, result.ByCategory["uncategorized"].Covered)
-	assert.InDelta(t, 100.0, result.ByCategory["uncategorized"].Percent, 0.01)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.TotalQuestions)
+	assert.Equal(t, 0, result.CoveredCount)
+	assert.Equal(t, 0, result.UncoveredCount)
+	assert.InDelta(t, 100.0, result.CoveragePercent, 0.01)
+	assert.Empty(t, result.Questions)
 }
 
 func TestEvaluateQuality_QuestionsPathReturned(t *testing.T) {
@@ -550,26 +447,32 @@ critical_files = ["file.go"]
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, questionsPath, result.QuestionsPath)
+	// On macOS, DiscoverGoldenQuestions resolves symlinks (/var -> /private/var),
+	// so we compare resolved paths.
+	resolvedQuestionsPath, resolveErr := filepath.EvalSymlinks(questionsPath)
+	if resolveErr != nil {
+		resolvedQuestionsPath = questionsPath
+	}
+	assert.Equal(t, resolvedQuestionsPath, result.QuestionsPath)
 }
 
-func TestEvaluateQuality_RootLevelDiscovery(t *testing.T) {
+func TestEvaluateQuality_AutoDiscovery(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	createRepoFile(t, root, "app.go", "package main\n")
 
-	// Place the golden questions at root level (fallback location).
+	// Place the golden questions in the standard .harvx/ location.
 	tomlContent := `
 [[questions]]
-id = "root-q"
-question = "Root-level question"
+id = "auto-q"
+question = "Auto-discovered question"
 expected_answer = "answer"
 category = "conventions"
 critical_files = ["app.go"]
 `
 
-	questionsPath := filepath.Join(root, "golden-questions.toml")
+	questionsPath := filepath.Join(root, ".harvx", "golden-questions.toml")
 	writeGoldenQuestionsTOML(t, questionsPath, tomlContent)
 
 	result, err := EvaluateQuality(QualityOptions{
@@ -577,7 +480,12 @@ critical_files = ["app.go"]
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, questionsPath, result.QuestionsPath)
+	// On macOS, DiscoverGoldenQuestions resolves symlinks (/var -> /private/var).
+	resolvedPath, resolveErr := filepath.EvalSymlinks(questionsPath)
+	if resolveErr != nil {
+		resolvedPath = questionsPath
+	}
+	assert.Equal(t, resolvedPath, result.QuestionsPath)
 	assert.Equal(t, 1, result.CoveredCount)
 }
 
@@ -609,204 +517,8 @@ critical_files = ["b.go", "a.go"]
 
 	// CriticalFiles should be sorted alphabetically.
 	assert.Equal(t, []string{"a.go", "b.go"}, result.Questions[0].CriticalFiles)
-	// FoundFiles should also be sorted.
-	assert.Equal(t, []string{"a.go", "b.go"}, result.Questions[0].FoundFiles)
-}
-
-func TestIsGlobPattern(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		pattern string
-		want    bool
-	}{
-		{name: "star extension", pattern: "*.go", want: true},
-		{name: "literal filename", pattern: "foo.go", want: false},
-		{name: "doublestar glob", pattern: "lib/**", want: true},
-		{name: "doublestar with extension", pattern: "internal/**/*.go", want: true},
-		{name: "question mark", pattern: "file?.go", want: true},
-		{name: "bracket character class", pattern: "file[0-9].go", want: true},
-		{name: "curly brace alternation", pattern: "*.{go,rs}", want: true},
-		{name: "plain directory path", pattern: "internal/auth/token.go", want: false},
-		{name: "path with dots", pattern: "config.d/app.toml", want: false},
-		{name: "empty string", pattern: "", want: false},
-		{name: "just a star", pattern: "*", want: true},
-		{name: "nested path no glob", pattern: "a/b/c/d.txt", want: false},
-		{name: "star in middle", pattern: "src/*/main.go", want: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := isGlobPattern(tt.pattern)
-			assert.Equal(t, tt.want, got, "isGlobPattern(%q)", tt.pattern)
-		})
-	}
-}
-
-func TestFilePatternExists_LiteralPath(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	createRepoFile(t, root, "src/main.go", "package main\n")
-	createRepoFile(t, root, "README.md", "# Test\n")
-
-	tests := []struct {
-		name    string
-		pattern string
-		want    bool
-	}{
-		{name: "existing file", pattern: "src/main.go", want: true},
-		{name: "existing file at root", pattern: "README.md", want: true},
-		{name: "missing file", pattern: "src/missing.go", want: false},
-		{name: "missing directory", pattern: "lib/auth.go", want: false},
-		{name: "directory as literal", pattern: "src", want: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := filePatternExists(root, tt.pattern)
-			assert.Equal(t, tt.want, got, "filePatternExists(root, %q)", tt.pattern)
-		})
-	}
-}
-
-func TestFilePatternExists_GlobPattern(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	createRepoFile(t, root, "internal/auth/token.go", "package auth\n")
-	createRepoFile(t, root, "internal/auth/session.go", "package auth\n")
-	createRepoFile(t, root, "internal/db/config.go", "package db\n")
-	createRepoFile(t, root, "lib/utils.go", "package lib\n")
-	createRepoFile(t, root, "main.go", "package main\n")
-
-	tests := []struct {
-		name    string
-		pattern string
-		want    bool
-	}{
-		{name: "doublestar matches nested", pattern: "internal/**/*.go", want: true},
-		{name: "star matches single level", pattern: "internal/auth/*.go", want: true},
-		{name: "star extension at root", pattern: "*.go", want: true},
-		{name: "no match doublestar", pattern: "tests/**/*.go", want: false},
-		{name: "no match star extension", pattern: "*.rs", want: false},
-		{name: "doublestar all files", pattern: "internal/**", want: true},
-		{name: "single level wildcard", pattern: "internal/*/config.go", want: true},
-		{name: "single level wildcard no match", pattern: "internal/*/missing.go", want: false},
-		{name: "question mark glob", pattern: "lib/utils.g?", want: true},
-		{name: "question mark no match", pattern: "lib/utils.g??", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := filePatternExists(root, tt.pattern)
-			assert.Equal(t, tt.want, got, "filePatternExists(root, %q)", tt.pattern)
-		})
-	}
-}
-
-func TestComputeCategoryStats(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		questions []QuestionResult
-		want      map[string]CategoryStats
-	}{
-		{
-			name:      "empty questions",
-			questions: nil,
-			want:      map[string]CategoryStats{},
-		},
-		{
-			name: "single category all covered",
-			questions: []QuestionResult{
-				{ID: "q1", Category: "architecture", Covered: true},
-				{ID: "q2", Category: "architecture", Covered: true},
-			},
-			want: map[string]CategoryStats{
-				"architecture": {Total: 2, Covered: 2, Percent: 100.0},
-			},
-		},
-		{
-			name: "single category partial coverage",
-			questions: []QuestionResult{
-				{ID: "q1", Category: "security", Covered: true},
-				{ID: "q2", Category: "security", Covered: false},
-				{ID: "q3", Category: "security", Covered: false},
-			},
-			want: map[string]CategoryStats{
-				"security": {Total: 3, Covered: 1, Percent: 100.0 / 3.0},
-			},
-		},
-		{
-			name: "multiple categories",
-			questions: []QuestionResult{
-				{ID: "q1", Category: "architecture", Covered: true},
-				{ID: "q2", Category: "architecture", Covered: false},
-				{ID: "q3", Category: "security", Covered: true},
-				{ID: "q4", Category: "configuration", Covered: true},
-				{ID: "q5", Category: "configuration", Covered: true},
-			},
-			want: map[string]CategoryStats{
-				"architecture":  {Total: 2, Covered: 1, Percent: 50.0},
-				"security":      {Total: 1, Covered: 1, Percent: 100.0},
-				"configuration": {Total: 2, Covered: 2, Percent: 100.0},
-			},
-		},
-		{
-			name: "empty category becomes uncategorized",
-			questions: []QuestionResult{
-				{ID: "q1", Category: "", Covered: true},
-				{ID: "q2", Category: "", Covered: false},
-			},
-			want: map[string]CategoryStats{
-				"uncategorized": {Total: 2, Covered: 1, Percent: 50.0},
-			},
-		},
-		{
-			name: "mixed empty and named categories",
-			questions: []QuestionResult{
-				{ID: "q1", Category: "architecture", Covered: true},
-				{ID: "q2", Category: "", Covered: true},
-				{ID: "q3", Category: "", Covered: false},
-			},
-			want: map[string]CategoryStats{
-				"architecture":  {Total: 1, Covered: 1, Percent: 100.0},
-				"uncategorized": {Total: 2, Covered: 1, Percent: 50.0},
-			},
-		},
-		{
-			name: "none covered",
-			questions: []QuestionResult{
-				{ID: "q1", Category: "security", Covered: false},
-				{ID: "q2", Category: "security", Covered: false},
-			},
-			want: map[string]CategoryStats{
-				"security": {Total: 2, Covered: 0, Percent: 0.0},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := computeCategoryStats(tt.questions)
-
-			assert.Len(t, got, len(tt.want), "number of categories")
-			for cat, wantStats := range tt.want {
-				gotStats, ok := got[cat]
-				require.True(t, ok, "category %q should exist", cat)
-				assert.Equal(t, wantStats.Total, gotStats.Total, "category %q total", cat)
-				assert.Equal(t, wantStats.Covered, gotStats.Covered, "category %q covered", cat)
-				assert.InDelta(t, wantStats.Percent, gotStats.Percent, 0.01, "category %q percent", cat)
-			}
-		})
-	}
+	// IncludedFiles should also be sorted.
+	assert.Equal(t, []string{"a.go", "b.go"}, result.Questions[0].IncludedFiles)
 }
 
 func TestEvaluateQuality_MultipleCriticalFilesPartialMatch(t *testing.T) {
@@ -840,12 +552,12 @@ critical_files = ["middleware/auth.go", "internal/auth/token.go", "internal/auth
 
 	q := result.Questions[0]
 	assert.False(t, q.Covered, "question should not be covered when any critical file is missing")
-	assert.Len(t, q.FoundFiles, 2)
+	assert.Len(t, q.IncludedFiles, 2)
 	assert.Len(t, q.MissingFiles, 1)
 	assert.Contains(t, q.MissingFiles, "internal/auth/session.go")
 }
 
-func TestEvaluateQuality_ProfileFieldPassedThrough(t *testing.T) {
+func TestEvaluateQuality_ProfileNameFieldPassedThrough(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -863,10 +575,10 @@ critical_files = ["main.go"]
 	questionsPath := filepath.Join(root, ".harvx", "golden-questions.toml")
 	writeGoldenQuestionsTOML(t, questionsPath, tomlContent)
 
-	// Verify the profile option does not cause an error.
+	// Verify the ProfileName option does not cause an error.
 	result, err := EvaluateQuality(QualityOptions{
-		RootDir: root,
-		Profile: "custom-profile",
+		RootDir:     root,
+		ProfileName: "custom-profile",
 	})
 
 	require.NoError(t, err)
@@ -950,4 +662,119 @@ category = "architecture"
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate")
+}
+
+func TestCollectRepoFiles_SkipsHiddenDirs(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	createRepoFile(t, root, "visible.go", "package main\n")
+	createRepoFile(t, root, ".hidden/secret.go", "package hidden\n")
+	createRepoFile(t, root, "src/.cache/data.bin", "data")
+	createRepoFile(t, root, "src/main.go", "package main\n")
+
+	files, err := collectRepoFiles(root)
+	require.NoError(t, err)
+
+	sort.Strings(files)
+
+	// Should include visible files but skip hidden directories.
+	assert.Contains(t, files, "visible.go")
+	assert.Contains(t, files, "src/main.go")
+	assert.NotContains(t, files, ".hidden/secret.go")
+	assert.NotContains(t, files, "src/.cache/data.bin")
+}
+
+func TestCollectRepoFiles_ReturnsRelativePaths(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	createRepoFile(t, root, "a/b/c.go", "package c\n")
+
+	files, err := collectRepoFiles(root)
+	require.NoError(t, err)
+
+	require.Len(t, files, 1)
+	// Path should be forward-slash separated and relative.
+	assert.Equal(t, "a/b/c.go", files[0])
+}
+
+func TestCollectRepoFiles_EmptyDir(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	files, err := collectRepoFiles(root)
+	require.NoError(t, err)
+	assert.Empty(t, files)
+}
+
+func TestPatternMatchesAny(t *testing.T) {
+	t.Parallel()
+
+	files := []string{
+		"internal/auth/token.go",
+		"internal/auth/session.go",
+		"internal/db/config.go",
+		"lib/utils/helpers.go",
+		"main.go",
+		"README.md",
+	}
+
+	tests := []struct {
+		name    string
+		pattern string
+		want    bool
+	}{
+		{name: "literal match", pattern: "main.go", want: true},
+		{name: "literal nested match", pattern: "internal/auth/token.go", want: true},
+		{name: "literal no match", pattern: "missing.go", want: false},
+		{name: "glob star extension", pattern: "*.go", want: true},
+		{name: "glob star extension no match", pattern: "*.rs", want: false},
+		{name: "doublestar nested", pattern: "internal/**/*.go", want: true},
+		{name: "doublestar no match", pattern: "tests/**/*.go", want: false},
+		{name: "single star wildcard", pattern: "internal/auth/*.go", want: true},
+		{name: "doublestar all", pattern: "lib/**", want: true},
+		{name: "single level wildcard", pattern: "internal/*/config.go", want: true},
+		{name: "README literal", pattern: "README.md", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := patternMatchesAny(tt.pattern, files)
+			assert.Equal(t, tt.want, got, "patternMatchesAny(%q)", tt.pattern)
+		})
+	}
+}
+
+func TestEvaluateQuality_HiddenDirsNotMatchedByCriticalFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	// Place the file only inside a hidden directory.
+	createRepoFile(t, root, ".hidden/auth.go", "package auth\n")
+
+	tomlContent := `
+[[questions]]
+id = "hidden-q"
+question = "Is auth.go present?"
+expected_answer = "No, only in hidden dir"
+category = "architecture"
+critical_files = [".hidden/auth.go"]
+`
+
+	questionsPath := filepath.Join(root, ".harvx", "golden-questions.toml")
+	writeGoldenQuestionsTOML(t, questionsPath, tomlContent)
+
+	result, err := EvaluateQuality(QualityOptions{
+		RootDir: root,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Questions, 1)
+	// The file is in a hidden dir, so it should not be found during walk.
+	assert.False(t, result.Questions[0].Covered)
+	assert.Contains(t, result.Questions[0].MissingFiles, ".hidden/auth.go")
 }

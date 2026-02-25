@@ -10,8 +10,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -20,60 +18,64 @@ import (
 )
 
 // qualityJSON is a local flag target for --json on the quality command.
+// When true, quality results are output as structured JSON.
 var qualityJSON bool
 
-// qualityQuestionsPath is a local flag target for --questions.
+// qualityQuestionsPath is a local flag target for --questions on the quality
+// command. When set, it overrides auto-discovery of the golden questions file.
 var qualityQuestionsPath string
 
-// qualityYes is a local flag target for --yes on the quality init subcommand.
-var qualityYes bool
+// qualityInitOutput is a local flag target for --output on the quality init
+// subcommand. It specifies the output path for the generated golden questions
+// file (default: .harvx/golden-questions.toml).
+var qualityInitOutput string
+
+// qualityInitYes is a local flag target for --yes on the quality init
+// subcommand. When true, existing files are overwritten without prompting.
+var qualityInitYes bool
 
 // qualityCmd implements `harvx quality` (alias: `qa`) which evaluates
-// golden questions coverage.
+// golden questions coverage against the repository.
 var qualityCmd = &cobra.Command{
 	Use:     "quality",
 	Aliases: []string{"qa"},
 	Short:   "Evaluate golden questions coverage",
-	Long: `Evaluate coverage of golden questions against the current repository.
+	Long: `Evaluate how well your Harvx context covers a set of golden questions.
 
-For each golden question, the command checks whether the critical files are
-present in the repository. Coverage reports show which questions have all
-their critical files included and which are missing files.
-
-Golden questions are loaded from .harvx/golden-questions.toml by default.
-Use --questions to specify a custom path.
+Each golden question pairs a natural-language query with the critical files
+an LLM needs to answer it. The quality command checks whether those files
+exist in the repository and reports per-question coverage.
 
 Examples:
-  # Run quality check
+  # Evaluate coverage using auto-discovered golden questions
   harvx quality
 
-  # Use a custom questions file
-  harvx quality --questions path/to/questions.toml
-
-  # JSON output for CI
+  # Output results as structured JSON
   harvx quality --json
 
-  # Initialize a starter golden questions file
+  # Use a custom golden questions file
+  harvx quality --questions path/to/questions.toml
+
+  # Generate a starter golden questions file
   harvx quality init`,
 	RunE: runQuality,
 }
 
 // qualityInitCmd implements `harvx quality init` which generates a starter
-// golden questions file.
+// golden questions TOML file.
 var qualityInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Generate a starter golden questions file",
-	Long: `Generate a starter golden questions TOML file with example questions.
-
-The file is written to .harvx/golden-questions.toml by default. If the file
-already exists, the command exits with an error unless --yes is specified.`,
-	RunE: runQualityInit,
+	RunE:  runQualityInit,
 }
 
 func init() {
-	qualityCmd.Flags().BoolVar(&qualityJSON, "json", false, "Output results as structured JSON")
-	qualityCmd.Flags().StringVar(&qualityQuestionsPath, "questions", "", "Path to golden questions TOML file")
-	qualityInitCmd.Flags().BoolVar(&qualityYes, "yes", false, "Overwrite existing golden questions file without prompting")
+	qualityCmd.Flags().BoolVar(&qualityJSON, "json", false, "Output structured JSON")
+	qualityCmd.Flags().StringVar(&qualityQuestionsPath, "questions", "", "Path to golden questions TOML (overrides auto-discovery)")
+
+	qualityInitCmd.Flags().StringVar(&qualityInitOutput, "output", ".harvx/golden-questions.toml", "Output path for the generated file")
+	qualityInitCmd.Flags().BoolVar(&qualityInitYes, "yes", false, "Overwrite without prompting")
+
 	qualityCmd.AddCommand(qualityInitCmd)
 	rootCmd.AddCommand(qualityCmd)
 }
@@ -89,16 +91,17 @@ func runQuality(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("quality: resolving directory: %w", err)
 	}
 
-	slog.Debug("quality: starting evaluation",
+	slog.Debug("quality: resolved paths",
 		"root_dir", rootDir,
 		"questions_path", qualityQuestionsPath,
+		"json", qualityJSON,
 		"profile", fv.Profile,
 	)
 
 	opts := workflows.QualityOptions{
 		RootDir:       rootDir,
 		QuestionsPath: qualityQuestionsPath,
-		Profile:       fv.Profile,
+		ProfileName:   fv.Profile,
 	}
 
 	result, err := workflows.EvaluateQuality(opts)
@@ -126,53 +129,35 @@ func writeQualityJSON(cmd *cobra.Command, result *workflows.QualityResult) error
 	return nil
 }
 
-// writeQualityReport renders a human-readable quality coverage report to stdout.
+// writeQualityReport renders a human-readable quality coverage report to
+// stdout. Each question is shown with a [PASS] or [MISS] label, and missed
+// questions list their missing files indented below.
 func writeQualityReport(cmd *cobra.Command, result *workflows.QualityResult) error {
 	w := cmd.OutOrStdout()
 
 	// Header line.
-	questionsBase := filepath.Base(result.QuestionsPath)
-	fmt.Fprintf(w, "Golden Questions Coverage (%d questions from %s)\n\n",
-		result.TotalQuestions, questionsBase)
+	fmt.Fprintf(w, "Golden Questions Coverage\n\n")
 
 	// Per-question results.
 	for _, qr := range result.Questions {
 		label := qualityStatusLabel(qr.Covered)
-		fmt.Fprintf(w, "%s %-20s %s\n", label, qr.ID, qr.Question)
+		detail := "all critical files found"
+		if !qr.Covered {
+			detail = fmt.Sprintf("%d/%d critical files missing", len(qr.MissingFiles), len(qr.CriticalFiles))
+		}
 
-		if qr.Covered {
-			if len(qr.FoundFiles) > 0 {
-				fmt.Fprintf(w, "      found: %s\n", strings.Join(qr.FoundFiles, ", "))
-			}
-		} else {
-			if len(qr.FoundFiles) > 0 {
-				fmt.Fprintf(w, "      found:   %s\n", strings.Join(qr.FoundFiles, ", "))
-			}
-			if len(qr.MissingFiles) > 0 {
-				fmt.Fprintf(w, "      missing: %s\n", strings.Join(qr.MissingFiles, ", "))
+		fmt.Fprintf(w, "%s %s - %s\n", label, qr.ID, detail)
+
+		// For missed questions, list missing files indented.
+		if !qr.Covered {
+			for _, f := range qr.MissingFiles {
+				fmt.Fprintf(w, "      %s\n", f)
 			}
 		}
 	}
 
-	// Per-category summary table.
-	if len(result.ByCategory) > 0 {
-		fmt.Fprintf(w, "\nBy Category:\n")
-
-		// Sort category names for deterministic output.
-		categories := make([]string, 0, len(result.ByCategory))
-		for cat := range result.ByCategory {
-			categories = append(categories, cat)
-		}
-		sort.Strings(categories)
-
-		for _, cat := range categories {
-			stats := result.ByCategory[cat]
-			fmt.Fprintf(w, "  %-20s %d/%d (%.0f%%)\n", cat, stats.Covered, stats.Total, stats.Percent)
-		}
-	}
-
-	// Overall coverage line.
-	fmt.Fprintf(w, "\nCoverage: %d/%d (%.0f%%)\n",
+	// Summary line.
+	fmt.Fprintf(w, "\nCoverage: %d/%d questions covered (%.1f%%)\n",
 		result.CoveredCount, result.TotalQuestions, result.CoveragePercent)
 
 	return nil
@@ -187,7 +172,8 @@ func qualityStatusLabel(covered bool) string {
 }
 
 // runQualityInit executes the quality init subcommand. It generates a starter
-// golden questions TOML file at .harvx/golden-questions.toml.
+// golden questions TOML file at the specified path, creating parent
+// directories as needed.
 func runQualityInit(cmd *cobra.Command, _ []string) error {
 	fv := GlobalFlags()
 
@@ -196,34 +182,34 @@ func runQualityInit(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("quality init: resolving directory: %w", err)
 	}
 
-	// Build the output path.
-	harvxDir := filepath.Join(rootDir, ".harvx")
-	outputPath := filepath.Join(harvxDir, "golden-questions.toml")
-
-	// Check if the file already exists.
-	if _, statErr := os.Stat(outputPath); statErr == nil {
-		// File exists. Check --yes flags (local and global).
-		if !qualityYes && !fv.Yes {
-			return fmt.Errorf("quality init: %s already exists; use --yes to overwrite", outputPath)
-		}
-		slog.Debug("quality init: overwriting existing file",
-			"path", outputPath,
-		)
+	// Resolve output path relative to the root directory.
+	outputPath := qualityInitOutput
+	if !filepath.IsAbs(outputPath) {
+		outputPath = filepath.Join(rootDir, outputPath)
 	}
 
-	// Create the .harvx directory if needed.
-	if err := os.MkdirAll(harvxDir, 0o755); err != nil {
-		return fmt.Errorf("quality init: creating directory %s: %w", harvxDir, err)
+	slog.Debug("quality init: resolved output path",
+		"output", outputPath,
+		"yes", qualityInitYes,
+	)
+
+	// Check if the file already exists.
+	if _, statErr := os.Stat(outputPath); statErr == nil && !qualityInitYes {
+		return fmt.Errorf("quality init: file already exists, use --yes to overwrite")
+	}
+
+	// Create parent directories.
+	dir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("quality init: creating directory %s: %w", dir, err)
 	}
 
 	// Generate and write the starter content.
 	content := config.GenerateGoldenQuestionsInit()
 	if err := os.WriteFile(outputPath, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("quality init: writing %s: %w", outputPath, err)
+		return fmt.Errorf("quality init: writing file %s: %w", outputPath, err)
 	}
 
-	fmt.Fprintf(cmd.ErrOrStderr(), "Created %s with 3 example golden questions\n", outputPath)
-	fmt.Fprintf(cmd.ErrOrStderr(), "Edit the file to add questions specific to your project.\n")
-
+	fmt.Fprintf(cmd.OutOrStdout(), "Created golden questions file: %s\n", outputPath)
 	return nil
 }

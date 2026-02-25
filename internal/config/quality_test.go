@@ -267,54 +267,83 @@ func TestValidateGoldenQuestions(t *testing.T) {
 	}
 }
 
-// TestDiscoverGoldenQuestionsPath_HarvxDirFirst verifies that .harvx/ is
-// checked before the root directory.
-func TestDiscoverGoldenQuestionsPath_HarvxDirFirst(t *testing.T) {
+// TestDiscoverGoldenQuestions_InStartDir verifies that .harvx/golden-questions.toml
+// is found in the starting directory.
+func TestDiscoverGoldenQuestions_InStartDir(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	harvxDir := filepath.Join(dir, ".harvx")
-	require.NoError(t, os.MkdirAll(harvxDir, 0o755))
+	// Resolve symlinks to match what DiscoverGoldenQuestions returns on macOS
+	// (where /var is a symlink to /private/var).
+	resolved, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
 
-	// Create both files.
+	harvxDir := filepath.Join(resolved, ".harvx")
+	require.NoError(t, os.MkdirAll(harvxDir, 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(harvxDir, "golden-questions.toml"),
 		[]byte("# harvx dir"),
 		0o644,
 	))
-	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "golden-questions.toml"),
-		[]byte("# root dir"),
-		0o644,
-	))
 
-	got := DiscoverGoldenQuestionsPath(dir)
+	got, discoverErr := DiscoverGoldenQuestions(dir)
+	require.NoError(t, discoverErr)
 	assert.Equal(t, filepath.Join(harvxDir, "golden-questions.toml"), got)
 }
 
-// TestDiscoverGoldenQuestionsPath_FallbackToRoot verifies that the root-level
-// file is returned when .harvx/ does not contain the file.
-func TestDiscoverGoldenQuestionsPath_FallbackToRoot(t *testing.T) {
+// TestDiscoverGoldenQuestions_WalksUpToParent verifies that discovery walks
+// up from a subdirectory to find the file in a parent.
+func TestDiscoverGoldenQuestions_WalksUpToParent(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	root := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+
+	harvxDir := filepath.Join(resolved, ".harvx")
+	require.NoError(t, os.MkdirAll(harvxDir, 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "golden-questions.toml"),
-		[]byte("# root dir"),
+		filepath.Join(harvxDir, "golden-questions.toml"),
+		[]byte("# root level"),
 		0o644,
 	))
 
-	got := DiscoverGoldenQuestionsPath(dir)
-	assert.Equal(t, filepath.Join(dir, "golden-questions.toml"), got)
+	// Create a nested subdirectory to start the search from.
+	subDir := filepath.Join(resolved, "src", "pkg")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	got, discoverErr := DiscoverGoldenQuestions(subDir)
+	require.NoError(t, discoverErr)
+	assert.Equal(t, filepath.Join(harvxDir, "golden-questions.toml"), got)
 }
 
-// TestDiscoverGoldenQuestionsPath_NotFound verifies that an empty string is
+// TestDiscoverGoldenQuestions_StopsAtGitBoundary verifies that the search
+// stops at a .git directory boundary.
+func TestDiscoverGoldenQuestions_StopsAtGitBoundary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	// Create .git in root so it acts as repo boundary.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+
+	// Do NOT create .harvx/golden-questions.toml in root.
+	// The search should stop here and return empty.
+	got, err := DiscoverGoldenQuestions(root)
+	require.NoError(t, err)
+	assert.Equal(t, "", got)
+}
+
+// TestDiscoverGoldenQuestions_NotFound verifies that an empty string is
 // returned when no golden questions file exists.
-func TestDiscoverGoldenQuestionsPath_NotFound(t *testing.T) {
+func TestDiscoverGoldenQuestions_NotFound(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	got := DiscoverGoldenQuestionsPath(dir)
+	// Place a .git boundary so search terminates quickly.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+
+	got, err := DiscoverGoldenQuestions(dir)
+	require.NoError(t, err)
 	assert.Equal(t, "", got)
 }
 
@@ -363,7 +392,7 @@ func TestGenerateGoldenQuestionsInit_Categories(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, q := range cfg.Questions {
-		assert.True(t, ValidCategories[q.Category],
+		assert.True(t, ValidGoldenCategories[q.Category],
 			"question %q has unknown category %q", q.ID, q.Category)
 	}
 }
@@ -388,9 +417,9 @@ func TestGenerateGoldenQuestionsInit_UniqueIDs(t *testing.T) {
 	}
 }
 
-// TestValidCategories_KnownSet verifies the exported ValidCategories map
+// TestValidGoldenCategories_KnownSet verifies the exported ValidGoldenCategories map
 // contains exactly the 5 known categories from the spec.
-func TestValidCategories_KnownSet(t *testing.T) {
+func TestValidGoldenCategories_KnownSet(t *testing.T) {
 	t.Parallel()
 
 	expected := []string{
@@ -401,9 +430,9 @@ func TestValidCategories_KnownSet(t *testing.T) {
 		"integration",
 	}
 
-	assert.Len(t, ValidCategories, len(expected))
+	assert.Len(t, ValidGoldenCategories, len(expected))
 	for _, cat := range expected {
-		assert.True(t, ValidCategories[cat], "category %q must be in ValidCategories", cat)
+		assert.True(t, ValidGoldenCategories[cat], "category %q must be in ValidGoldenCategories", cat)
 	}
 }
 
@@ -448,7 +477,7 @@ category = "integration"
 	require.Len(t, cfg.Questions, 5)
 
 	for i, q := range cfg.Questions {
-		assert.True(t, ValidCategories[q.Category],
+		assert.True(t, ValidGoldenCategories[q.Category],
 			"question[%d] category %q must be valid", i, q.Category)
 	}
 }

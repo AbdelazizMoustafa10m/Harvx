@@ -14,7 +14,8 @@ func resetQualityFlags(t *testing.T) {
 	t.Cleanup(func() {
 		qualityJSON = false
 		qualityQuestionsPath = ""
-		qualityYes = false
+		qualityInitOutput = ".harvx/golden-questions.toml"
+		qualityInitYes = false
 	})
 }
 
@@ -90,6 +91,10 @@ func TestQualityInitCmd_Flags(t *testing.T) {
 	f := qualityInitCmd.Flags().Lookup("yes")
 	require.NotNil(t, f, "quality init must have --yes flag")
 	assert.Equal(t, "false", f.DefValue, "--yes default value must be false")
+
+	o := qualityInitCmd.Flags().Lookup("output")
+	require.NotNil(t, o, "quality init must have --output flag")
+	assert.Equal(t, ".harvx/golden-questions.toml", o.DefValue, "--output default value mismatch")
 }
 
 func TestQualityCmd_HelpContainsExamples(t *testing.T) {
@@ -113,15 +118,11 @@ func TestQualityStatusLabel(t *testing.T) {
 }
 
 func TestQualityCmd_GlobalFlagInheritance(t *testing.T) {
-	t.Parallel()
-
+	// InheritedFlags() modifies cobra internal state (parent flag merging),
+	// so this test must not run in parallel with other cobra tests.
 	globalFlags := []string{"dir", "profile"}
 	for _, name := range globalFlags {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			flag := qualityCmd.InheritedFlags().Lookup(name)
-			assert.NotNil(t, flag, "quality must inherit --%s from root", name)
-		})
+		flag := qualityCmd.InheritedFlags().Lookup(name)
+		assert.NotNil(t, flag, "quality must inherit --%s from root", name)
 	}
 }

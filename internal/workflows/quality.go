@@ -8,10 +8,7 @@ package workflows
 import (
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 
@@ -24,11 +21,11 @@ type QualityOptions struct {
 	RootDir string
 
 	// QuestionsPath is the path to a golden questions TOML file.
-	// When empty, auto-discovery is used via config.DiscoverGoldenQuestionsPath.
+	// When empty, auto-discovery is used via config.DiscoverGoldenQuestions.
 	QuestionsPath string
 
-	// Profile is the active profile name, used for logging context.
-	Profile string
+	// ProfileName is the active profile name, used for logging context.
+	ProfileName string
 }
 
 // QuestionResult holds the coverage result for a single golden question.
@@ -45,12 +42,12 @@ type QuestionResult struct {
 	// CriticalFiles lists the file patterns declared in the question.
 	CriticalFiles []string `json:"critical_files"`
 
-	// FoundFiles lists critical file patterns that matched at least one
-	// file in the repository.
-	FoundFiles []string `json:"found_files"`
+	// IncludedFiles lists critical file patterns that matched at least one
+	// file in the repository (i.e., critical files that ARE in the output).
+	IncludedFiles []string `json:"included_files"`
 
 	// MissingFiles lists critical file patterns that matched zero files
-	// in the repository.
+	// in the repository (i.e., critical files NOT in the output).
 	MissingFiles []string `json:"missing_files"`
 
 	// Covered is true when every critical file pattern matched at least
@@ -77,32 +74,20 @@ type QualityResult struct {
 	// appear in the golden questions file.
 	Questions []QuestionResult `json:"questions"`
 
-	// ByCategory holds per-category aggregate coverage statistics.
-	ByCategory map[string]CategoryStats `json:"by_category"`
-
 	// QuestionsPath is the absolute path to the golden questions file
 	// that was evaluated.
 	QuestionsPath string `json:"questions_path"`
 }
 
-// CategoryStats holds per-category aggregate coverage statistics.
-type CategoryStats struct {
-	// Total is the number of questions in this category.
-	Total int `json:"total"`
-
-	// Covered is the number of covered questions in this category.
-	Covered int `json:"covered"`
-
-	// Percent is the coverage percentage for this category (0-100).
-	Percent float64 `json:"percent"`
-}
-
 // EvaluateQuality runs the golden questions coverage evaluation. For each
-// question, it checks whether the critical_files exist in the repository.
-// Glob patterns in critical_files are expanded using doublestar. A question
-// is "covered" when ALL critical file patterns match at least one file.
-// Questions with empty critical_files are always considered covered (with
-// a debug-level warning logged).
+// question, it walks the RootDir to collect file paths and checks whether
+// the critical_files exist using doublestar.Match for glob patterns. A
+// question is "covered" when ALL critical file patterns match at least one
+// file. Questions with empty critical_files are always considered covered
+// (with a debug-level note logged).
+//
+// If the golden questions file contains zero questions, the function returns
+// a meaningful result with 0 total questions and 100% coverage.
 func EvaluateQuality(opts QualityOptions) (*QualityResult, error) {
 	if opts.RootDir == "" {
 		return nil, fmt.Errorf("quality: root directory required")
@@ -111,26 +96,34 @@ func EvaluateQuality(opts QualityOptions) (*QualityResult, error) {
 	// Step 1: Discover or use provided questions path.
 	questionsPath := opts.QuestionsPath
 	if questionsPath == "" {
-		questionsPath = config.DiscoverGoldenQuestionsPath(opts.RootDir)
-		if questionsPath == "" {
-			return nil, fmt.Errorf("quality: no golden questions file found in %s (expected .harvx/golden-questions.toml or golden-questions.toml); use --questions to specify a path", opts.RootDir)
+		discovered, discoverErr := config.DiscoverGoldenQuestions(opts.RootDir)
+		if discoverErr != nil {
+			return nil, fmt.Errorf("quality: discovering golden questions: %w", discoverErr)
 		}
+		if discovered == "" {
+			return nil, fmt.Errorf("quality: no golden questions file found in %s (expected .harvx/golden-questions.toml); use --questions to specify a path", opts.RootDir)
+		}
+		questionsPath = discovered
 	}
 
 	slog.Debug("quality: loading golden questions",
 		"path", questionsPath,
 		"root", opts.RootDir,
-		"profile", opts.Profile,
+		"profile", opts.ProfileName,
 	)
 
-	// Step 2: Load and validate golden questions.
+	// Step 2: Load golden questions.
 	cfg, err := config.LoadGoldenQuestions(questionsPath)
 	if err != nil {
 		return nil, fmt.Errorf("quality: %w", err)
 	}
 
-	if err := config.ValidateGoldenQuestions(cfg); err != nil {
-		return nil, fmt.Errorf("quality: %w", err)
+	// Validate unless the file is empty (empty is a valid edge case:
+	// 0 questions, 100% coverage).
+	if len(cfg.Questions) > 0 {
+		if err := config.ValidateGoldenQuestions(cfg); err != nil {
+			return nil, fmt.Errorf("quality: %w", err)
+		}
 	}
 
 	slog.Debug("quality: loaded golden questions",
@@ -138,28 +131,36 @@ func EvaluateQuality(opts QualityOptions) (*QualityResult, error) {
 		"path", questionsPath,
 	)
 
-	// Step 3: Evaluate each question.
+	// Step 3: Walk the repository to collect file paths (relative, skip hidden dirs).
+	repoFiles, err := collectRepoFiles(opts.RootDir)
+	if err != nil {
+		return nil, fmt.Errorf("quality: collecting repo files: %w", err)
+	}
+
+	slog.Debug("quality: collected repo files",
+		"count", len(repoFiles),
+		"root", opts.RootDir,
+	)
+
+	// Step 4: Evaluate each question against the collected files.
 	questions := make([]QuestionResult, 0, len(cfg.Questions))
 	coveredCount := 0
 
 	for _, q := range cfg.Questions {
-		qr := evaluateQuestion(opts.RootDir, q)
+		qr := evaluateQuestion(repoFiles, q)
 		questions = append(questions, qr)
 		if qr.Covered {
 			coveredCount++
 		}
 	}
 
-	// Step 4: Compute aggregate statistics.
+	// Step 5: Compute aggregate statistics.
 	totalQuestions := len(questions)
 	uncoveredCount := totalQuestions - coveredCount
-	coveragePercent := 0.0
+	coveragePercent := 100.0
 	if totalQuestions > 0 {
 		coveragePercent = float64(coveredCount) / float64(totalQuestions) * 100
 	}
-
-	// Step 5: Compute per-category statistics.
-	byCategory := computeCategoryStats(questions)
 
 	result := &QualityResult{
 		TotalQuestions:  totalQuestions,
@@ -167,7 +168,6 @@ func EvaluateQuality(opts QualityOptions) (*QualityResult, error) {
 		UncoveredCount:  uncoveredCount,
 		CoveragePercent: coveragePercent,
 		Questions:       questions,
-		ByCategory:      byCategory,
 		QuestionsPath:   questionsPath,
 	}
 
@@ -183,9 +183,9 @@ func EvaluateQuality(opts QualityOptions) (*QualityResult, error) {
 }
 
 // evaluateQuestion checks a single golden question's critical files against
-// the repository. Each critical file pattern is checked: literal paths via
-// os.Stat and glob patterns via doublestar.Glob.
-func evaluateQuestion(rootDir string, q config.GoldenQuestion) QuestionResult {
+// the collected repository files. Each critical file pattern is matched using
+// doublestar.Match against all repo file paths.
+func evaluateQuestion(repoFiles []string, q config.GoldenQuestion) QuestionResult {
 	qr := QuestionResult{
 		ID:            q.ID,
 		Question:      q.Question,
@@ -204,12 +204,12 @@ func evaluateQuestion(rootDir string, q config.GoldenQuestion) QuestionResult {
 		return qr
 	}
 
-	var found []string
+	var included []string
 	var missing []string
 
 	for _, pattern := range q.CriticalFiles {
-		if filePatternExists(rootDir, pattern) {
-			found = append(found, pattern)
+		if patternMatchesAny(pattern, repoFiles) {
+			included = append(included, pattern)
 			slog.Debug("quality: critical file found",
 				"id", q.ID,
 				"pattern", pattern,
@@ -224,71 +224,33 @@ func evaluateQuestion(rootDir string, q config.GoldenQuestion) QuestionResult {
 	}
 
 	// Sort for deterministic output.
-	sort.Strings(found)
+	sort.Strings(included)
 	sort.Strings(missing)
 
-	qr.FoundFiles = found
+	qr.IncludedFiles = included
 	qr.MissingFiles = missing
 	qr.Covered = len(missing) == 0
 
 	return qr
 }
 
-// isGlobPattern reports whether the pattern contains glob metacharacters.
-func isGlobPattern(pattern string) bool {
-	return strings.ContainsAny(pattern, "*?[{")
-}
-
-// filePatternExists checks whether a critical file pattern matches at least
-// one file in the repository. Glob patterns are expanded using doublestar;
-// literal paths are checked with os.Stat.
-func filePatternExists(rootDir, pattern string) bool {
-	if isGlobPattern(pattern) {
-		matches, err := doublestar.Glob(os.DirFS(rootDir), pattern)
+// patternMatchesAny checks whether the given pattern matches at least one
+// file in the list using doublestar.Match. Both literal paths and glob
+// patterns are handled uniformly by doublestar.Match.
+func patternMatchesAny(pattern string, files []string) bool {
+	for _, f := range files {
+		ok, err := doublestar.Match(pattern, f)
 		if err != nil {
-			slog.Debug("quality: glob expansion error",
+			slog.Debug("quality: match error",
 				"pattern", pattern,
+				"file", f,
 				"error", err,
 			)
-			return false
+			continue
 		}
-		return len(matches) > 0
+		if ok {
+			return true
+		}
 	}
-
-	// Literal path check.
-	absPath := filepath.Join(rootDir, filepath.FromSlash(pattern))
-	_, err := os.Stat(absPath)
-	return err == nil
-}
-
-// computeCategoryStats aggregates per-category coverage statistics from
-// the evaluated question results. Categories are sorted alphabetically in
-// the returned map. Questions with an empty category are grouped under
-// the key "uncategorized".
-func computeCategoryStats(questions []QuestionResult) map[string]CategoryStats {
-	stats := make(map[string]CategoryStats)
-
-	for _, q := range questions {
-		cat := q.Category
-		if cat == "" {
-			cat = "uncategorized"
-		}
-
-		s := stats[cat]
-		s.Total++
-		if q.Covered {
-			s.Covered++
-		}
-		stats[cat] = s
-	}
-
-	// Compute percentages.
-	for cat, s := range stats {
-		if s.Total > 0 {
-			s.Percent = float64(s.Covered) / float64(s.Total) * 100
-		}
-		stats[cat] = s
-	}
-
-	return stats
+	return false
 }

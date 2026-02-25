@@ -10,10 +10,10 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// ValidCategories is the set of recognized categories for golden questions.
+// ValidGoldenCategories is the set of recognized categories for golden questions.
 // Questions with categories outside this set still parse but produce a
 // validation warning.
-var ValidCategories = map[string]bool{
+var ValidGoldenCategories = map[string]bool{
 	"architecture":  true,
 	"configuration": true,
 	"security":      true,
@@ -44,7 +44,7 @@ type GoldenQuestion struct {
 	ExpectedAnswer string `toml:"expected_answer"`
 
 	// Category classifies the question. Known categories are listed in
-	// ValidCategories; custom categories are permitted but produce warnings.
+	// ValidGoldenCategories; custom categories are permitted but produce warnings.
 	Category string `toml:"category"`
 
 	// CriticalFiles lists the file paths (relative to the repo root) that
@@ -64,17 +64,7 @@ func LoadGoldenQuestions(path string) (*GoldenQuestionsConfig, error) {
 		return nil, fmt.Errorf("parse golden questions %s: %w", path, err)
 	}
 
-	undecoded := meta.Undecoded()
-	if len(undecoded) > 0 {
-		keys := make([]string, 0, len(undecoded))
-		for _, k := range undecoded {
-			keys = append(keys, k.String())
-		}
-		slog.Warn("unknown golden questions keys will be ignored",
-			"source", path,
-			"keys", strings.Join(keys, ", "),
-		)
-	}
+	warnUndecodedKeys(meta, path)
 
 	return &cfg, nil
 }
@@ -111,7 +101,7 @@ func ValidateGoldenQuestions(cfg *GoldenQuestionsConfig) error {
 			}
 			seen[q.ID] = true
 		}
-		if q.Category != "" && !ValidCategories[q.Category] {
+		if q.Category != "" && !ValidGoldenCategories[q.Category] {
 			slog.Warn("unknown golden question category",
 				"id", q.ID,
 				"category", q.Category,
@@ -127,32 +117,62 @@ func ValidateGoldenQuestions(cfg *GoldenQuestionsConfig) error {
 	return nil
 }
 
-// DiscoverGoldenQuestionsPath checks for a golden questions TOML file in
-// standard locations relative to rootDir. It returns the absolute path of
-// the first file found, or an empty string if no file exists.
-//
-// Search order:
-//  1. <rootDir>/.harvx/golden-questions.toml
-//  2. <rootDir>/golden-questions.toml
-func DiscoverGoldenQuestionsPath(rootDir string) string {
-	candidates := []string{
-		filepath.Join(rootDir, ".harvx", "golden-questions.toml"),
-		filepath.Join(rootDir, "golden-questions.toml"),
+// DiscoverGoldenQuestions searches for .harvx/golden-questions.toml starting
+// from startDir, walking up parent directories. It stops at a .git boundary
+// or the filesystem root, or after maxSearchDepth levels, whichever comes
+// first. Returns an empty string if no golden-questions.toml is found.
+func DiscoverGoldenQuestions(startDir string) (string, error) {
+	abs, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", fmt.Errorf("abs path for %s: %w", startDir, err)
 	}
 
-	for _, path := range candidates {
-		if _, err := os.Stat(path); err == nil {
-			slog.Debug("discovered golden questions file",
-				"path", path,
+	// Resolve symlinks to avoid loops and get the canonical path.
+	if resolved, evalErr := filepath.EvalSymlinks(abs); evalErr == nil {
+		abs = resolved
+	} else {
+		slog.Debug("symlink eval failed, using unresolved path",
+			"dir", abs,
+			"err", evalErr,
+		)
+	}
+
+	dir := abs
+	for depth := 0; depth < maxSearchDepth; depth++ {
+		configPath := filepath.Join(dir, ".harvx", "golden-questions.toml")
+		if _, statErr := os.Stat(configPath); statErr == nil {
+			slog.Debug("discovered golden questions",
+				"path", configPath,
+				"depth", depth,
 			)
-			return path
+			return configPath, nil
 		}
+
+		// Check for .git boundary: if .git exists here, we are at the repo
+		// root. After checking for golden-questions.toml at this level (done
+		// above), stop the search regardless.
+		if _, statErr := os.Stat(filepath.Join(dir, ".git")); statErr == nil {
+			slog.Debug("reached .git boundary, stopping golden questions search",
+				"dir", dir,
+				"depth", depth,
+			)
+			return "", nil
+		}
+
+		// Move to parent directory.
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached the filesystem root.
+			slog.Debug("reached filesystem root, no golden-questions.toml found")
+			return "", nil
+		}
+		dir = parent
 	}
 
-	slog.Debug("no golden questions file found",
-		"root", rootDir,
+	slog.Debug("reached max search depth without finding golden-questions.toml",
+		"maxDepth", maxSearchDepth,
 	)
-	return ""
+	return "", nil
 }
 
 // GenerateGoldenQuestionsInit returns a starter TOML string with three

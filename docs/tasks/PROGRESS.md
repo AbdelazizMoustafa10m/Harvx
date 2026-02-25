@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 78 |
+| Completed | 79 |
 | In Progress | 0 |
-| Not Started | 17 |
+| Not Started | 16 |
 
 ---
 
@@ -801,4 +801,29 @@
   - `internal/cli/verify_test.go` -- 9 tests: registration, properties, flags, global flag inheritance, help, status labels, formatNumber, pluralS
   - `testdata/expected-output/verify-pass.md` -- Test fixture with matching output (3 files)
   - `testdata/expected-output/verify-fail.md` -- Test fixture with intentional mismatch in config.go
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-076: Golden Questions Harness and Quality Evaluation Framework
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - Golden questions TOML types (`GoldenQuestion`, `GoldenQuestionsConfig`) with BurntSushi/toml parsing, unknown-key warnings, validation, and auto-discovery
+  - `harvx quality` command (alias: `qa`) evaluating critical file coverage against golden questions using doublestar glob matching
+  - `harvx quality init` subcommand generating starter `.harvx/golden-questions.toml` with 3 example questions
+  - Coverage analysis workflow walking repo files, matching critical_files patterns, computing per-question and aggregate coverage
+  - `--json` flag for structured CI-friendly output, `--questions` flag for custom questions path
+  - Human-readable report with `[PASS]`/`[MISS]` labels and coverage summary
+  - Evaluation methodology guide, starter TOML template, and shell script template for LLM A/B testing
+  - 5 recognized categories: architecture, configuration, security, conventions, integration
+- **Files created/modified:**
+  - `internal/config/quality.go` -- GoldenQuestion, GoldenQuestionsConfig types, LoadGoldenQuestions, ValidateGoldenQuestions, DiscoverGoldenQuestions, GenerateGoldenQuestionsInit
+  - `internal/config/quality_test.go` -- 16 tests: TOML parsing, validation, discovery, init generation, categories, uniqueness
+  - `internal/workflows/quality.go` -- QualityOptions, QuestionResult, QualityResult, EvaluateQuality, evaluateQuestion, patternMatchesAny
+  - `internal/workflows/quality_test.go` -- 20 tests: full coverage, partial coverage, glob patterns, empty files, auto-discovery, sorting, hidden dirs
+  - `internal/cli/quality.go` -- Cobra quality/qa command, quality init subcommand, --json/--questions/--output/--yes flags
+  - `internal/cli/quality_test.go` -- 9 tests: registration, alias, flags, init flags, help, status labels, global flag inheritance
+  - `docs/guides/golden-questions.md` -- Evaluation methodology documentation with writing tips, CI workflow, scoring guide
+  - `docs/templates/golden-questions.toml` -- Starter template with 5 example questions across all categories
+  - `docs/templates/evaluate.sh` -- Shell script template for LLM A/B evaluation (diff-only vs Harvx context)
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
