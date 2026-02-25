@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 60 |
+| Completed | 61 |
 | In Progress | 0 |
-| Not Started | 35 |
+| Not Started | 34 |
 
 ---
 
@@ -584,5 +584,32 @@
   - `internal/output/metadata_test.go` -- 32 unit tests + 2 benchmarks covering all acceptance criteria, edge cases (empty files, nil maps, 10K+ files, multiple dots, round-trip)
   - `internal/output/writer.go` -- Added OutputMetadata, Target, MaxTokens, GenerationTimeMs fields to OutputOpts; metadata sidecar generation in Write method
   - `internal/config/flags.go` -- Added OutputMetadata bool field to FlagValues, --output-metadata flag registration
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-058: Output Pipeline Integration and Golden Tests
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `OutputConfig` struct aggregating all output-related settings: format, target, output path, stdout flag, split size, line numbers, metadata, tree depth, tree metadata, project name, profile name, tokenizer name, timestamp, max tokens, generation time, diff summary, custom writer
+  - `RenderOutput(ctx, cfg, files)` orchestration function: converts `[]pipeline.FileDescriptor` to internal types, builds tree, computes content hash, assembles `RenderData`, dispatches to correct renderer (Markdown/XML), writes output (file or stdout), optionally splits into multiple parts, optionally generates metadata sidecar
+  - Internal conversion helpers: `toFileRenderEntries`, `toFileEntries`, `toFileHashEntries` with language inference from file extension and error message extraction
+  - Aggregation helpers: `computeTierCounts`, `computeTotalTokens`, `computeTotalRedactions`, `computeTopFiles` (top N by token count descending, defensive copy before sort)
+  - Golden test helpers in `testutil_test.go`: `loadGoldenFile`, `compareGolden`, `writeGoldenFile` with `HARVX_UPDATE_GOLDEN=1` env var and first-run auto-generation
+  - 5 golden fixture files in `testdata/golden-fixtures/` with known content for deterministic tests
+  - 5 golden tests: Markdown basic, Markdown with line numbers, XML basic, Markdown with diff, metadata sidecar
+  - 13 integration tests: Markdown/XML render, same content hash across formats, stdout==file, correct OutputResult, zero files, single file, all options enabled, content hash changes, adding file changes hash, cancelled context, default timestamp, diff summary, tree depth limit
+  - 1 split integration test verifying multi-part output with file existence checks
+  - 10 unit tests for conversion and aggregation helpers
+- **Files created/modified:**
+  - `internal/output/pipeline.go` -- OutputConfig struct, RenderOutput function, renderSingle, renderSplit, conversion and aggregation helpers
+  - `internal/output/pipeline_test.go` -- 29 tests: 10 unit tests, 13 integration tests, 5 golden tests, 1 split test
+  - `internal/output/testutil_test.go` -- Golden test helpers: updateGolden, loadGoldenFile, compareGolden, writeGoldenFile
+  - `testdata/golden-fixtures/go.mod` -- Sample fixture (tier 0, config)
+  - `testdata/golden-fixtures/README.md` -- Sample fixture (tier 4, docs)
+  - `testdata/golden-fixtures/cmd/main.go` -- Sample fixture (tier 1, source)
+  - `testdata/golden-fixtures/internal/handler.go` -- Sample fixture (tier 1, source)
+  - `testdata/golden-fixtures/internal/handler_test.go` -- Sample fixture (tier 3, test)
+  - `docs/tasks/PROGRESS.md` -- Updated with T-058 completion
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

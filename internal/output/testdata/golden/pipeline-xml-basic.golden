@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<repository>
+  <metadata>
+    <project_name>sample-project</project_name>
+    <generated>2025-01-15T10:30:00Z</generated>
+    <content_hash>e4df3bc3c71caf67</content_hash>
+    <profile>default</profile>
+    <tokenizer>cl100k_base</tokenizer>
+    <total_tokens>127</total_tokens>
+    <total_files>5</total_files>
+  </metadata>
+  <file_summary>
+    <total_files>5</total_files>
+    <total_tokens>127</total_tokens>
+    <files_by_tier>
+      <tier number="0" label="critical" count="1"/>
+      <tier number="1" label="primary" count="2"/>
+      <tier number="3" label="tests" count="1"/>
+      <tier number="4" label="docs" count="1"/>
+    </files_by_tier>
+    <top_files>
+      <file path="internal/handler_test.go" tokens="40" size="131 B"/>
+      <file path="internal/handler.go" tokens="35" size="138 B"/>
+      <file path="cmd/main.go" tokens="25" size="68 B"/>
+      <file path="go.mod" tokens="15" size="39 B"/>
+      <file path="README.md" tokens="12" size="60 B"/>
+    </top_files>
+    <redaction_summary total="0"/>
+  </file_summary>
+  <directory_structure><![CDATA[📁 .
+├── 📁 cmd
+│   └── 📄 main.go
+├── 📁 internal
+│   ├── 📄 handler.go
+│   └── 📄 handler_test.go
+├── 📄 go.mod
+└── 📄 README.md]]></directory_structure>
+  <files>
+    <file path="go.mod" tokens="15" tier="critical" size="39" language="" compressed="false">
+      <content><![CDATA[module example.com/sample
+
+go 1.24.0
+]]></content>
+    </file>
+    <file path="README.md" tokens="12" tier="docs" size="60" language="markdown" compressed="false">
+      <content><![CDATA[# Sample Project
+
+A sample project for testing output rendering.
+]]></content>
+    </file>
+    <file path="cmd/main.go" tokens="25" tier="primary" size="68" language="go" compressed="false">
+      <content><![CDATA[package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("hello world")
+}
+]]></content>
+    </file>
+    <file path="internal/handler.go" tokens="35" tier="primary" size="138" language="go" compressed="false">
+      <content><![CDATA[package internal
+
+// Handler processes requests.
+type Handler struct {
+	Name string
+}
+
+// Handle processes a single request.
+func (h *Handler) Handle() error {
+	return nil
+}
+]]></content>
+    </file>
+    <file path="internal/handler_test.go" tokens="40" tier="tests" size="131" language="go" compressed="false">
+      <content><![CDATA[package internal
+
+import "testing"
+
+func TestHandler_Handle(t *testing.T) {
+	h := &Handler{Name: "test"}
+	if err := h.Handle(); err != nil {
+		t.Fatal(err)
+	}
+}
+]]></content>
+    </file>
+  </files>
+  <statistics>
+    <total_files>5</total_files>
+    <total_tokens>127</total_tokens>
+  </statistics>
+</repository>
