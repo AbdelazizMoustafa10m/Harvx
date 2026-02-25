@@ -54,6 +54,11 @@ type Profile struct {
 	// even if they would otherwise be ignored.
 	Include []string `toml:"include"`
 
+	// AssertInclude is the list of glob patterns that must each match at least
+	// one included file. If any pattern matches zero files, the pipeline fails
+	// with exit code 1. Used for CI coverage checks.
+	AssertInclude []string `toml:"assert_include"`
+
 	// Relevance holds tier-based file sorting configuration. Each tier is
 	// a list of glob patterns that match files assigned to that tier.
 	Relevance RelevanceConfig `toml:"relevance"`

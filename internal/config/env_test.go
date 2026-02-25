@@ -3,6 +3,7 @@ package config
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -163,7 +164,191 @@ func clearHarvxEnv(t *testing.T) {
 	for _, name := range []string{
 		EnvProfile, EnvMaxTokens, EnvFormat, EnvTokenizer,
 		EnvOutput, EnvTarget, EnvLogFormat, EnvCompress, EnvRedact,
+		"HARVX_VERBOSE", "HARVX_QUIET", "HARVX_NO_REDACT",
+		"HARVX_FAIL_ON_REDACTION", "HARVX_STDOUT", "HARVX_DIR",
 	} {
 		t.Setenv(name, "")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// parseBoolEnv tests (T-069)
+// ---------------------------------------------------------------------------
+
+func TestParseBoolEnv(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input   string
+		want    bool
+		wantErr bool
+	}{
+		// Truthy values
+		{"true", true, false},
+		{"True", true, false},
+		{"TRUE", true, false},
+		{"1", true, false},
+		{"yes", true, false},
+		{"Yes", true, false},
+		{"YES", true, false},
+		// Falsy values
+		{"false", false, false},
+		{"False", false, false},
+		{"FALSE", false, false},
+		{"0", false, false},
+		{"no", false, false},
+		{"No", false, false},
+		{"NO", false, false},
+		// With whitespace
+		{" true ", true, false},
+		{" false ", false, false},
+		// Invalid
+		{"maybe", false, true},
+		{"abc", false, true},
+		{"2", false, true},
+		{"", false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseBoolEnv(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// applyEnvOverrides tests (T-069)
+// ---------------------------------------------------------------------------
+
+func TestApplyEnvOverrides_Profile(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_PROFILE", "myprofile")
+
+	fv := &FlagValues{Profile: "default"}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.Equal(t, "myprofile", fv.Profile)
+}
+
+func TestApplyEnvOverrides_MaxTokens(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_MAX_TOKENS", "50000")
+
+	fv := &FlagValues{}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.Equal(t, 50000, fv.MaxTokens)
+}
+
+func TestApplyEnvOverrides_MaxTokens_Invalid(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_MAX_TOKENS", "abc")
+
+	fv := &FlagValues{}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	// Invalid value should be ignored (stays 0).
+	assert.Equal(t, 0, fv.MaxTokens)
+}
+
+func TestApplyEnvOverrides_Tokenizer(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_TOKENIZER", "o200k_base")
+
+	fv := &FlagValues{Tokenizer: "cl100k_base"}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.Equal(t, "o200k_base", fv.Tokenizer)
+}
+
+func TestApplyEnvOverrides_Compress(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_COMPRESS", "yes")
+
+	fv := &FlagValues{}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.True(t, fv.Compress)
+}
+
+func TestApplyEnvOverrides_Redact_False(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_REDACT", "false")
+
+	fv := &FlagValues{}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.True(t, fv.NoRedact, "HARVX_REDACT=false should set NoRedact=true")
+}
+
+func TestApplyEnvOverrides_Redact_True(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_REDACT", "true")
+
+	fv := &FlagValues{NoRedact: true}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.False(t, fv.NoRedact, "HARVX_REDACT=true should set NoRedact=false")
+}
+
+func TestApplyEnvOverrides_Stdout(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_STDOUT", "1")
+
+	fv := &FlagValues{}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.True(t, fv.Stdout)
+}
+
+func TestApplyEnvOverrides_Stdout_YesUppercase(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_STDOUT", "YES")
+
+	fv := &FlagValues{}
+	cmd := newTestCmd(fv)
+	applyEnvOverrides(fv, cmd)
+	assert.True(t, fv.Stdout)
+}
+
+func TestApplyEnvOverrides_CLIFlagTakesPrecedence(t *testing.T) {
+	clearHarvxEnv(t)
+	t.Setenv("HARVX_FORMAT", "xml")
+
+	fv := &FlagValues{Format: "markdown"}
+	cmd := newTestCmd(fv)
+	// Simulate the flag being explicitly set on CLI by parsing args.
+	cmd.SetArgs([]string{"--format", "markdown"})
+	cmd.Execute()
+	applyEnvOverrides(fv, cmd)
+	assert.Equal(t, "markdown", fv.Format, "CLI flag should take precedence over env var")
+}
+
+// newTestCmd creates a minimal cobra.Command with the standard flags registered
+// for testing applyEnvOverrides. Flags are registered but not marked as Changed
+// unless explicitly set via cmd.Flags().Set().
+func newTestCmd(fv *FlagValues) *cobra.Command {
+	cmd := &cobra.Command{Use: "test"}
+	pf := cmd.PersistentFlags()
+	pf.StringVar(&fv.Dir, "dir", ".", "")
+	pf.StringVar(&fv.Output, "output", "", "")
+	pf.StringVar(&fv.Format, "format", "markdown", "")
+	pf.StringVar(&fv.Target, "target", "generic", "")
+	pf.StringVar(&fv.Profile, "profile", "default", "")
+	pf.StringVar(&fv.Tokenizer, "tokenizer", "cl100k_base", "")
+	pf.IntVar(&fv.MaxTokens, "max-tokens", 0, "")
+	pf.BoolVar(&fv.Verbose, "verbose", false, "")
+	pf.BoolVar(&fv.Quiet, "quiet", false, "")
+	pf.BoolVar(&fv.NoRedact, "no-redact", false, "")
+	pf.BoolVar(&fv.FailOnRedaction, "fail-on-redaction", false, "")
+	pf.BoolVar(&fv.Compress, "compress", false, "")
+	pf.BoolVar(&fv.Stdout, "stdout", false, "")
+	return cmd
 }

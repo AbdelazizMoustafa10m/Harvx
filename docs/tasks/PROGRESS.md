@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 71 |
+| Completed | 72 |
 | In Progress | 0 |
-| Not Started | 24 |
+| Not Started | 23 |
 
 ---
 
@@ -618,5 +618,28 @@
   - `internal/config/flags.go` -- Added `PreviewJSON bool` field to `FlagValues`
   - `internal/cli/preview.go` -- Added `--json` flag, `runPreviewJSON`, `writePreviewJSON`, `buildPreviewPipelineOptions`; updated help text with `--json` example
   - `internal/cli/preview_test.go` -- 10 new tests: flag registration, exits zero, schema validation, struct deserialization, max-tokens integration, null budget, pretty-printing, flag variable setting, stdout routing, help text
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-069: Assert-Include Coverage Checks and Environment Variable Overrides
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `CheckAssertInclude` function for verifying critical files are present in pipeline output via `--assert-include` glob patterns
+  - `AssertionError` and `AssertionFailure` types with descriptive multi-failure error messages including pattern, file count, and remediation suggestions
+  - `--assert-include` repeatable CLI flag using doublestar glob engine (same as relevance tier patterns)
+  - `AssertInclude []string` field on `Profile` struct with TOML config support (`assert_include` key)
+  - Profile inheritance merge support for `assert_include` via `mergeSlice`
+  - Enhanced `applyEnvOverrides` with comprehensive `HARVX_*` env var support: `HARVX_PROFILE`, `HARVX_MAX_TOKENS` (int), `HARVX_TOKENIZER`, `HARVX_COMPRESS` (flexible bool), `HARVX_REDACT` (inverted bool), `HARVX_STDOUT` (flexible bool)
+  - `parseBoolEnv` helper accepting `true/1/yes/false/0/no` (case-insensitive) for boolean env vars
+  - Invalid env var values produce `slog.Warn` messages (e.g., "HARVX_MAX_TOKENS must be a positive integer")
+- **Files created/modified:**
+  - `internal/pipeline/assert.go` -- AssertionFailure, AssertionError, CheckAssertInclude with doublestar matching
+  - `internal/pipeline/assert_test.go` -- 18 tests: empty patterns, single match/fail, multiple patterns, glob wildcards, error message format, errors.As unwrapping, profile+CLI merge
+  - `internal/config/types.go` -- Added AssertInclude field to Profile struct
+  - `internal/config/flags.go` -- Added AssertIncludes field, --assert-include flag, enhanced applyEnvOverrides, parseBoolEnv helper
+  - `internal/config/env_test.go` -- 13 new tests: parseBoolEnv (20 cases), env var overrides for profile/max-tokens/tokenizer/compress/redact/stdout, CLI flag precedence
+  - `internal/config/merge.go` -- Added AssertInclude to mergeProfile
+  - `internal/config/resolver.go` -- Added assert_include to flattenProfileRaw, profileToFlatMap, flatMapToProfile
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

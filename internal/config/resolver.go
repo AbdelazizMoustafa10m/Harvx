@@ -310,7 +310,7 @@ func flattenProfileRaw(raw map[string]interface{}) map[string]any {
 	}
 
 	// Slice fields.
-	for _, key := range []string{"ignore", "priority_files", "include"} {
+	for _, key := range []string{"ignore", "priority_files", "include", "assert_include"} {
 		if v, ok := raw[key]; ok {
 			flat[key] = rawToStringSlice(v)
 		}
@@ -390,6 +390,7 @@ func profileToFlatMap(p *Profile) map[string]any {
 		"ignore":         p.Ignore,
 		"priority_files": p.PriorityFiles,
 		"include":        p.Include,
+		"assert_include": p.AssertInclude,
 
 		"relevance.tier_0": p.Relevance.Tier0,
 		"relevance.tier_1": p.Relevance.Tier1,
@@ -418,6 +419,7 @@ func flatMapToProfile(k *koanf.Koanf) *Profile {
 		Ignore:        k.Strings("ignore"),
 		PriorityFiles: k.Strings("priority_files"),
 		Include:       k.Strings("include"),
+		AssertInclude: k.Strings("assert_include"),
 
 		Relevance: RelevanceConfig{
 			Tier0: k.Strings("relevance.tier_0"),

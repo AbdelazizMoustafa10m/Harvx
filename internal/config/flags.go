@@ -64,6 +64,9 @@ type FlagValues struct {
 
 	// Preview/workflow JSON output flag (T-068)
 	PreviewJSON bool // Output machine-readable JSON to stdout (preview, brief, review-slice)
+
+	// Assert-include patterns (T-069)
+	AssertIncludes []string // --assert-include glob patterns for coverage checks
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -78,6 +81,7 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 	pf.StringArrayVarP(&fv.Filters, "filter", "f", nil, "filter by file extension (repeatable, e.g. -f ts -f go)")
 	pf.StringArrayVar(&fv.Includes, "include", nil, "include glob pattern (repeatable)")
 	pf.StringArrayVar(&fv.Excludes, "exclude", nil, "exclude glob pattern (repeatable)")
+	pf.StringArrayVar(&fv.AssertIncludes, "assert-include", nil, "assert glob pattern must match at least one file (repeatable)")
 	pf.StringVar(&fv.Format, "format", "markdown", "output format: markdown, xml")
 	pf.StringVar(&fv.Target, "target", "generic", "LLM target: claude, chatgpt, generic")
 	pf.BoolVar(&fv.GitTrackedOnly, "git-tracked-only", false, "only include files in git index")
@@ -223,7 +227,7 @@ func ValidateFlags(fv *FlagValues, cmd *cobra.Command) error {
 // not explicitly set on the command line. The prefix is HARVX_.
 func applyEnvOverrides(fv *FlagValues, cmd *cobra.Command) {
 	envMap := map[string]func(string){
-		"HARVX_DIR": func(v string) { fv.Dir = v },
+		"HARVX_DIR":    func(v string) { fv.Dir = v },
 		"HARVX_OUTPUT": func(v string) { fv.Output = v },
 		"HARVX_FORMAT": func(v string) { fv.Format = v },
 		"HARVX_TARGET": func(v string) { fv.Target = v },
@@ -241,7 +245,24 @@ func applyEnvOverrides(fv *FlagValues, cmd *cobra.Command) {
 		}
 	}
 
-	// Boolean env vars
+	// String env vars with non-matching flag names.
+	if v := os.Getenv("HARVX_PROFILE"); v != "" && !cmd.Flags().Changed("profile") {
+		fv.Profile = v
+	}
+	if v := os.Getenv("HARVX_TOKENIZER"); v != "" && !cmd.Flags().Changed("tokenizer") {
+		fv.Tokenizer = v
+	}
+
+	// Integer env vars.
+	if v := os.Getenv("HARVX_MAX_TOKENS"); v != "" && !cmd.Flags().Changed("max-tokens") {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			fv.MaxTokens = n
+		} else {
+			slog.Warn("HARVX_MAX_TOKENS must be a positive integer", "value", v)
+		}
+	}
+
+	// Boolean env vars with flexible parsing.
 	if os.Getenv("HARVX_VERBOSE") == "1" && !cmd.Flags().Changed("verbose") {
 		fv.Verbose = true
 	}
@@ -257,9 +278,47 @@ func applyEnvOverrides(fv *FlagValues, cmd *cobra.Command) {
 		fv.FailOnRedaction = true
 	}
 
-	// HARVX_STDOUT=true routes output to stdout
-	if os.Getenv("HARVX_STDOUT") == "true" && !cmd.Flags().Changed("stdout") {
-		fv.Stdout = true
+	// HARVX_COMPRESS with flexible boolean parsing (true/1/yes/false/0/no)
+	if v := os.Getenv("HARVX_COMPRESS"); v != "" && !cmd.Flags().Changed("compress") {
+		if b, err := parseBoolEnv(v); err == nil {
+			fv.Compress = b
+		} else {
+			slog.Warn("HARVX_COMPRESS must be a boolean (true/1/yes/false/0/no)", "value", v)
+		}
+	}
+
+	// HARVX_REDACT with flexible boolean parsing
+	if v := os.Getenv("HARVX_REDACT"); v != "" && !cmd.Flags().Changed("no-redact") {
+		if b, err := parseBoolEnv(v); err == nil {
+			// HARVX_REDACT=false means --no-redact; HARVX_REDACT=true means redaction enabled (default)
+			fv.NoRedact = !b
+		} else {
+			slog.Warn("HARVX_REDACT must be a boolean (true/1/yes/false/0/no)", "value", v)
+		}
+	}
+
+	// HARVX_STDOUT with flexible boolean parsing
+	if v := os.Getenv("HARVX_STDOUT"); v != "" && !cmd.Flags().Changed("stdout") {
+		if b, err := parseBoolEnv(v); err == nil {
+			fv.Stdout = b
+		} else {
+			slog.Warn("HARVX_STDOUT must be a boolean (true/1/yes/false/0/no)", "value", v)
+		}
+	}
+}
+
+// parseBoolEnv parses a boolean-ish environment variable value.
+// Accepts: true, 1, yes (case-insensitive) for true.
+// Accepts: false, 0, no (case-insensitive) for false.
+// Returns an error for any other value.
+func parseBoolEnv(v string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "true", "1", "yes":
+		return true, nil
+	case "false", "0", "no":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean value: %q", v)
 	}
 }
 

@@ -32,6 +32,7 @@ func mergeProfile(base, override *Profile) *Profile {
 		Ignore:        mergeSlice(base.Ignore, override.Ignore),
 		PriorityFiles: mergeSlice(base.PriorityFiles, override.PriorityFiles),
 		Include:       mergeSlice(base.Include, override.Include),
+		AssertInclude: mergeSlice(base.AssertInclude, override.AssertInclude),
 
 		// Nested structs
 		Relevance:       mergeRelevance(base.Relevance, override.Relevance),
