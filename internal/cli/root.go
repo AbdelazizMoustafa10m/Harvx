@@ -63,7 +63,9 @@ context file optimized for large language models like Claude, ChatGPT, and other
 				return fmt.Errorf("resolving config for TUI: %w", err)
 			}
 			p := pipeline.NewPipeline()
-			return runInteractive(cmd, resolved, p)
+			// smartDefault is true when the TUI was auto-launched (no explicit -i flag).
+			smartDefault := !cmd.Flags().Changed("interactive")
+			return runInteractive(cmd, resolved, p, smartDefault)
 		}
 		return runGenerate(cmd, args)
 	},

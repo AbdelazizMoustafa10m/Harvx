@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 85 |
+| Completed | 86 |
 | In Progress | 0 |
-| Not Started | 10 |
+| Not Started | 9 |
 
 ---
 
@@ -768,4 +768,26 @@
   - `internal/tui/app_test.go` -- 30+ tests covering actions, overlays, toasts, profile cycling
   - `go.mod` -- Added atotto/clipboard transitive dependency
   - `go.sum` -- Updated checksums
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-086: TUI State Serialization to Profile TOML & Smart Default Launch
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `SerializeToProfile` function converting TUI file selection state into valid TOML profile with `extends = "default"`, `priority_files`, `include`/`ignore` patterns, `relevance` tier assignments, and preserved settings (format, max_tokens, tokenizer, target, compression, redaction)
+  - Pattern minimization algorithm (`MinimizePatterns`): bottom-up tree walk that emits `dir/**` globs when all children are included/excluded, and individual file entries for mixed directories
+  - `SaveProfileToFile` for writing/appending serialized profiles to `harvx.toml`
+  - Enhanced smart default detection: `IsNoArgsInvocation` checks `os.Args` for bare binary invocation; `ShouldLaunchInteractive` now requires no-args + TTY + no config file
+  - One-line hint printed to stderr on smart-default TUI launch
+  - `buildRelevanceTiers` converting tier-to-files mapping into TOML `tier_0` through `tier_5` arrays
+  - `HasManualIncludes` method for detecting non-glob include patterns
+- **Files created/modified:**
+  - `internal/tui/patterns.go` -- Pattern minimization algorithm with MinimizedPatterns, MinimizePatterns, collectTierInfo
+  - `internal/tui/patterns_test.go` -- 14 tests for pattern minimization including dir globs, mixed dirs, nested structures, determinism
+  - `internal/tui/serialize.go` -- Added SerializeToProfile, buildProfileData, buildRelevanceTiers, SaveProfileToFile
+  - `internal/tui/serialize_test.go` -- Enhanced with 18+ new tests for full serialization, round-trip TOML parsing, tier mapping
+  - `internal/cli/interactive.go` -- Added smartDefaultHint, IsNoArgsInvocation, osArgsProvider; enhanced ShouldLaunchInteractive; added smartDefault hint to runInteractive
+  - `internal/cli/interactive_test.go` -- Added tests for no-args invocation, smart default with args
+  - `internal/cli/root.go` -- Updated RunE to pass smartDefault bool to runInteractive
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

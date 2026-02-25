@@ -11,6 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setTestOsArgs overrides getOsArgs for the duration of the test and returns a
+// cleanup function that restores the original. Tests using this helper must NOT
+// be run in parallel because they mutate package-level state.
+func setTestOsArgs(args []string) func() {
+	orig := getOsArgs
+	getOsArgs = func() osArgsProvider {
+		return osArgsProvider{args: args}
+	}
+	return func() { getOsArgs = orig }
+}
+
 func TestShouldLaunchInteractive_ExplicitFlag(t *testing.T) {
 	t.Parallel()
 
@@ -39,10 +50,13 @@ func TestShouldLaunchInteractive_ExplicitFlag(t *testing.T) {
 }
 
 func TestShouldLaunchInteractive_SmartDefault_NoConfig(t *testing.T) {
-	// Cannot be parallel: overrides package-level isTerminal.
+	// Cannot be parallel: overrides package-level isTerminal and getOsArgs.
 	origIsTerminal := isTerminal
 	isTerminal = func(_ uintptr) bool { return true }
 	defer func() { isTerminal = origIsTerminal }()
+
+	cleanup := setTestOsArgs([]string{"harvx"})
+	defer cleanup()
 
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().BoolP("interactive", "i", false, "")
@@ -56,10 +70,13 @@ func TestShouldLaunchInteractive_SmartDefault_NoConfig(t *testing.T) {
 }
 
 func TestShouldLaunchInteractive_SmartDefault_WithConfig(t *testing.T) {
-	// Cannot be parallel: overrides package-level isTerminal.
+	// Cannot be parallel: overrides package-level isTerminal and getOsArgs.
 	origIsTerminal := isTerminal
 	isTerminal = func(_ uintptr) bool { return true }
 	defer func() { isTerminal = origIsTerminal }()
+
+	cleanup := setTestOsArgs([]string{"harvx"})
+	defer cleanup()
 
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().BoolP("interactive", "i", false, "")
@@ -74,10 +91,13 @@ func TestShouldLaunchInteractive_SmartDefault_WithConfig(t *testing.T) {
 }
 
 func TestShouldLaunchInteractive_SmartDefault_NoTerminal(t *testing.T) {
-	// Cannot be parallel: overrides package-level isTerminal.
+	// Cannot be parallel: overrides package-level isTerminal and getOsArgs.
 	origIsTerminal := isTerminal
 	isTerminal = func(_ uintptr) bool { return false }
 	defer func() { isTerminal = origIsTerminal }()
+
+	cleanup := setTestOsArgs([]string{"harvx"})
+	defer cleanup()
 
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().BoolP("interactive", "i", false, "")
@@ -87,6 +107,64 @@ func TestShouldLaunchInteractive_SmartDefault_NoTerminal(t *testing.T) {
 
 	assert.False(t, ShouldLaunchInteractive(cmd, fv),
 		"should NOT launch TUI when stdin is not a terminal")
+}
+
+func TestShouldLaunchInteractive_SmartDefault_WithArgs(t *testing.T) {
+	// Cannot be parallel: overrides package-level isTerminal and getOsArgs.
+	origIsTerminal := isTerminal
+	isTerminal = func(_ uintptr) bool { return true }
+	defer func() { isTerminal = origIsTerminal }()
+
+	tests := []struct {
+		name   string
+		osArgs []string
+	}{
+		{"subcommand present", []string{"harvx", "generate"}},
+		{"flag present", []string{"harvx", "--verbose"}},
+		{"flag with value", []string{"harvx", "--dir", "/tmp"}},
+		{"short flag", []string{"harvx", "-v"}},
+		{"subcommand and flag", []string{"harvx", "generate", "--output", "ctx.md"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := setTestOsArgs(tt.osArgs)
+			defer cleanup()
+
+			cmd := &cobra.Command{Use: "test"}
+			cmd.Flags().BoolP("interactive", "i", false, "")
+
+			dir := t.TempDir() // no harvx.toml
+			fv := &config.FlagValues{Dir: dir}
+
+			assert.False(t, ShouldLaunchInteractive(cmd, fv),
+				"should NOT launch TUI when args are present: %v", tt.osArgs)
+		})
+	}
+}
+
+func TestIsNoArgsInvocation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		osArgs   []string
+		expected bool
+	}{
+		{"bare binary", []string{"harvx"}, true},
+		{"empty args", []string{}, true},
+		{"with subcommand", []string{"harvx", "generate"}, false},
+		{"with flag", []string{"harvx", "--verbose"}, false},
+		{"with short flag", []string{"harvx", "-i"}, false},
+		{"with multiple args", []string{"harvx", "generate", "--output", "ctx.md"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, IsNoArgsInvocation(tt.osArgs))
+		})
+	}
 }
 
 func TestHasConfigInTree_Found(t *testing.T) {
