@@ -4,13 +4,17 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines the global key bindings for the TUI application.
 type KeyMap struct {
-	Quit       key.Binding
-	Help       key.Binding
-	Generate   key.Binding
-	ProfileTab key.Binding
-	Up         key.Binding
-	Down       key.Binding
-	Toggle     key.Binding
+	Quit           key.Binding
+	Help           key.Binding
+	Generate       key.Binding
+	Preview        key.Binding
+	Save           key.Binding
+	Export         key.Binding
+	ProfileTab     key.Binding
+	ProfileBackTab key.Binding
+	Up             key.Binding
+	Down           key.Binding
+	Toggle         key.Binding
 }
 
 // DefaultKeyMap returns the default key bindings.
@@ -25,12 +29,28 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("?", "toggle help"),
 		),
 		Generate: key.NewBinding(
-			key.WithKeys("ctrl+g"),
-			key.WithHelp("ctrl+g", "generate"),
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "generate"),
+		),
+		Preview: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "preview"),
+		),
+		Save: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "save as profile"),
+		),
+		Export: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "export to clipboard"),
 		),
 		ProfileTab: key.NewBinding(
 			key.WithKeys("tab"),
-			key.WithHelp("tab", "switch profile"),
+			key.WithHelp("tab", "next profile"),
+		),
+		ProfileBackTab: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "prev profile"),
 		),
 		Up: key.NewBinding(
 			key.WithKeys("up", "k"),
@@ -56,7 +76,8 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Toggle},
-		{k.Generate, k.ProfileTab},
+		{k.Generate, k.Preview, k.Save, k.Export},
+		{k.ProfileTab, k.ProfileBackTab},
 		{k.Help, k.Quit},
 	}
 }

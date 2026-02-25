@@ -10,6 +10,7 @@ import (
 
 	"github.com/harvx/harvx/internal/config"
 	"github.com/harvx/harvx/internal/pipeline"
+	"github.com/harvx/harvx/internal/tui/profile"
 	"github.com/harvx/harvx/internal/tui/stats"
 )
 
@@ -24,6 +25,17 @@ func validPipeline() *pipeline.Pipeline {
 	return pipeline.NewPipeline()
 }
 
+// mockClipboard is a test double for the Clipboarder interface.
+type mockClipboard struct {
+	written string
+	err     error
+}
+
+func (m *mockClipboard) WriteAll(text string) error {
+	m.written = text
+	return m.err
+}
+
 // --- Constructor tests ---
 
 func TestNew_Success(t *testing.T) {
@@ -31,7 +43,7 @@ func TestNew_Success(t *testing.T) {
 
 	m, err := New(validCfg(), validPipeline())
 	require.NoError(t, err)
-	assert.Equal(t, "default", m.profileSelector.current)
+	assert.Equal(t, "default", m.profileSelector.Current())
 	assert.False(t, m.ready)
 	assert.False(t, m.quitting)
 	assert.Nil(t, m.err)
@@ -51,6 +63,17 @@ func TestNew_NilConfig(t *testing.T) {
 	_, err := New(nil, validPipeline())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "config must not be nil")
+}
+
+func TestNew_WithProfileNames(t *testing.T) {
+	t.Parallel()
+
+	m, err := New(validCfg(), validPipeline(), Options{
+		ProfileNames: []string{"default", "minimal", "full"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "default", m.profileSelector.Current())
+	assert.Equal(t, 3, m.profileSelector.Count())
 }
 
 // --- Init test ---
@@ -113,31 +136,150 @@ func TestUpdate_HelpToggle(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-func TestUpdate_CtrlGProducesGenerateMsg(t *testing.T) {
+func TestUpdate_EnterStartsGenerate(t *testing.T) {
 	t.Parallel()
 
 	m := mustNewModel(t)
-	// Make the model ready so it is not in initializing state.
 	m.ready = true
 
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
-	_ = updated.(Model)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
 
+	// Generate action activates the generating overlay.
+	assert.Equal(t, overlayGenerating, model.overlay.State())
 	require.NotNil(t, cmd)
-	msg := cmd()
-	assert.IsType(t, GenerateRequestedMsg{}, msg)
 }
 
-func TestUpdate_CtrlGSuppressedDuringHelp(t *testing.T) {
+func TestUpdate_EnterSuppressedDuringHelp(t *testing.T) {
 	t.Parallel()
 
 	m := mustNewModel(t)
 	m.helpOverlay.visible = true
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
-	// When help is visible, Ctrl+G should not produce a generate command.
-	// The cmds slice is empty, so tea.Batch returns nil.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// When help is visible, Enter should not trigger generation.
 	assert.Nil(t, cmd)
+}
+
+func TestUpdate_PreviewAction(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.ready = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	model := updated.(Model)
+
+	assert.Equal(t, overlayPreviewing, model.overlay.State())
+}
+
+func TestUpdate_SaveAction(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.ready = true
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model := updated.(Model)
+
+	assert.Equal(t, overlaySavingProfile, model.overlay.State())
+	require.NotNil(t, cmd, "save should return a blink cmd for text input")
+}
+
+func TestUpdate_ExportAction(t *testing.T) {
+	t.Parallel()
+
+	cb := &mockClipboard{}
+	m, err := New(validCfg(), validPipeline(), Options{
+		Clipboard: cb,
+	})
+	require.NoError(t, err)
+	m.ready = true
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	_ = updated.(Model)
+
+	require.NotNil(t, cmd)
+	// Execute the command to trigger clipboard write.
+	msg := cmd()
+	cbMsg, ok := msg.(clipboardCompleteMsg)
+	assert.True(t, ok)
+	assert.Equal(t, 0, cbMsg.count, "no files selected initially")
+}
+
+func TestUpdate_TabCyclesProfile(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModelWithProfiles(t, []string{"default", "minimal", "full"})
+	assert.Equal(t, "default", m.profileSelector.Current())
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model := updated.(Model)
+
+	assert.Equal(t, "minimal", model.profileSelector.Current())
+	require.NotNil(t, cmd)
+}
+
+func TestUpdate_ShiftTabCyclesProfileBackward(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModelWithProfiles(t, []string{"default", "minimal", "full"})
+	assert.Equal(t, "default", m.profileSelector.Current())
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	model := updated.(Model)
+
+	assert.Equal(t, "full", model.profileSelector.Current())
+	require.NotNil(t, cmd)
+}
+
+// --- Overlay key handling tests ---
+
+func TestOverlay_PreviewDismissOnEsc(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.ready = true
+
+	// Open preview.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	model := updated.(Model)
+	assert.Equal(t, overlayPreviewing, model.overlay.State())
+
+	// Press Esc to dismiss.
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	model = updated.(Model)
+	assert.Equal(t, overlayNone, model.overlay.State())
+}
+
+func TestOverlay_SaveProfileCancel(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.ready = true
+
+	// Open save overlay.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model := updated.(Model)
+	assert.Equal(t, overlaySavingProfile, model.overlay.State())
+
+	// Press Esc to cancel.
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	model = updated.(Model)
+	assert.Equal(t, overlayNone, model.overlay.State())
+}
+
+func TestOverlay_GeneratingQuit(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.overlay.startGenerating()
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model := updated.(Model)
+
+	assert.True(t, model.quitting)
+	require.NotNil(t, cmd)
 }
 
 // --- WindowSizeMsg propagation ---
@@ -200,13 +342,13 @@ func TestUpdate_TokenCountUpdatedMsg(t *testing.T) {
 func TestUpdate_ProfileChangedMsg(t *testing.T) {
 	t.Parallel()
 
-	m := mustNewModel(t)
+	m := mustNewModelWithProfiles(t, []string{"default", "minimal"})
 	msg := ProfileChangedMsg{ProfileName: "minimal"}
 
 	updated, cmd := m.Update(msg)
 	model := updated.(Model)
 
-	assert.Equal(t, "minimal", model.profileSelector.current)
+	assert.Equal(t, "minimal", model.profileSelector.Current())
 	assert.Nil(t, cmd)
 }
 
@@ -222,6 +364,74 @@ func TestUpdate_ErrorMsg(t *testing.T) {
 
 	assert.Equal(t, testErr, model.err)
 	assert.Nil(t, cmd)
+}
+
+func TestUpdate_ToastDismiss(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	_ = m.toast.show("test message")
+	assert.True(t, m.toast.visible)
+
+	updated, _ := m.Update(toastDismissMsg{id: m.toast.id})
+	model := updated.(Model)
+	assert.False(t, model.toast.visible)
+}
+
+func TestUpdate_GenerateCompleteSuccess(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.overlay.startGenerating()
+
+	result := &pipeline.RunResult{}
+	updated, cmd := m.Update(generateCompleteMsg{result: result})
+	model := updated.(Model)
+
+	assert.True(t, model.quitting)
+	assert.Equal(t, overlayNone, model.overlay.State())
+	require.NotNil(t, cmd)
+}
+
+func TestUpdate_GenerateCompleteError(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.overlay.startGenerating()
+
+	updated, cmd := m.Update(generateCompleteMsg{err: errors.New("pipeline failed")})
+	model := updated.(Model)
+
+	assert.False(t, model.quitting)
+	assert.Equal(t, overlayNone, model.overlay.State())
+	assert.NotNil(t, model.err)
+	require.NotNil(t, cmd, "should return toast cmd")
+}
+
+func TestUpdate_ClipboardComplete(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+
+	updated, cmd := m.Update(clipboardCompleteMsg{count: 5})
+	model := updated.(Model)
+
+	assert.True(t, model.toast.visible)
+	assert.Contains(t, model.toast.message, "5 file path(s)")
+	require.NotNil(t, cmd)
+}
+
+func TestUpdate_ClipboardError(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+
+	updated, cmd := m.Update(clipboardCompleteMsg{err: ErrClipboardUnavailable})
+	model := updated.(Model)
+
+	assert.True(t, model.toast.visible)
+	assert.Contains(t, model.toast.message, "clipboard not available")
+	require.NotNil(t, cmd)
 }
 
 // --- View tests ---
@@ -288,33 +498,57 @@ func TestView_NormalLayout(t *testing.T) {
 	assert.Contains(t, view, "Stats")
 }
 
-// --- Sub-model unit tests ---
+func TestView_OverlayPreview(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.ready = true
+	m.width = 80
+	m.height = 24
+	m.overlay.startPreview(10, 5000, 128000, 3.9, nil, nil)
+
+	view := m.View()
+	assert.Contains(t, view, "Output Preview")
+	assert.Contains(t, view, "10")
+}
+
+func TestView_ToastDisplayed(t *testing.T) {
+	t.Parallel()
+
+	m := mustNewModel(t)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	_ = m.toast.show("Profile saved!")
+
+	view := m.View()
+	assert.Contains(t, view, "Profile saved!")
+}
+
+// --- Profile selector sub-model tests ---
 
 func TestProfileSelector_Next_SingleProfile(t *testing.T) {
 	t.Parallel()
 
-	ps := newProfileSelectorModel("default")
-	next := ps.next()
-	assert.Equal(t, "default", next.current, "single profile should not change on next()")
+	ps := profile.New("default", nil)
+	next, cmd := ps.Next()
+	assert.Equal(t, "default", next.Current(), "single profile should not change on next()")
+	assert.Nil(t, cmd)
 }
 
 func TestProfileSelector_Next_MultipleProfiles(t *testing.T) {
 	t.Parallel()
 
-	ps := profileSelectorModel{
-		current:  "default",
-		profiles: []string{"default", "minimal", "full"},
-		index:    0,
-	}
+	ps := profile.New("default", []string{"default", "minimal", "full"})
 
-	ps = ps.next()
-	assert.Equal(t, "minimal", ps.current)
+	ps, _ = ps.Next()
+	assert.Equal(t, "minimal", ps.Current())
 
-	ps = ps.next()
-	assert.Equal(t, "full", ps.current)
+	ps, _ = ps.Next()
+	assert.Equal(t, "full", ps.Current())
 
-	ps = ps.next()
-	assert.Equal(t, "default", ps.current, "should wrap around")
+	ps, _ = ps.Next()
+	assert.Equal(t, "default", ps.Current(), "should wrap around")
 }
 
 func TestStatsPanelModel_HandleTokenUpdate(t *testing.T) {
@@ -338,6 +572,15 @@ func TestStatsPanelModel_HandleTokenUpdate(t *testing.T) {
 func mustNewModel(t *testing.T) Model {
 	t.Helper()
 	m, err := New(validCfg(), validPipeline())
+	require.NoError(t, err)
+	return m
+}
+
+func mustNewModelWithProfiles(t *testing.T, profiles []string) Model {
+	t.Helper()
+	m, err := New(validCfg(), validPipeline(), Options{
+		ProfileNames: profiles,
+	})
 	require.NoError(t, err)
 	return m
 }

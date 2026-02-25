@@ -173,6 +173,39 @@ func (m Model) Height() int {
 	return m.height
 }
 
+// MaxTokens returns the token budget cap from the profile.
+func (m Model) MaxTokens() int {
+	return m.maxTokens
+}
+
+// ProfileName returns the active profile name.
+func (m Model) ProfileName() string {
+	return m.profileName
+}
+
+// TargetName returns the LLM target name.
+func (m Model) TargetName() string {
+	return m.targetName
+}
+
+// TierBreakdown returns the tier-to-file-count mapping.
+func (m Model) TierBreakdown() map[int]int {
+	result := make(map[int]int, len(m.tierBreakdown))
+	for k, v := range m.tierBreakdown {
+		result[k] = v
+	}
+	return result
+}
+
+// TierTokens returns the tier-to-token-count mapping.
+func (m Model) TierTokens() map[int]int {
+	result := make(map[int]int, len(m.tierTokens))
+	for k, v := range m.tierTokens {
+		result[k] = v
+	}
+	return result
+}
+
 // handleFileToggled increments the debounce generation counter and schedules
 // a debounced recalculation tick.
 func (m Model) handleFileToggled(_ tuimsg.FileToggledMsg) (tea.Model, tea.Cmd) {

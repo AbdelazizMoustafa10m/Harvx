@@ -12,6 +12,7 @@ import (
 	"github.com/harvx/harvx/internal/discovery"
 	"github.com/harvx/harvx/internal/pipeline"
 	"github.com/harvx/harvx/internal/tui/filetree"
+	"github.com/harvx/harvx/internal/tui/profile"
 	"github.com/harvx/harvx/internal/tui/stats"
 )
 
@@ -20,17 +21,21 @@ var _ tea.Model = Model{}
 
 // Model is the root Bubble Tea model for the Harvx interactive TUI.
 // It composes sub-models for the file tree, stats panel, profile selector,
-// and help overlay, dispatching messages to each in Update.
+// overlay system, toast messages, and help overlay, dispatching messages to
+// each in Update.
 type Model struct {
 	// Sub-models for each panel.
 	fileTree        filetree.Model
 	statsPanel      stats.Model
-	profileSelector profileSelectorModel
+	profileSelector profile.Model
 	helpOverlay     helpOverlayModel
+	overlay         overlayModel
+	toast           toastModel
 
 	// External dependencies.
-	cfg      *config.ResolvedConfig
-	pipeline *pipeline.Pipeline
+	cfg       *config.ResolvedConfig
+	pipeline  *pipeline.Pipeline
+	clipboard Clipboarder
 
 	// Global state.
 	keys     KeyMap
@@ -48,6 +53,14 @@ type Options struct {
 
 	// Ignorer filters files from the tree. May be nil for no filtering.
 	Ignorer discovery.Ignorer
+
+	// ProfileNames is the list of all available profile names from config.
+	// If empty, only the active profile name is shown.
+	ProfileNames []string
+
+	// Clipboard is the clipboard implementation. Defaults to a noop that
+	// returns ErrClipboardUnavailable.
+	Clipboard Clipboarder
 }
 
 // New creates a new root TUI model with the given resolved configuration
@@ -67,6 +80,9 @@ func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline, opts ...Options) (Mod
 	if o.RootDir == "" {
 		o.RootDir = "."
 	}
+	if o.Clipboard == nil {
+		o.Clipboard = noopClipboard{}
+	}
 
 	ft := filetree.New(o.RootDir, o.Ignorer)
 
@@ -79,14 +95,19 @@ func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline, opts ...Options) (Mod
 	})
 	sp.SetTreeRoot(ft.Root())
 
+	ps := profile.New(cfg.ProfileName, o.ProfileNames)
+
 	return Model{
 		cfg:             cfg,
 		pipeline:        p,
+		clipboard:       o.Clipboard,
 		keys:            DefaultKeyMap(),
 		fileTree:        ft,
 		statsPanel:      sp,
-		profileSelector: newProfileSelectorModel(cfg.ProfileName),
+		profileSelector: ps,
 		helpOverlay:     newHelpOverlayModel(),
+		overlay:         newOverlayModel(),
+		toast:           newToastModel(),
 	}, nil
 }
 
@@ -101,13 +122,34 @@ func (m Model) FileTree() filetree.Model {
 	return m.fileTree
 }
 
+// ProfileSelector returns the profile selector sub-model. Useful for testing.
+func (m Model) ProfileSelector() profile.Model {
+	return m.profileSelector
+}
+
+// Overlay returns the overlay model. Useful for testing.
+func (m Model) Overlay() overlayModel {
+	return m.overlay
+}
+
+// Toast returns the toast model. Useful for testing.
+func (m Model) Toast() toastModel {
+	return m.toast
+}
+
 // Update implements tea.Model. It handles global key bindings and dispatches
-// messages to the appropriate sub-models.
+// messages to the appropriate sub-models. When an overlay is active, key
+// events are routed to the overlay instead of the normal key handlers.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// If an overlay is active, route keys to overlay handling.
+		if m.overlay.Active() {
+			return m.handleOverlayKey(msg)
+		}
+
 		// Global key handling takes priority when help is not showing.
 		switch {
 		case key.Matches(msg, m.keys.Quit):
@@ -120,15 +162,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Generate):
 			if !m.helpOverlay.visible {
-				return m, func() tea.Msg { return GenerateRequestedMsg{} }
+				return m.handleGenerate()
+			}
+
+		case key.Matches(msg, m.keys.Preview):
+			if !m.helpOverlay.visible {
+				return m.handlePreview()
+			}
+
+		case key.Matches(msg, m.keys.Save):
+			if !m.helpOverlay.visible {
+				return m.handleSaveProfile()
+			}
+
+		case key.Matches(msg, m.keys.Export):
+			if !m.helpOverlay.visible {
+				return m.handleExportClipboard()
 			}
 
 		case key.Matches(msg, m.keys.ProfileTab):
 			if !m.helpOverlay.visible {
-				m.profileSelector = m.profileSelector.next()
-				return m, func() tea.Msg {
-					return ProfileChangedMsg{ProfileName: m.profileSelector.current}
+				var cmd tea.Cmd
+				m.profileSelector, cmd = m.profileSelector.Next()
+				if cmd != nil {
+					cmds = append(cmds, cmd)
 				}
+				return m, tea.Batch(cmds...)
+			}
+
+		case key.Matches(msg, m.keys.ProfileBackTab):
+			if !m.helpOverlay.visible {
+				var cmd tea.Cmd
+				m.profileSelector, cmd = m.profileSelector.Prev()
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+				return m, tea.Batch(cmds...)
 			}
 		}
 
@@ -185,22 +254,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ProfileChangedMsg:
-		m.profileSelector = m.profileSelector.handleChange(msg)
+		// Update profile selector.
+		updated, _ := m.profileSelector.Update(msg)
+		m.profileSelector = updated.(profile.Model)
 		// Also forward to stats panel.
 		var statsCmd tea.Cmd
-		var updated tea.Model
-		updated, statsCmd = m.statsPanel.Update(msg)
-		m.statsPanel = updated.(stats.Model)
+		var statsUpdated tea.Model
+		statsUpdated, statsCmd = m.statsPanel.Update(msg)
+		m.statsPanel = statsUpdated.(stats.Model)
 		if statsCmd != nil {
 			cmds = append(cmds, statsCmd)
 		}
 		return m, tea.Batch(cmds...)
+
+	case generateCompleteMsg:
+		return m.handleGenerateComplete(msg)
+
+	case saveProfileCompleteMsg:
+		return m.handleSaveProfileComplete(msg)
+
+	case clipboardCompleteMsg:
+		return m.handleClipboardComplete(msg)
+
+	case toastDismissMsg:
+		m.toast.dismiss(msg)
+		return m, nil
 
 	case ErrorMsg:
 		m.err = msg.Err
 		return m, nil
 
 	default:
+		// Forward to overlay if active (handles spinner tick, text input blink).
+		if m.overlay.Active() {
+			cmd := m.overlay.update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+
 		// Forward unrecognised messages to the stats panel. This handles
 		// stats-internal messages (recalcTickMsg, tokenCountResult) that
 		// are returned as tea.Cmd results and re-dispatched by Bubble Tea.
@@ -217,6 +309,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// handleOverlayKey routes key events when an overlay is active.
+func (m Model) handleOverlayKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch m.overlay.state {
+	case overlayGenerating:
+		// While generating, only allow quit.
+		if key.Matches(msg, m.keys.Quit) {
+			m.overlay.close()
+			m.quitting = true
+			return m, tea.Quit
+		}
+		return m, nil
+
+	case overlayPreviewing:
+		// Esc or q dismisses the preview.
+		if key.Matches(msg, m.keys.Quit) {
+			m.overlay.close()
+			return m, nil
+		}
+		return m, nil
+
+	case overlaySavingProfile:
+		switch msg.Type {
+		case tea.KeyEnter:
+			return m.handleSaveProfileConfirm()
+		case tea.KeyEscape:
+			m.overlay.close()
+			return m, nil
+		default:
+			// Forward to text input.
+			cmd := m.overlay.update(msg)
+			return m, cmd
+		}
+	}
+
+	return m, nil
+}
+
 // View implements tea.Model. It composes the sub-model views into a
 // multi-panel layout with the file tree on the left and stats on the right.
 func (m Model) View() string {
@@ -231,6 +360,11 @@ func (m Model) View() string {
 	// Help overlay takes over the full screen.
 	if m.helpOverlay.visible {
 		return m.helpOverlay.view(m.keys, m.width, m.height)
+	}
+
+	// Overlay takes over the full screen.
+	if m.overlay.Active() {
+		return m.overlay.view(m.width, m.height)
 	}
 
 	// Error display.
@@ -256,18 +390,23 @@ func (m Model) View() string {
 
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, separator, rightPanel)
 
-	// Status bar at the bottom.
-	statusBar := m.renderStatusBar()
+	// Toast or status bar at the bottom.
+	var bottomBar string
+	if m.toast.visible {
+		bottomBar = m.toast.view(m.width)
+	} else {
+		bottomBar = m.renderStatusBar()
+	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, mainView, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, mainView, bottomBar)
 }
 
 // renderStatusBar renders the bottom status bar with key hints.
 func (m Model) renderStatusBar() string {
-	profile := m.profileSelector.current
+	prof := m.profileSelector.Current()
 	status := fmt.Sprintf(
-		" Profile: %s | q: quit | ?: help | ctrl+g: generate | tab: profile | space: toggle",
-		profile,
+		" Profile: %s | q: quit | ?: help | enter: generate | p: preview | tab: profile | space: toggle",
+		prof,
 	)
 
 	style := lipgloss.NewStyle().
@@ -279,39 +418,8 @@ func (m Model) renderStatusBar() string {
 	return style.Render(status)
 }
 
-// --- Stub sub-models ---
-// Profile selector and help overlay remain as stubs.
-// They will be fully implemented in subsequent tasks (T-083 to T-085).
-
-// profileSelectorModel is a stub for the profile selector.
-type profileSelectorModel struct {
-	current  string
-	profiles []string
-	index    int
-}
-
-func newProfileSelectorModel(currentProfile string) profileSelectorModel {
-	return profileSelectorModel{
-		current:  currentProfile,
-		profiles: []string{currentProfile},
-	}
-}
-
-func (m profileSelectorModel) next() profileSelectorModel {
-	if len(m.profiles) <= 1 {
-		return m
-	}
-	m.index = (m.index + 1) % len(m.profiles)
-	m.current = m.profiles[m.index]
-	return m
-}
-
-func (m profileSelectorModel) handleChange(msg ProfileChangedMsg) profileSelectorModel {
-	m.current = msg.ProfileName
-	return m
-}
-
 // helpOverlayModel is a stub for the help overlay.
+// It will be fully implemented in a subsequent task (T-085).
 type helpOverlayModel struct {
 	visible bool
 }
