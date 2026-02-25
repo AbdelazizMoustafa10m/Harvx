@@ -5,9 +5,12 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
+	"path/filepath"
 
 	"github.com/harvx/harvx/internal/config"
+	"github.com/harvx/harvx/internal/diff"
 	"github.com/harvx/harvx/internal/pipeline"
 	"github.com/spf13/cobra"
 )
@@ -38,6 +41,14 @@ context file optimized for large language models like Claude, ChatGPT, and other
 		config.SetupLogging(level, format)
 
 		slog.Debug("logging initialized", "level", level, "format", format)
+
+		// Handle --clear-cache: clear cached state before any pipeline steps.
+		if flagValues.ClearCache {
+			if err := handleClearCache(); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	},
 	// When no subcommand is given, delegate to the generate command.
@@ -111,4 +122,32 @@ func RootCmd() *cobra.Command {
 // PersistentPreRunE has run. Subcommands use this to access shared configuration.
 func GlobalFlags() *config.FlagValues {
 	return flagValues
+}
+
+// handleClearCache clears cached state before the pipeline runs. When a profile
+// is specified via --profile, only that profile's state is cleared. Otherwise,
+// all cached state is removed.
+func handleClearCache() error {
+	rootDir, err := filepath.Abs(flagValues.Dir)
+	if err != nil {
+		return fmt.Errorf("resolving directory for --clear-cache: %w", err)
+	}
+
+	cache := diff.NewStateCache(flagValues.Profile)
+
+	if flagValues.Profile != "" && flagValues.Profile != "default" {
+		slog.Debug("clearing cache for profile", "profile", flagValues.Profile)
+		if err := cache.ClearState(rootDir); err != nil {
+			return fmt.Errorf("clearing cached state for profile %q: %w", flagValues.Profile, err)
+		}
+		slog.Info("cleared cached state", "profile", flagValues.Profile)
+	} else {
+		slog.Debug("clearing all cached state")
+		if err := cache.ClearAllState(rootDir); err != nil {
+			return fmt.Errorf("clearing all cached state: %w", err)
+		}
+		slog.Info("cleared all cached state")
+	}
+
+	return nil
 }

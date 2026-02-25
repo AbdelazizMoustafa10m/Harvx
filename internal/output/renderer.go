@@ -113,4 +113,7 @@ type DiffSummaryData struct {
 
 	// DeletedFiles is the list of deleted file paths.
 	DeletedFiles []string
+
+	// Unchanged is the count of files that have not changed since the last run.
+	Unchanged int
 }

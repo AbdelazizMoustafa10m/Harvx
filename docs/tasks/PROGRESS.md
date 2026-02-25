@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 67 |
+| Completed | 68 |
 | In Progress | 0 |
-| Not Started | 28 |
+| Not Started | 27 |
 
 ---
 
@@ -598,5 +598,28 @@
   - `internal/cli/diff_test.go` -- CLI tests: command registration, flag presence, help output, inherited flags, no-cache helpful message
   - `internal/config/flags.go` -- Added DiffOnly and Profile fields to FlagValues, registered --diff-only and --profile persistent flags
   - `internal/cli/root_test.go` -- Added diff-only to boolean flags test, --diff-only and --profile to help output test
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-065: Cache Subcommands and Change Summary Rendering
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **What was built:**
+  - `harvx cache` parent command with `cache clear` and `cache show` subcommands for managing persistent state
+  - `harvx cache clear` clears all cached state or a specific profile's state; friendly message when no cache exists
+  - `harvx cache show` lists cached profiles with metadata (timestamp, branch, HEAD SHA, file count) in table or JSON format
+  - `RenderChangeSummary` function producing formatted change summaries in both Markdown and XML formats
+  - `NewDiffSummaryData` converter from `diff.DiffResult` to output-layer `DiffSummaryData`
+  - `--clear-cache` handler wired in root command's `PersistentPreRunE` to clear state before pipeline runs
+  - Added `Unchanged int` field to `DiffSummaryData` for complete change summary rendering
+  - 30+ unit tests for cache subcommands covering clear/show/JSON/table/edge cases
+  - 10+ unit tests for change summary rendering covering Markdown/XML/nil/empty/escaping
+- **Files created/modified:**
+  - `internal/cli/cache.go` -- Cobra commands: cache, cache clear, cache show with table/JSON output
+  - `internal/cli/cache_test.go` -- 30 test functions for cache subcommands
+  - `internal/output/change_summary.go` -- RenderChangeSummary (Markdown/XML), NewDiffSummaryData converter
+  - `internal/output/change_summary_test.go` -- 10+ tests for change summary rendering
+  - `internal/output/renderer.go` -- Added Unchanged field to DiffSummaryData
+  - `internal/cli/root.go` -- Wired --clear-cache handler via handleClearCache function
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
