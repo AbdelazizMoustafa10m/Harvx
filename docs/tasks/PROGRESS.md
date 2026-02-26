@@ -725,184 +725,87 @@
 
 ---
 
-### T-088: GoReleaser Configuration with Cosign Signing & Syft SBOM
+### Phase 10: Polish & Distribution (T-088 to T-095)
 
 - **Status:** Completed
 - **Date:** 2026-02-26
-- **What was built:**
-  - GoReleaser v2 configuration with 5 cross-platform build targets (darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64)
-  - Cosign keyless signing via Sigstore for checksum file authenticity
-  - Syft SBOM generation in SPDX JSON format for each archive
-  - Shell completion file generation (bash, zsh, fish) included in archives
-  - SHA-256 checksum file for all release archives
-  - Makefile targets for local snapshot builds and config validation
-  - Security documentation with verification instructions
-- **Files created/modified:**
-  - `.goreleaser.yaml` -- Complete GoReleaser v2 configuration with builds, archives, signing, SBOM
-  - `Makefile` -- Added `release-snapshot` and `release-check` targets
-  - `docs/SECURITY.md` -- Verification instructions for cosign, checksums, and SBOM
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- **Tasks Completed:** 8 tasks
 
-### T-089: GitHub Release Automation Workflow
+#### Features Implemented
 
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - GitHub Actions release workflow (`.github/workflows/release.yml`) triggering on `v*.*.*` tags with GoReleaser v2, Cosign signing, Syft SBOM, and build provenance attestation
-  - GitHub Actions CI workflow (`.github/workflows/ci.yml`) with go vet, go test, gofmt, golangci-lint, module hygiene, goreleaser config check, and coverage upload
-  - Snapshot validation on PRs to catch GoReleaser config errors before merge
-  - CI and release status badges in README.md
-- **Files created/modified:**
-  - `.github/workflows/ci.yml` -- Added `goreleaser-check` job validating `.goreleaser.yaml` on every CI run
-  - `README.md` -- Added CI status, release status, and latest release badges
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| GoReleaser distribution | T-088 | Cross-platform builds (5 targets), Cosign keyless signing, Syft SBOM in SPDX JSON, SHA-256 checksums, completion files in archives |
+| GitHub Actions CI/Release | T-089 | Release workflow on `v*.*.*` tags with provenance attestation; CI workflow with vet, test, lint, goreleaser config check, coverage upload, README badges |
+| Shell completion & man pages | T-090 | Dynamic `--profile` and `--compress-engine` flag completion; hidden `harvx docs man` command via `cobra/doc.GenManTree`; Makefile `completions` and `man` targets |
+| Performance benchmarking | T-091 | Synthetic repo generator for 1K/10K/50K files; per-stage benchmarks (discovery, tokenization, compression, redaction, output, full pipeline); SLO tests; memory guard; `//go:build bench` tag |
+| Integration test suite | T-092 | 4 synthetic OSS-style fixtures (Go CLI, Next.js, FastAPI, monorepo); 25+ tests covering default profile, output formats, CLI flags, compression, redaction; `make test-integration` |
+| Fuzz testing | T-093 | 4 redaction fuzz targets (`FuzzRedactContent`, `FuzzRedactHighEntropy`, `FuzzRedactEnvFile`, `FuzzRedactMixedContent`); 3 config fuzz targets (`FuzzParseConfig`, `FuzzProfileInheritance`, `FuzzGlobPattern`); seed corpus in `testdata/fuzz/` |
+| Golden test infrastructure | T-094 | `internal/golden` package with output normalization (timestamps, hashes, paths, timing), unified diff via `go-difflib`, `GoldenFile` helper with `-update` flag; 5 pipeline scenarios; `make golden-update` |
+| Doctor command & README | T-095 | `harvx doctor` with 6 checks (git, large binaries, oversized files, build artifacts, config, stale cache), `--json` and `--fix` flags; comprehensive README with quickstart, persona recipes, command reference, Claude Code integration |
 
-### T-090: Shell Completion Generation & Man Page Generation
+#### Key Technical Decisions
 
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - `--profile` flag completion via `completeProfileNames` (dynamic, reads config at completion time)
-  - `--compress-engine` flag completion (`ast`, `regex`, `auto`)
-  - Hidden `harvx docs man --output-dir <dir>` command generating troff man pages for all registered commands using `cobra/doc`
-  - Makefile `completions` target generating bash/zsh/fish completion scripts in `completions/`
-  - Makefile `man` target generating man pages in `man/`
-  - GoReleaser hook generating man pages during release builds
-  - Man pages included in release archives alongside completions
-  - 8 unit tests covering command registration, hidden status, man page generation, content verification, nested directory creation, and new completion functions
-- **Files created/modified:**
-  - `internal/cli/docs.go` -- Hidden `docs` parent command with `man` subcommand using `cobra/doc.GenManTree`
-  - `internal/cli/docs_man_test.go` -- 8 table-driven tests for docs command and new completion functions
-  - `internal/cli/root.go` -- Added `--profile` and `--compress-engine` flag completion registrations, `completeCompressEngine` function
-  - `Makefile` -- Added `completions` and `man` targets, updated `clean` to remove generated directories
-  - `.goreleaser.yaml` -- Added man page generation hook, `man/*` in archive files
-  - `.gitignore` -- Added `completions/` and `man/` to ignored directories
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+1. **`//go:build bench` tag** -- Benchmarks excluded from `go test ./...`; run only via `make bench` to keep CI fast
+2. **Cosign keyless signing via Sigstore** -- No long-lived key material; signing tied to OIDC identity in GitHub Actions
+3. **`go-difflib` for golden diffs** -- Promoted from indirect to direct dependency to produce unified diffs in golden test failures
 
-### T-091: Performance Benchmarking Suite
+#### Key Files Reference
 
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - Synthetic repository generator (`GenerateTestRepo`, `GenerateFileDescriptors`, `GenerateCachedLargeRepo`) with 7 file types, variable depth (flat/3-level/10-level), 100B-50KB sizes, and 1MB large files
-  - Discovery benchmarks: `BenchmarkDiscovery_1K`, `BenchmarkDiscovery_10K`, `BenchmarkDiscovery_50K`
-  - Tokenization benchmarks: `BenchmarkTokenization_1K` (none + cl100k sub-benchmarks), `BenchmarkTokenization_10K`
-  - Compression benchmark: `BenchmarkCompression_1K` with EngineAuto (AST + regex fallback)
-  - Redaction benchmarks: `BenchmarkRedaction_1K`, `BenchmarkRedaction_10K`
-  - Output rendering benchmarks: `BenchmarkOutputRendering_1K` (markdown + xml), `BenchmarkOutputRendering_10K`
-  - Full pipeline benchmarks: `BenchmarkFullPipeline_1K`, `BenchmarkFullPipeline_10K`, `BenchmarkFullPipeline_50K`
-  - SLO verification tests: `TestSLO_1KFiles_Under1Second`, `TestSLO_10KFiles_Under3Seconds`, `TestSLO_TUITokenRecalc_Under300ms`
-  - Memory guard test: `TestMemory_10KFiles_Under500MB` (HeapAlloc < 500MB, Sys < 1GB)
-  - Makefile targets: `bench`, `bench-compare` (benchstat), `bench-update-baseline`
-  - All benchmarks gated behind `//go:build bench` tag, excluded from regular `go test ./...`
-- **Files created/modified:**
-  - `internal/benchmark/fixtures.go` -- Synthetic repo generator with 7 content types and sync.Once caching
-  - `internal/benchmark/discovery_bench_test.go` -- Discovery stage benchmarks (1K/10K/50K)
-  - `internal/benchmark/tokenizer_bench_test.go` -- Tokenization benchmarks (1K/10K)
-  - `internal/benchmark/compression_bench_test.go` -- Compression benchmark (1K)
-  - `internal/benchmark/redaction_bench_test.go` -- Redaction benchmarks (1K/10K)
-  - `internal/benchmark/output_bench_test.go` -- Output rendering benchmarks (1K/10K)
-  - `internal/benchmark/pipeline_bench_test.go` -- Full pipeline benchmarks (1K/10K/50K)
-  - `internal/benchmark/slo_test.go` -- SLO verification tests (1K < 1s, 10K < 3s, TUI < 300ms)
-  - `internal/benchmark/memory_test.go` -- Memory usage guard test (10K < 500MB heap)
-  - `testdata/benchmarks/baseline.txt` -- Placeholder baseline for benchstat comparison
-  - `Makefile` -- Added `bench`, `bench-compare`, `bench-update-baseline` targets
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Purpose | Location |
+| ------- | -------- |
+| GoReleaser v2 config | `.goreleaser.yaml` |
+| CI workflow | `.github/workflows/ci.yml` |
+| Release workflow | `.github/workflows/release.yml` |
+| Makefile targets (all phases) | `Makefile` |
+| Security verification docs | `docs/SECURITY.md` |
+| Project README | `README.md` |
+| `docs man` subcommand | `internal/cli/docs.go` |
+| `docs man` tests | `internal/cli/docs_man_test.go` |
+| Root flag completions | `internal/cli/root.go` |
+| `doctor` subcommand | `internal/cli/doctor.go` |
+| `doctor` CLI tests | `internal/cli/doctor_test.go` |
+| Doctor check functions | `internal/doctor/checks.go` |
+| Doctor output formatters | `internal/doctor/reporter.go` |
+| Doctor check tests | `internal/doctor/checks_test.go` |
+| Doctor reporter tests | `internal/doctor/reporter_test.go` |
+| Golden output normalization | `internal/golden/normalize.go` |
+| Golden file helper | `internal/golden/helpers.go` |
+| Golden pipeline tests | `internal/golden/golden_test.go` |
+| Golden normalize tests | `internal/golden/normalize_test.go` |
+| Benchmark synthetic fixtures | `internal/benchmark/fixtures.go` |
+| Discovery benchmarks | `internal/benchmark/discovery_bench_test.go` |
+| Tokenizer benchmarks | `internal/benchmark/tokenizer_bench_test.go` |
+| Compression benchmarks | `internal/benchmark/compression_bench_test.go` |
+| Redaction benchmarks | `internal/benchmark/redaction_bench_test.go` |
+| Output rendering benchmarks | `internal/benchmark/output_bench_test.go` |
+| Full pipeline benchmarks | `internal/benchmark/pipeline_bench_test.go` |
+| SLO verification tests | `internal/benchmark/slo_test.go` |
+| Memory guard test | `internal/benchmark/memory_test.go` |
+| Benchmark baseline | `testdata/benchmarks/baseline.txt` |
+| Redaction fuzz tests | `internal/security/fuzz_test.go` |
+| Config fuzz tests | `internal/config/fuzz_test.go` |
+| Fuzz seed corpus | `testdata/fuzz/` |
+| Integration test registry | `tests/integration/repos.go` |
+| Default profile integration tests | `tests/integration/default_profile_test.go` |
+| Format integration tests | `tests/integration/format_test.go` |
+| CLI flags integration tests | `tests/integration/cli_flags_test.go` |
+| Compression integration tests | `tests/integration/compression_test.go` |
+| Redaction integration tests | `tests/integration/redaction_test.go` |
+| Go CLI OSS fixture | `testdata/oss-go-cli/` |
+| Next.js OSS fixture | `testdata/oss-ts-nextjs/` |
+| FastAPI OSS fixture | `testdata/oss-python-fastapi/` |
+| Monorepo OSS fixture | `testdata/oss-monorepo/` |
+| Enhanced sample repo | `testdata/sample-repo/` |
+| Multi-package monorepo fixture | `testdata/monorepo/` |
+| Golden reference files | `testdata/expected-output/` |
 
-### T-092: Integration Test Suite Against Real OSS Repos
+#### Verification
 
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - 4 synthetic OSS-style test repositories in `testdata/` simulating real-world project types (Go CLI, TypeScript/Next.js, Python/FastAPI, multi-language monorepo)
-  - `TestRepo` struct and `testRepos()` registry in `tests/integration/repos.go` with per-repo metadata (language, expected file count, file type flags)
-  - 5 integration test files with 25+ test functions covering default profile, output formats, CLI flags, redaction, and compression
-  - Default profile tests: `TestDefaultProfile_AllRepos`, `TestDefaultProfile_BriefJSON_AllRepos`, language-specific content tests (Go, Python, Monorepo)
-  - Format tests: markdown sections, XML well-formedness via `encoding/xml.NewDecoder`, JSON metadata, determinism across all repos
-  - CLI flags tests: `--max-tokens`, `HARVX_MAX_TOKENS`, `--stdout`, `--git-tracked-only`, pipe chain, `--format xml`, verbose, quiet
-  - Compression tests: token reduction for Go/TS repos, all-repos exit-zero with `--compress`, regex and AST engine flags
-  - Redaction tests: default redaction, secret detection verification, `--no-redact`, redaction report, fail-on-redaction
-  - `make test-integration` Makefile target
-  - CI workflow `integration-tests` job in `.github/workflows/ci.yml`
-- **Files created/modified:**
-  - `testdata/oss-go-cli/` -- 15-file Go CLI "gosync" project with cobra commands, config, handler, watcher, API client
-  - `testdata/oss-ts-nextjs/` -- 15-file Next.js 14 "DevBlog" with pages, components, types, utils, CSS
-  - `testdata/oss-python-fastapi/` -- 17-file FastAPI "TaskAPI" with models, routes, services, utils, tests
-  - `testdata/oss-monorepo/` -- 20-file "Acme Platform" with TS core/api/web packages, Go worker service
-  - `tests/integration/repos.go` -- `TestRepo` struct, `projectRoot()`, `testRepos()`, `repoByName()`
-  - `tests/integration/default_profile_test.go` -- Default profile tests across all repo types
-  - `tests/integration/format_test.go` -- Output format validation (markdown, XML, JSON, determinism)
-  - `tests/integration/cli_flags_test.go` -- CLI flags and env var override tests
-  - `tests/integration/compression_test.go` -- Compression engine tests
-  - `tests/integration/redaction_test.go` -- Redaction pipeline tests
-  - `Makefile` -- Added `test-integration` target
-  - `.github/workflows/ci.yml` -- Added `integration-tests` job to CI pipeline
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go test -tags integration` ✓ (all pass)
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+- `go test -tags integration ./tests/integration/...` pass
 
-### T-093: Fuzz Testing for Redaction & Config Parsing
+---
 
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - 4 security fuzz tests in `internal/security/fuzz_test.go`: `FuzzRedactContent`, `FuzzRedactHighEntropy`, `FuzzRedactEnvFile`, `FuzzRedactMixedContent`
-  - 3 config fuzz tests in `internal/config/fuzz_test.go`: `FuzzParseConfig`, `FuzzProfileInheritance`, `FuzzGlobPattern`
-  - Seed corpus files in `testdata/fuzz/` for all 7 fuzz targets with edge cases (AWS keys, PEM blocks, Unicode, invalid TOML, deep chains)
-  - Property invariants: no panics, valid UTF-8 output, well-formed `[REDACTED:type]` markers, config returns valid result or error (never both nil)
-  - `make fuzz` target with configurable duration (default 30s per test via `FUZZ_TIME`)
-- **Files created/modified:**
-  - `internal/security/fuzz_test.go` -- 4 fuzz tests for redaction pipeline and entropy analyzer
-  - `internal/config/fuzz_test.go` -- 3 fuzz tests for config parsing, profile inheritance, glob patterns
-  - `testdata/fuzz/FuzzRedactContent/` -- 6 seed corpus files (AWS key, GitHub token, PEM block, Stripe key, Unicode, empty)
-  - `testdata/fuzz/FuzzRedactHighEntropy/` -- 3 seed corpus files (hex, base64, low entropy)
-  - `testdata/fuzz/FuzzRedactEnvFile/` -- 3 seed corpus files (AWS secret, database URL, empty value)
-  - `testdata/fuzz/FuzzRedactMixedContent/` -- 1 seed corpus file (code + secret)
-  - `testdata/fuzz/FuzzParseConfig/` -- 3 seed corpus files (valid full, nested TOML, invalid TOML)
-  - `testdata/fuzz/FuzzGlobPattern/` -- 2 seed corpus files (complex patterns, negation)
-  - `testdata/fuzz/FuzzProfileInheritance/` -- 1 seed corpus file (deep chain)
-  - `Makefile` -- Added `fuzz` target with FUZZ_TIME variable
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-094: Golden Test Infrastructure
-
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - `internal/golden/` package with output normalization (timestamps, hashes, paths, timing), unified diff via `go-difflib`, and `GoldenFile` helper with `-update` flag
-  - Table-driven `TestGolden` with 5 scenarios: default-profile-markdown, default-profile-xml, redacted-markdown, token-budget-10k, monorepo-markdown
-  - Enhanced `testdata/sample-repo/` to 24 files across 8+ directories (added tsconfig.json, package.json, models/user.go, api/handler.go, api/handler_test.go, .github/workflows/ci.yml, docs/API.md)
-  - Built `testdata/monorepo/` with 3 packages (core TypeScript, api Go service, web React app), nested `.gitignore` files, shared root config (19 files)
-  - 5 golden reference files in `testdata/expected-output/` with header comments documenting generation command
-  - `make golden-update` Makefile target for regenerating golden files
-  - 10 normalize unit tests + 3 diff tests running with `go test ./...` (no build tag)
-- **Files created/modified:**
-  - `internal/golden/normalize.go` -- Output normalization for timestamps, hashes, paths, timing values
-  - `internal/golden/normalize_test.go` -- 10 table-driven normalize tests + 3 diff tests
-  - `internal/golden/helpers.go` -- GoldenFile compare/update helper, Diff unified diff, header generation
-  - `internal/golden/golden_test.go` -- TestGolden with 5 pipeline scenarios
-  - `testdata/sample-repo/{tsconfig.json,package.json,src/models/user.go,src/api/handler.go,src/api/handler_test.go,.github/workflows/ci.yml,docs/API.md}` -- Enhanced sample repo
-  - `testdata/monorepo/` -- 19-file multi-package repository (core/api/web)
-  - `testdata/expected-output/{default-profile-markdown.md,default-profile-xml.xml,redacted-markdown.md,token-budget-10k.md,monorepo-markdown.md}` -- Golden reference files
-  - `Makefile` -- Added `golden-update` target
-  - `go.mod` -- Promoted `pmezard/go-difflib` from indirect to direct dependency
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-095: Doctor Command and README Documentation
-
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - `harvx doctor` diagnostic command with 6 checks: git repo status, large binaries (>1MB), oversized text files (>500KB), build artifact directories without .harvxignore, config validation (delegates to T-020), stale cache files (>7 days)
-  - `--json` flag for machine-readable output, `--fix` flag for auto-generating .harvxignore entries
-  - Text reporter with [PASS]/[WARN]/[FAIL] checklist indicators and summary line
-  - JSON reporter with indented output and omitempty on empty details
-  - Comprehensive README with installation (go install, binary download), quickstart, feature overview, configuration guide (harvx.toml, profiles, inheritance), persona recipes (Alex/Zizo/Jordan from PRD), full command reference, global flags table, Claude Code integration (hooks + MCP), exit codes, comparison with alternatives table, and development instructions
-  - 26 unit tests for doctor checks and 6 reporter tests, 4 CLI integration tests
-- **Files created/modified:**
-  - `internal/doctor/checks.go` -- 6 diagnostic check functions, Run orchestrator, Options/DoctorReport/CheckResult types
-  - `internal/doctor/reporter.go` -- FormatText and FormatJSON output formatters
-  - `internal/doctor/checks_test.go` -- 20 unit tests for all checks and helper functions
-  - `internal/doctor/reporter_test.go` -- 6 tests for text and JSON formatting
-  - `internal/cli/doctor.go` -- Cobra subcommand with --json and --fix flags
-  - `internal/cli/doctor_test.go` -- 4 CLI integration tests
-  - `README.md` -- Comprehensive project documentation with badges, installation, quickstart, persona recipes, command reference, comparison table
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
