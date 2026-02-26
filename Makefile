@@ -24,7 +24,7 @@ LDFLAGS := -s -w \
 	-X '$(LDFLAGS_PKG).GoVersion=$(GO_VERSION)'
 
 # ─── Phony Targets ───────────────────────────────────────────────────────────
-.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot release-snapshot release-check help
+.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot release-snapshot release-check completions man help
 
 .DEFAULT_GOAL := help
 
@@ -80,9 +80,21 @@ tidy: ## Run go mod tidy
 	go mod tidy
 
 # ─── Clean ───────────────────────────────────────────────────────────────────
-clean: ## Remove bin/ and dist/ directories and build artifacts
-	rm -rf $(BIN_DIR) $(DIST_DIR)
+clean: ## Remove bin/, dist/, completions/, and man/ directories and build artifacts
+	rm -rf $(BIN_DIR) $(DIST_DIR) completions man
 	@echo "Cleaned build artifacts"
+
+# ─── Completions ────────────────────────────────────────────────────────────
+completions: build ## Generate shell completion scripts in completions/
+	@mkdir -p completions
+	./$(BIN_DIR)/$(BINARY) completion bash > completions/harvx.bash
+	./$(BIN_DIR)/$(BINARY) completion zsh > completions/_harvx
+	./$(BIN_DIR)/$(BINARY) completion fish > completions/harvx.fish
+	@echo "Generated shell completions in completions/"
+
+# ─── Man Pages ──────────────────────────────────────────────────────────────
+man: build ## Generate man pages in man/
+	./$(BIN_DIR)/$(BINARY) docs man --output-dir ./man
 
 # ─── Install ─────────────────────────────────────────────────────────────────
 install: ## Install harvx to $GOPATH/bin with version metadata

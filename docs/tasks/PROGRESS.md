@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 92 |
+| Completed | 93 |
 | In Progress | 0 |
-| Not Started | 3 |
+| Not Started | 2 |
 
 ---
 
@@ -755,4 +755,26 @@
 - **Files created/modified:**
   - `.github/workflows/ci.yml` -- Added `goreleaser-check` job validating `.goreleaser.yaml` on every CI run
   - `README.md` -- Added CI status, release status, and latest release badges
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-090: Shell Completion Generation & Man Page Generation
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - `--profile` flag completion via `completeProfileNames` (dynamic, reads config at completion time)
+  - `--compress-engine` flag completion (`ast`, `regex`, `auto`)
+  - Hidden `harvx docs man --output-dir <dir>` command generating troff man pages for all registered commands using `cobra/doc`
+  - Makefile `completions` target generating bash/zsh/fish completion scripts in `completions/`
+  - Makefile `man` target generating man pages in `man/`
+  - GoReleaser hook generating man pages during release builds
+  - Man pages included in release archives alongside completions
+  - 8 unit tests covering command registration, hidden status, man page generation, content verification, nested directory creation, and new completion functions
+- **Files created/modified:**
+  - `internal/cli/docs.go` -- Hidden `docs` parent command with `man` subcommand using `cobra/doc.GenManTree`
+  - `internal/cli/docs_man_test.go` -- 8 table-driven tests for docs command and new completion functions
+  - `internal/cli/root.go` -- Added `--profile` and `--compress-engine` flag completion registrations, `completeCompressEngine` function
+  - `Makefile` -- Added `completions` and `man` targets, updated `clean` to remove generated directories
+  - `.goreleaser.yaml` -- Added man page generation hook, `man/*` in archive files
+  - `.gitignore` -- Added `completions/` and `man/` to ignored directories
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

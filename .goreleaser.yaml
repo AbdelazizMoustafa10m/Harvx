@@ -15,6 +15,7 @@ before:
     - sh -c "go run ./cmd/harvx completion bash > completions/harvx.bash"
     - sh -c "go run ./cmd/harvx completion zsh > completions/harvx.zsh"
     - sh -c "go run ./cmd/harvx completion fish > completions/harvx.fish"
+    - sh -c "go run ./cmd/harvx docs man --output-dir man"
 
 builds:
   - id: harvx
@@ -48,6 +49,7 @@ archives:
       - LICENSE
       - README.md
       - completions/*
+      - man/*
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
