@@ -838,3 +838,26 @@
   - `Makefile` -- Added `test-integration` target
   - `.github/workflows/ci.yml` -- Added `integration-tests` job to CI pipeline
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go test -tags integration` ✓ (all pass)
+
+### T-093: Fuzz Testing for Redaction & Config Parsing
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - 4 security fuzz tests in `internal/security/fuzz_test.go`: `FuzzRedactContent`, `FuzzRedactHighEntropy`, `FuzzRedactEnvFile`, `FuzzRedactMixedContent`
+  - 3 config fuzz tests in `internal/config/fuzz_test.go`: `FuzzParseConfig`, `FuzzProfileInheritance`, `FuzzGlobPattern`
+  - Seed corpus files in `testdata/fuzz/` for all 7 fuzz targets with edge cases (AWS keys, PEM blocks, Unicode, invalid TOML, deep chains)
+  - Property invariants: no panics, valid UTF-8 output, well-formed `[REDACTED:type]` markers, config returns valid result or error (never both nil)
+  - `make fuzz` target with configurable duration (default 30s per test via `FUZZ_TIME`)
+- **Files created/modified:**
+  - `internal/security/fuzz_test.go` -- 4 fuzz tests for redaction pipeline and entropy analyzer
+  - `internal/config/fuzz_test.go` -- 3 fuzz tests for config parsing, profile inheritance, glob patterns
+  - `testdata/fuzz/FuzzRedactContent/` -- 6 seed corpus files (AWS key, GitHub token, PEM block, Stripe key, Unicode, empty)
+  - `testdata/fuzz/FuzzRedactHighEntropy/` -- 3 seed corpus files (hex, base64, low entropy)
+  - `testdata/fuzz/FuzzRedactEnvFile/` -- 3 seed corpus files (AWS secret, database URL, empty value)
+  - `testdata/fuzz/FuzzRedactMixedContent/` -- 1 seed corpus file (code + secret)
+  - `testdata/fuzz/FuzzParseConfig/` -- 3 seed corpus files (valid full, nested TOML, invalid TOML)
+  - `testdata/fuzz/FuzzGlobPattern/` -- 2 seed corpus files (complex patterns, negation)
+  - `testdata/fuzz/FuzzProfileInheritance/` -- 1 seed corpus file (deep chain)
+  - `Makefile` -- Added `fuzz` target with FUZZ_TIME variable
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

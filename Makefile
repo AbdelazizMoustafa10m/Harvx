@@ -24,7 +24,7 @@ LDFLAGS := -s -w \
 	-X '$(LDFLAGS_PKG).GoVersion=$(GO_VERSION)'
 
 # ─── Phony Targets ───────────────────────────────────────────────────────────
-.PHONY: all build run test test-verbose test-cover test-integration lint fmt vet tidy clean install snapshot release-snapshot release-check completions man bench bench-compare bench-update-baseline help
+.PHONY: all build run test test-verbose test-cover test-integration lint fmt vet tidy clean install snapshot release-snapshot release-check completions man bench bench-compare bench-update-baseline fuzz help
 
 .DEFAULT_GOAL := help
 
@@ -125,6 +125,20 @@ bench-update-baseline: bench ## Save current benchmark results as the new baseli
 	@mkdir -p $$(dirname $(BENCH_BASELINE))
 	cp $(BENCH_CURRENT) $(BENCH_BASELINE)
 	@echo "Baseline updated: $(BENCH_BASELINE)"
+
+# ─── Fuzz Testing ──────────────────────────────────────────────────────────
+FUZZ_TIME ?= 30s
+
+fuzz: ## Run all fuzz tests (FUZZ_TIME=30s per test, configurable)
+	@echo "Running fuzz tests ($(FUZZ_TIME) per target)..."
+	go test -fuzz=FuzzRedactContent    -fuzztime=$(FUZZ_TIME) -run=^$$ ./internal/security/
+	go test -fuzz=FuzzRedactHighEntropy -fuzztime=$(FUZZ_TIME) -run=^$$ ./internal/security/
+	go test -fuzz=FuzzRedactEnvFile    -fuzztime=$(FUZZ_TIME) -run=^$$ ./internal/security/
+	go test -fuzz=FuzzRedactMixedContent -fuzztime=$(FUZZ_TIME) -run=^$$ ./internal/security/
+	go test -fuzz=FuzzParseConfig      -fuzztime=$(FUZZ_TIME) -run=^$$ ./internal/config/
+	go test -fuzz=FuzzProfileInheritance -fuzztime=$(FUZZ_TIME) -run=^$$ ./internal/config/
+	go test -fuzz=FuzzGlobPattern      -fuzztime=$(FUZZ_TIME) -run=^$$ ./internal/config/
+	@echo "All fuzz tests completed without crashes"
 
 # ─── Install ─────────────────────────────────────────────────────────────────
 install: ## Install harvx to $GOPATH/bin with version metadata

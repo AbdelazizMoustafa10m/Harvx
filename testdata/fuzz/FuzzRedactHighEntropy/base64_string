@@ -1,0 +1,2 @@
+go test fuzz v1
+string("aB3dE5gH7jK9mN1pQ3sT5vW7yZ0+/=_-")

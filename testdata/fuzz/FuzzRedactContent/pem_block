@@ -1,0 +1,2 @@
+go test fuzz v1
+string("-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAHudeSA/x3hB2f+2NRkJLA1Y\n-----END RSA PRIVATE KEY-----")
