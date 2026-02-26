@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 91 |
+| Completed | 92 |
 | In Progress | 0 |
-| Not Started | 4 |
+| Not Started | 3 |
 
 ---
 
@@ -743,3 +743,16 @@
   - `docs/SECURITY.md` -- Verification instructions for cosign, checksums, and SBOM
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 
+### T-089: GitHub Release Automation Workflow
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - GitHub Actions release workflow (`.github/workflows/release.yml`) triggering on `v*.*.*` tags with GoReleaser v2, Cosign signing, Syft SBOM, and build provenance attestation
+  - GitHub Actions CI workflow (`.github/workflows/ci.yml`) with go vet, go test, gofmt, golangci-lint, module hygiene, goreleaser config check, and coverage upload
+  - Snapshot validation on PRs to catch GoReleaser config errors before merge
+  - CI and release status badges in README.md
+- **Files created/modified:**
+  - `.github/workflows/ci.yml` -- Added `goreleaser-check` job validating `.goreleaser.yaml` on every CI run
+  - `README.md` -- Added CI status, release status, and latest release badges
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

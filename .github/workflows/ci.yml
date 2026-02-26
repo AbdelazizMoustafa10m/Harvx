@@ -147,10 +147,31 @@ jobs:
           version: latest
           args: --timeout=5m
 
+  goreleaser-check:
+    name: GoReleaser Config Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ hashFiles('.goreleaser.yaml') != '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Validate GoReleaser config
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
   ci-status:
     name: CI Status
     runs-on: ubuntu-latest
-    needs: [go-ci, golangci-lint]
+    needs: [go-ci, golangci-lint, goreleaser-check]
     if: always()
     steps:
       - name: Check all job results
@@ -168,6 +189,7 @@ jobs:
           failed=0
           check_result "go-ci" "${{ needs.go-ci.result }}" || failed=1
           check_result "golangci-lint" "${{ needs.golangci-lint.result }}" || failed=1
+          check_result "goreleaser-check" "${{ needs.goreleaser-check.result }}" || failed=1
 
           if [[ "$failed" -eq 1 ]]; then
             echo "FAIL  CI pipeline failed"

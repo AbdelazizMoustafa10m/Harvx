@@ -2,7 +2,9 @@
 
 > Package codebases into LLM-optimized context documents.
 
-![Status: Under Development](https://img.shields.io/badge/status-under%20development-orange)
+[![CI](https://github.com/harvx/harvx/actions/workflows/ci.yml/badge.svg)](https://github.com/harvx/harvx/actions/workflows/ci.yml)
+[![Release](https://github.com/harvx/harvx/actions/workflows/release.yml/badge.svg)](https://github.com/harvx/harvx/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/harvx/harvx)](https://github.com/harvx/harvx/releases/latest)
 ![Go 1.24+](https://img.shields.io/badge/go-1.24%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
