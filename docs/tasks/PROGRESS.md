@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 94 |
+| Completed | 95 |
 | In Progress | 0 |
-| Not Started | 1 |
+| Not Started | 0 |
 
 ---
 
@@ -884,4 +884,25 @@
   - `testdata/expected-output/{default-profile-markdown.md,default-profile-xml.xml,redacted-markdown.md,token-budget-10k.md,monorepo-markdown.md}` -- Golden reference files
   - `Makefile` -- Added `golden-update` target
   - `go.mod` -- Promoted `pmezard/go-difflib` from indirect to direct dependency
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-095: Doctor Command and README Documentation
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - `harvx doctor` diagnostic command with 6 checks: git repo status, large binaries (>1MB), oversized text files (>500KB), build artifact directories without .harvxignore, config validation (delegates to T-020), stale cache files (>7 days)
+  - `--json` flag for machine-readable output, `--fix` flag for auto-generating .harvxignore entries
+  - Text reporter with [PASS]/[WARN]/[FAIL] checklist indicators and summary line
+  - JSON reporter with indented output and omitempty on empty details
+  - Comprehensive README with installation (go install, binary download), quickstart, feature overview, configuration guide (harvx.toml, profiles, inheritance), persona recipes (Alex/Zizo/Jordan from PRD), full command reference, global flags table, Claude Code integration (hooks + MCP), exit codes, comparison with alternatives table, and development instructions
+  - 26 unit tests for doctor checks and 6 reporter tests, 4 CLI integration tests
+- **Files created/modified:**
+  - `internal/doctor/checks.go` -- 6 diagnostic check functions, Run orchestrator, Options/DoctorReport/CheckResult types
+  - `internal/doctor/reporter.go` -- FormatText and FormatJSON output formatters
+  - `internal/doctor/checks_test.go` -- 20 unit tests for all checks and helper functions
+  - `internal/doctor/reporter_test.go` -- 6 tests for text and JSON formatting
+  - `internal/cli/doctor.go` -- Cobra subcommand with --json and --fix flags
+  - `internal/cli/doctor_test.go` -- 4 CLI integration tests
+  - `README.md` -- Comprehensive project documentation with badges, installation, quickstart, persona recipes, command reference, comparison table
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
