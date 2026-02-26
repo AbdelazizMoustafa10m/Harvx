@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 89 |
+| Completed | 90 |
 | In Progress | 0 |
-| Not Started | 6 |
+| Not Started | 5 |
 
 ---
 
@@ -865,4 +865,37 @@
   - `internal/tui/filetree/model_test.go` -- Updated cursor indicator test for new background-highlight rendering
   - `internal/tui/styles.go` -- Extended ThemeColors with TierGold/Green/Blue/Cyan/Magenta/Dim, IncludedGreen, ExcludedGray, PartialYellow, CursorBg, SecretRed, TokenCountDim
   - `internal/tui/app.go` -- Added SetDark call in WindowSizeMsg handler
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-085: Search/Filter, Tier Views & Help Overlay
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - Search component (`/` key) with `bubbles/textinput`, case-insensitive fuzzy matching (substring + subsequence fallback), match character highlighting, and live filtering as user types
+  - Filter predicates in filetree: `FilterState` with `SearchQuery` and `TierFilter`, `FilterNodes()` applied during `refreshVisible()`, directories included only if they have matching descendants
+  - Tier view cycling (`t` key): All → Tier 0 → Tier 1 → ... → Tier 5 → All, with panel header indicator
+  - Select all/none (`a`/`n` keys) operating on currently visible (filtered) nodes only, with parent state propagation
+  - Help overlay (`?` key) with categorized keybindings (Navigation, Selection, Filtering, Profiles, Actions) in a centered bordered box with dark/light theme support
+  - Dynamic panel title showing active filter indicators ("Files | Tier: 0 (critical) | Filter: main")
+  - `Ctrl+L` and second `/` press clear the current filter
+  - Search mode intercepts all keys while active (Enter keeps filter, Esc clears it)
+- **Files created/modified:**
+  - `internal/tui/search/model.go` -- Search model with text input, activate/deactivate, FilterAppliedMsg/FilterClearedMsg
+  - `internal/tui/search/fuzzy.go` -- Match (substring + subsequence), MatchSubstring helpers
+  - `internal/tui/search/view.go` -- HighlightMatches, RenderFilterIndicator
+  - `internal/tui/search/model_test.go` -- 12 tests for search model lifecycle
+  - `internal/tui/search/fuzzy_test.go` -- 14 tests for fuzzy matching
+  - `internal/tui/filetree/filter.go` -- FilterState, FilterNodes, SelectAll, DeselectAll, propagateAllParents
+  - `internal/tui/filetree/filter_test.go` -- 14 tests for filter predicates and selection
+  - `internal/tui/help/model.go` -- Help overlay Model with Toggle, Update
+  - `internal/tui/help/view.go` -- View rendering with 5 categorized sections, dark/light theme
+  - `internal/tui/help/model_test.go` -- 6 tests for help overlay toggle and dismiss
+  - `internal/tui/keys.go` -- Added Search, TierView, SelectAll, SelectNone, ClearFilter bindings
+  - `internal/tui/filetree/model.go` -- Added filter field, SetSearchFilter, CycleTierFilter, ClearAllFilters, SelectAllVisible, DeselectAllVisible
+  - `internal/tui/layout.go` -- Added FileTreeTitle to LayoutParams for dynamic panel title
+  - `internal/tui/statusbar.go` -- Added /, t, a/n key hints
+  - `internal/tui/app.go` -- Replaced helpOverlayModel with help.Model, added search.Model, wired all new keys with priority routing
+  - `internal/tui/app_test.go` -- Updated help overlay tests for new help.Model
+  - `internal/tui/integration_test.go` -- Updated help text assertion
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

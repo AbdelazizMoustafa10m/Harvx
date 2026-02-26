@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,7 +12,9 @@ import (
 	"github.com/harvx/harvx/internal/discovery"
 	"github.com/harvx/harvx/internal/pipeline"
 	"github.com/harvx/harvx/internal/tui/filetree"
+	"github.com/harvx/harvx/internal/tui/help"
 	"github.com/harvx/harvx/internal/tui/profile"
+	"github.com/harvx/harvx/internal/tui/search"
 	"github.com/harvx/harvx/internal/tui/stats"
 )
 
@@ -22,14 +23,15 @@ var _ tea.Model = Model{}
 
 // Model is the root Bubble Tea model for the Harvx interactive TUI.
 // It composes sub-models for the file tree, stats panel, profile selector,
-// overlay system, toast messages, and help overlay, dispatching messages to
-// each in Update.
+// overlay system, toast messages, search, and help overlay, dispatching
+// messages to each in Update.
 type Model struct {
 	// Sub-models for each panel.
 	fileTree        filetree.Model
 	statsPanel      stats.Model
 	profileSelector profile.Model
-	helpOverlay     helpOverlayModel
+	helpOverlay     help.Model
+	searchModel     search.Model
 	overlay         overlayModel
 	toast           toastModel
 
@@ -109,7 +111,8 @@ func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline, opts ...Options) (Mod
 		fileTree:        ft,
 		statsPanel:      sp,
 		profileSelector: ps,
-		helpOverlay:     newHelpOverlayModel(),
+		helpOverlay:     help.New(),
+		searchModel:     search.New(),
 		overlay:         newOverlayModel(),
 		toast:           newToastModel(),
 	}, nil
@@ -144,6 +147,7 @@ func (m Model) Toast() toastModel {
 // Update implements tea.Model. It handles global key bindings and dispatches
 // messages to the appropriate sub-models. When an overlay is active, key
 // events are routed to the overlay instead of the normal key handlers.
+// Priority order: overlay > help overlay > search mode > global keys > filetree.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -154,66 +158,123 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleOverlayKey(msg)
 		}
 
-		// Global key handling takes priority when help is not showing.
+		// Help overlay intercepts all keys when visible.
+		if m.helpOverlay.Visible {
+			var cmd tea.Cmd
+			m.helpOverlay, cmd = m.helpOverlay.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+
+		// Search mode intercepts all keys when active.
+		if m.searchModel.Active() {
+			var cmd tea.Cmd
+			m.searchModel, cmd = m.searchModel.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			// Live-update the filetree filter as user types.
+			m.fileTree.SetSearchFilter(m.searchModel.Query())
+			return m, tea.Batch(cmds...)
+		}
+
+		// Global key handling.
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Help):
-			m.helpOverlay.visible = !m.helpOverlay.visible
+			m.helpOverlay = m.helpOverlay.Toggle()
 			return m, nil
 
-		case key.Matches(msg, m.keys.Generate):
-			if !m.helpOverlay.visible {
-				return m.handleGenerate()
+		case key.Matches(msg, m.keys.Search):
+			// If a filter is already active, a second "/" clears it.
+			if m.searchModel.Filtered() {
+				var cmd tea.Cmd
+				m.searchModel, cmd = m.searchModel.ClearFilter()
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+				m.fileTree.SetSearchFilter("")
+				return m, tea.Batch(cmds...)
 			}
+			var cmd tea.Cmd
+			m.searchModel, cmd = m.searchModel.Activate()
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+
+		case key.Matches(msg, m.keys.TierView):
+			m.fileTree.CycleTierFilter()
+			return m, nil
+
+		case key.Matches(msg, m.keys.SelectAll):
+			m.fileTree.SelectAllVisible()
+			m.statsPanel.SetTreeRoot(m.fileTree.Root())
+			return m, nil
+
+		case key.Matches(msg, m.keys.SelectNone):
+			m.fileTree.DeselectAllVisible()
+			m.statsPanel.SetTreeRoot(m.fileTree.Root())
+			return m, nil
+
+		case key.Matches(msg, m.keys.ClearFilter):
+			var cmd tea.Cmd
+			m.searchModel, cmd = m.searchModel.ClearFilter()
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			m.fileTree.ClearAllFilters()
+			return m, tea.Batch(cmds...)
+
+		case key.Matches(msg, m.keys.Generate):
+			return m.handleGenerate()
 
 		case key.Matches(msg, m.keys.Preview):
-			if !m.helpOverlay.visible {
-				return m.handlePreview()
-			}
+			return m.handlePreview()
 
 		case key.Matches(msg, m.keys.Save):
-			if !m.helpOverlay.visible {
-				return m.handleSaveProfile()
-			}
+			return m.handleSaveProfile()
 
 		case key.Matches(msg, m.keys.Export):
-			if !m.helpOverlay.visible {
-				return m.handleExportClipboard()
-			}
+			return m.handleExportClipboard()
 
 		case key.Matches(msg, m.keys.ProfileTab):
-			if !m.helpOverlay.visible {
-				var cmd tea.Cmd
-				m.profileSelector, cmd = m.profileSelector.Next()
-				if cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				return m, tea.Batch(cmds...)
+			var cmd tea.Cmd
+			m.profileSelector, cmd = m.profileSelector.Next()
+			if cmd != nil {
+				cmds = append(cmds, cmd)
 			}
+			return m, tea.Batch(cmds...)
 
 		case key.Matches(msg, m.keys.ProfileBackTab):
-			if !m.helpOverlay.visible {
-				var cmd tea.Cmd
-				m.profileSelector, cmd = m.profileSelector.Prev()
-				if cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				return m, tea.Batch(cmds...)
-			}
-		}
-
-		// Forward key events to file tree when help is not showing.
-		if !m.helpOverlay.visible {
 			var cmd tea.Cmd
-			m.fileTree, cmd = m.fileTree.Update(msg)
+			m.profileSelector, cmd = m.profileSelector.Prev()
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 			return m, tea.Batch(cmds...)
 		}
+
+		// Forward key events to file tree.
+		var cmd tea.Cmd
+		m.fileTree, cmd = m.fileTree.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return m, tea.Batch(cmds...)
+
+	case search.FilterAppliedMsg:
+		m.fileTree.SetSearchFilter(msg.Query)
+		return m, nil
+
+	case search.FilterClearedMsg:
+		m.fileTree.SetSearchFilter("")
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -310,8 +371,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 	}
-
-	return m, tea.Batch(cmds...)
 }
 
 // handleOverlayKey routes key events when an overlay is active.
@@ -364,8 +423,9 @@ func (m Model) View() string {
 	}
 
 	// Help overlay takes over the full screen.
-	if m.helpOverlay.visible {
-		return m.helpOverlay.view(m.keys, m.width, m.height)
+	if m.helpOverlay.Visible {
+		isDark := isDarkTheme(m.styles.Colors)
+		return help.View(m.width, m.height, isDark)
 	}
 
 	// Overlay takes over the full screen.
@@ -388,17 +448,43 @@ func (m Model) View() string {
 		statusBar = RenderStatusBar(m.profileSelector.Current(), m.width, m.styles)
 	}
 
+	// Build the file tree view. If search is active, append the search
+	// input below the tree content.
+	fileTreeView := m.fileTree.View()
+	if m.searchModel.Active() {
+		fileTreeView = fileTreeView + "\n" + m.searchModel.View()
+	}
+
+	// Build the dynamic panel title based on active filters.
+	panelTitle := m.buildPanelTitle()
+
 	// Compose via the layout system.
 	return RenderLayout(LayoutParams{
-		Styles:       m.styles,
-		FileTreeView: m.fileTree.View(),
-		StatsView:    m.statsPanel.View(),
-		TitleBar:     titleBar,
-		StatusBar:    statusBar,
-		Mode:         m.styles.Layout,
-		Width:        m.width,
-		Height:       m.height,
+		Styles:        m.styles,
+		FileTreeView:  fileTreeView,
+		StatsView:     m.statsPanel.View(),
+		TitleBar:      titleBar,
+		StatusBar:     statusBar,
+		FileTreeTitle: panelTitle,
+		Mode:          m.styles.Layout,
+		Width:         m.width,
+		Height:        m.height,
 	})
+}
+
+// buildPanelTitle returns a dynamic panel title based on active filters.
+func (m Model) buildPanelTitle() string {
+	filter := m.fileTree.Filter()
+	title := "Files"
+
+	if filter.HasTierFilter() {
+		title += " | Tier: " + filter.TierLabel()
+	}
+	if filter.HasSearchFilter() {
+		title += " | Filter: " + filter.SearchQuery
+	}
+
+	return title
 }
 
 // Styles returns the current computed styles. Useful for testing.
@@ -406,35 +492,12 @@ func (m Model) Styles() Styles {
 	return m.styles
 }
 
-// helpOverlayModel is a stub for the help overlay.
-// It will be fully implemented in a subsequent task (T-085).
-type helpOverlayModel struct {
-	visible bool
+// SearchModel returns the search sub-model. Useful for testing.
+func (m Model) SearchModel() search.Model {
+	return m.searchModel
 }
 
-func newHelpOverlayModel() helpOverlayModel {
-	return helpOverlayModel{}
-}
-
-func (m helpOverlayModel) view(keys KeyMap, width, height int) string {
-	style := lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		Align(lipgloss.Center).
-		AlignVertical(lipgloss.Center)
-
-	var b strings.Builder
-	b.WriteString("Harvx Interactive Mode\n")
-	b.WriteString("======================\n\n")
-
-	for _, group := range keys.FullHelp() {
-		for _, k := range group {
-			fmt.Fprintf(&b, "  %-12s %s\n", k.Help().Key, k.Help().Desc)
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\nPress ? to close help")
-
-	return style.Render(b.String())
+// HelpOverlay returns the help overlay model. Useful for testing.
+func (m Model) HelpOverlay() help.Model {
+	return m.helpOverlay
 }

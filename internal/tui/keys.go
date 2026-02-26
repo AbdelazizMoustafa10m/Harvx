@@ -15,6 +15,11 @@ type KeyMap struct {
 	Up             key.Binding
 	Down           key.Binding
 	Toggle         key.Binding
+	Search         key.Binding
+	TierView       key.Binding
+	SelectAll      key.Binding
+	SelectNone     key.Binding
+	ClearFilter    key.Binding
 }
 
 // DefaultKeyMap returns the default key bindings.
@@ -64,6 +69,26 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys(" "),
 			key.WithHelp("space", "toggle file"),
 		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search files"),
+		),
+		TierView: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "cycle tier view"),
+		),
+		SelectAll: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "select all visible"),
+		),
+		SelectNone: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "deselect all visible"),
+		),
+		ClearFilter: key.NewBinding(
+			key.WithKeys("ctrl+l"),
+			key.WithHelp("ctrl+l", "clear filter"),
+		),
 	}
 }
 
@@ -76,6 +101,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Toggle},
+		{k.Search, k.TierView, k.SelectAll, k.SelectNone, k.ClearFilter},
 		{k.Generate, k.Preview, k.Save, k.Export},
 		{k.ProfileTab, k.ProfileBackTab},
 		{k.Help, k.Quit},

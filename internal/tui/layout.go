@@ -27,6 +27,10 @@ type LayoutParams struct {
 	// StatusBar is the pre-rendered status bar string.
 	StatusBar string
 
+	// FileTreeTitle is the title displayed in the file tree panel border.
+	// Defaults to "Files" if empty.
+	FileTreeTitle string
+
 	// Mode is the layout mode derived from terminal dimensions.
 	Mode LayoutMode
 
@@ -67,9 +71,13 @@ func RenderLayout(p LayoutParams) string {
 // renderSinglePanel renders only the file tree panel for narrow terminals.
 func renderSinglePanel(p LayoutParams) string {
 	isDark := isDarkTheme(p.Styles.Colors)
+	title := p.FileTreeTitle
+	if title == "" {
+		title = "Files"
+	}
 	return RenderPanelWithBorder(
 		p.FileTreeView,
-		"Files",
+		title,
 		p.Styles.LeftPanelWidth,
 		p.Styles.ContentHeight,
 		p.Styles.Colors.BorderActive,
@@ -81,10 +89,14 @@ func renderSinglePanel(p LayoutParams) string {
 // vertical separator between them.
 func renderTwoPanels(p LayoutParams) string {
 	isDark := isDarkTheme(p.Styles.Colors)
+	title := p.FileTreeTitle
+	if title == "" {
+		title = "Files"
+	}
 
 	leftPanel := RenderPanelWithBorder(
 		p.FileTreeView,
-		"Files",
+		title,
 		p.Styles.LeftPanelWidth,
 		p.Styles.ContentHeight,
 		p.Styles.Colors.BorderActive,

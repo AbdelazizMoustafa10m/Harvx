@@ -22,6 +22,7 @@ type Model struct {
 	loading map[string]bool // dirs currently being loaded
 	ready   bool
 	isDark  bool // whether the terminal has a dark background
+	filter  FilterState
 	logger  *slog.Logger
 }
 
@@ -38,6 +39,7 @@ func New(rootDir string, ignorer discovery.Ignorer) Model {
 		rootDir: rootDir,
 		ignorer: ignorer,
 		loading: make(map[string]bool),
+		filter:  NewFilterState(),
 		logger:  slog.Default().With("component", "filetree"),
 	}
 }
@@ -50,6 +52,7 @@ func NewWithRoot(root *Node, rootDir string) Model {
 		root:    root,
 		rootDir: rootDir,
 		loading: make(map[string]bool),
+		filter:  NewFilterState(),
 		logger:  slog.Default().With("component", "filetree"),
 		ready:   true,
 	}
@@ -120,9 +123,11 @@ func (m Model) Visible() []*Node {
 	return m.visible
 }
 
-// refreshVisible rebuilds the visible node list from the root node.
+// refreshVisible rebuilds the visible node list from the root node, applying
+// any active filters (search query and tier).
 func (m *Model) refreshVisible() {
-	m.visible = m.root.VisibleNodes()
+	all := m.root.VisibleNodes()
+	m.visible = FilterNodes(all, m.filter)
 }
 
 // clampCursor ensures the cursor stays within the valid range of visible nodes.
@@ -160,4 +165,45 @@ func (m Model) cursorNode() *Node {
 		return nil
 	}
 	return m.visible[m.cursor]
+}
+
+// Filter returns the current filter state.
+func (m Model) Filter() FilterState {
+	return m.filter
+}
+
+// SetSearchFilter sets the search query filter and refreshes visible nodes.
+func (m *Model) SetSearchFilter(query string) {
+	m.filter.SearchQuery = query
+	m.refreshVisible()
+	m.clampCursor()
+	m.adjustScroll()
+}
+
+// CycleTierFilter advances the tier filter to the next value and refreshes.
+func (m *Model) CycleTierFilter() {
+	m.filter = m.filter.CycleTier()
+	m.refreshVisible()
+	m.clampCursor()
+	m.adjustScroll()
+}
+
+// ClearAllFilters removes all active filters.
+func (m *Model) ClearAllFilters() {
+	m.filter = NewFilterState()
+	m.refreshVisible()
+	m.clampCursor()
+	m.adjustScroll()
+}
+
+// SelectAllVisible sets all currently visible file nodes to Included.
+func (m *Model) SelectAllVisible() {
+	SelectAll(m.visible)
+	m.refreshVisible()
+}
+
+// DeselectAllVisible sets all currently visible file nodes to Excluded.
+func (m *Model) DeselectAllVisible() {
+	DeselectAll(m.visible)
+	m.refreshVisible()
 }

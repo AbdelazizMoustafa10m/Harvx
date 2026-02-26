@@ -121,18 +121,18 @@ func TestUpdate_HelpToggle(t *testing.T) {
 	t.Parallel()
 
 	m := mustNewModel(t)
-	assert.False(t, m.helpOverlay.visible)
+	assert.False(t, m.helpOverlay.Visible)
 
 	// First press: show help.
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := updated.(Model)
-	assert.True(t, model.helpOverlay.visible)
+	assert.True(t, model.helpOverlay.Visible)
 	assert.Nil(t, cmd)
 
 	// Second press: hide help.
 	updated, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model = updated.(Model)
-	assert.False(t, model.helpOverlay.visible)
+	assert.False(t, model.helpOverlay.Visible)
 	assert.Nil(t, cmd)
 }
 
@@ -154,7 +154,7 @@ func TestUpdate_EnterSuppressedDuringHelp(t *testing.T) {
 	t.Parallel()
 
 	m := mustNewModel(t)
-	m.helpOverlay.visible = true
+	m.helpOverlay.Visible = true
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	// When help is visible, Enter should not trigger generation.
@@ -476,11 +476,11 @@ func TestView_HelpOverlay(t *testing.T) {
 	m.ready = true
 	m.width = 80
 	m.height = 24
-	m.helpOverlay.visible = true
+	m.helpOverlay.Visible = true
 
 	view := m.View()
 	assert.Contains(t, view, "Harvx Interactive Mode")
-	assert.Contains(t, view, "Press ? to close help")
+	assert.Contains(t, view, "Press ? or Esc to close")
 }
 
 func TestView_NormalLayout(t *testing.T) {

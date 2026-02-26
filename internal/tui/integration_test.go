@@ -138,7 +138,7 @@ func TestIntegration_HelpOverlayToggle(t *testing.T) {
 	// Press ? to show help.
 	m = sendKey(t, m, keyMsg('?'))
 	assertViewContains(t, m, "Harvx Interactive Mode")
-	assertViewContains(t, m, "Press ? to close help")
+	assertViewContains(t, m, "Press ? or Esc to close")
 
 	// Keys should be suppressed while help is visible.
 	// Press 'p' -- should NOT open preview.

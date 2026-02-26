@@ -11,6 +11,9 @@ import (
 var statusBarHints = [][2]string{
 	{"q", "quit"},
 	{"?", "help"},
+	{"/", "search"},
+	{"t", "tier"},
+	{"a/n", "all/none"},
 	{"enter", "generate"},
 	{"space", "toggle"},
 	{"tab", "profile"},
