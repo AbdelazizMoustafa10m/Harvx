@@ -271,9 +271,10 @@ func TestIntegration_WindowResizePropagation(t *testing.T) {
 	assert.Equal(t, 200, m.width)
 	assert.Equal(t, 60, m.height)
 
-	// Layout: left = 200*60/100 = 120, right = 200-120-1 = 79
-	assert.Equal(t, 58, m.fileTree.Height()) // 60-2
-	assert.Equal(t, 58, m.statsPanel.Height())
+	// LayoutFull (200 >= 100): left = 200*65/100 = 130, right = 200-130-1 = 69
+	// ContentHeight = 60 - 2 = 58; inner = 58 - 2 = 56 (border top/bottom)
+	assert.Equal(t, 56, m.fileTree.Height())
+	assert.Equal(t, 56, m.statsPanel.Height())
 }
 
 // ---------------------------------------------------------------------------
@@ -389,11 +390,11 @@ func TestIntegration_FullLayoutComposition(t *testing.T) {
 
 	view := m.View()
 
-	// Layout should have file tree on left, stats on right, status bar at bottom.
-	assert.Contains(t, view, "Profile: default", "status bar should show profile")
-	assert.Contains(t, view, "Stats", "stats panel should be visible")
-	// The separator should be present (pipes).
-	assert.Contains(t, view, "|", "separator should be present")
+	// Layout should have file tree on left, title bar at top, status bar at bottom.
+	assert.Contains(t, view, "default", "status bar should show profile name")
+	assert.Contains(t, view, "Harvx", "title bar should show app name")
+	// The vertical separator should be present (Unicode box-drawing).
+	assert.Contains(t, view, "│", "separator should be present")
 }
 
 // ---------------------------------------------------------------------------
@@ -415,8 +416,9 @@ func TestIntegration_ExportClipboardSuccess(t *testing.T) {
 	m.ready = true
 	m.width = 120
 	m.height = 40
-	m.fileTree.SetSize(72, 38)
-	m.statsPanel.SetSize(47, 38)
+	m.styles = NewStyles(true, 120, 40)
+	m.fileTree.SetSize(m.styles.LeftPanelWidth-4, m.styles.ContentHeight-2)
+	m.statsPanel.SetSize(m.styles.RightPanelWidth-4, m.styles.ContentHeight-2)
 
 	// Toggle all in src/ by navigating there and toggling.
 	srcIdx := -1

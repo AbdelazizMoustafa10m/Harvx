@@ -298,9 +298,11 @@ func TestUpdate_WindowSizeMsg(t *testing.T) {
 	assert.Equal(t, 40, model.height)
 	assert.Nil(t, cmd)
 
-	// Verify sub-models received the size update.
-	assert.Equal(t, 38, model.fileTree.Height()) // 40 - 2
-	assert.Equal(t, 38, model.statsPanel.Height()) // 40 - 2
+	// Verify sub-models received computed panel sizes.
+	// LayoutFull (120 >= 100): left = 120*65/100 = 78, right = 120-78-1 = 41
+	// ContentHeight = 40 - 2 = 38; inner = 38 - 2 = 36 (border top/bottom)
+	assert.Equal(t, 36, model.fileTree.Height())
+	assert.Equal(t, 36, model.statsPanel.Height())
 }
 
 // --- Message routing tests ---
@@ -485,17 +487,19 @@ func TestView_NormalLayout(t *testing.T) {
 	t.Parallel()
 
 	m := mustNewModel(t)
+	// Simulate receiving a WindowSizeMsg by setting state and styles.
 	m.ready = true
 	m.width = 100
 	m.height = 30
+	m.styles = NewStyles(true, 100, 30)
 
 	view := m.View()
-	// Should contain the status bar with profile info.
-	assert.Contains(t, view, "Profile: default")
+	// Status bar now shows profile name with accent styling (no "Profile:" prefix).
+	assert.Contains(t, view, "default")
 	// Should contain file tree content (loading or empty).
 	assert.Contains(t, view, "Loading file tree")
-	// Should contain stats panel.
-	assert.Contains(t, view, "Stats")
+	// Should contain the title bar with app name.
+	assert.Contains(t, view, "Harvx")
 }
 
 func TestView_OverlayPreview(t *testing.T) {
@@ -519,6 +523,7 @@ func TestView_ToastDisplayed(t *testing.T) {
 	m.ready = true
 	m.width = 100
 	m.height = 30
+	m.styles = NewStyles(true, 100, 30)
 	_ = m.toast.show("Profile saved!")
 
 	view := m.View()

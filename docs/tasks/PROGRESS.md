@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 87 |
+| Completed | 88 |
 | In Progress | 0 |
-| Not Started | 8 |
+| Not Started | 7 |
 
 ---
 
@@ -807,4 +807,35 @@
   - `internal/tui/integration_test.go` -- 20 integration test scenarios covering all TUI flows
   - `internal/tui/teatest_helpers_test.go` -- Test helpers: sendKey, sendMsg, drainCmds, buildTestTree, mustNewModelWithTree, assertViewContains
   - `internal/tui/filetree/model.go` -- Added NewWithRoot constructor for test tree injection
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-084: Lipgloss Styling, Responsive Layout & Theme Support
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - Complete `Styles` struct with `ThemeColors`, computed lipgloss styles, and responsive layout dimensions
+  - `NewStyles(isDark, width, height)` constructor creating styles adapted to terminal theme and size
+  - `ComputeLayout` with four modes: LayoutFull (>=100), LayoutCompressed (60-99), LayoutSinglePanel (40-59), LayoutTooSmall (<40 or <12)
+  - Dark and light theme color palettes using ANSI 256 codes for broad terminal compatibility
+  - `RenderLayout` composing title bar, multi-panel content, and status bar via `lipgloss.JoinVertical`/`JoinHorizontal`
+  - `RenderPanelWithBorder` with inline titles in top border using rounded Unicode box-drawing characters (╭─ Files ─╮)
+  - `RenderStatusBar` with profile name accent, key hints, and progressive truncation for narrow terminals
+  - `RenderTitleBar` with "Harvx" + version left, directory path right (left-truncated with "..." if too long)
+  - `RenderTooSmall` centered warning message when terminal is below minimum (40×12)
+  - Auto-detection of light/dark terminal via `lipgloss.HasDarkBackground()`
+  - Active panel border (brighter accent) vs inactive panel border (dimmer)
+  - Integrated layout system into root `Model.View()` replacing inline layout code
+  - 20 new unit tests for styles and layout plus updated existing tests
+- **Files created/modified:**
+  - `internal/tui/styles.go` -- Complete style system: LayoutMode, ThemeColors, Styles, ComputeLayout, NewStyles
+  - `internal/tui/layout.go` -- Responsive layout: LayoutParams, RenderLayout, RenderPanelWithBorder, RenderTooSmall
+  - `internal/tui/statusbar.go` -- RenderStatusBar with key hints and progressive truncation
+  - `internal/tui/titlebar.go` -- RenderTitleBar with version and directory path
+  - `internal/tui/styles_test.go` -- 7 tests: ComputeLayout boundaries, dark/light themes, panel widths, resize
+  - `internal/tui/layout_test.go` -- 13 tests: panel borders, inline titles, too-small, single/two-panel, bars, snapshot
+  - `internal/tui/app.go` -- Integrated Styles into Model, replaced View() with layout system, added Styles() accessor
+  - `internal/tui/app_test.go` -- Updated tests for new layout dimensions and status bar format
+  - `internal/tui/teatest_helpers_test.go` -- Updated helpers to set styles on test models
+  - `internal/tui/integration_test.go` -- Updated integration tests for new layout system
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓

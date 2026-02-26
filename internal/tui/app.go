@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/harvx/harvx/internal/buildinfo"
 	"github.com/harvx/harvx/internal/config"
 	"github.com/harvx/harvx/internal/discovery"
 	"github.com/harvx/harvx/internal/pipeline"
@@ -39,6 +40,8 @@ type Model struct {
 
 	// Global state.
 	keys     KeyMap
+	styles   Styles
+	dir      string
 	width    int
 	height   int
 	ready    bool
@@ -102,6 +105,7 @@ func New(cfg *config.ResolvedConfig, p *pipeline.Pipeline, opts ...Options) (Mod
 		pipeline:        p,
 		clipboard:       o.Clipboard,
 		keys:            DefaultKeyMap(),
+		dir:             o.RootDir,
 		fileTree:        ft,
 		statsPanel:      sp,
 		profileSelector: ps,
@@ -215,11 +219,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
-		// Propagate to file tree and stats panel.
-		leftWidth := msg.Width * 60 / 100
-		rightWidth := msg.Width - leftWidth - 1
-		m.fileTree.SetSize(leftWidth, msg.Height-2)
-		m.statsPanel.SetSize(rightWidth, msg.Height-2)
+		// Recompute styles for the new dimensions.
+		m.styles = NewStyles(lipgloss.HasDarkBackground(), msg.Width, msg.Height)
+		// Propagate computed panel sizes to sub-models.
+		m.fileTree.SetSize(m.styles.LeftPanelWidth-4, m.styles.ContentHeight-2)
+		m.statsPanel.SetSize(m.styles.RightPanelWidth-4, m.styles.ContentHeight-2)
 		return m, nil
 
 	case filetree.DirLoadedMsg:
@@ -348,6 +352,7 @@ func (m Model) handleOverlayKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // View implements tea.Model. It composes the sub-model views into a
 // multi-panel layout with the file tree on the left and stats on the right.
+// The layout adapts to terminal size using the pre-computed Styles.
 func (m Model) View() string {
 	if m.quitting {
 		return ""
@@ -372,50 +377,32 @@ func (m Model) View() string {
 		return fmt.Sprintf("Error: %v\n\nPress q to quit.", m.err)
 	}
 
-	// Calculate panel widths: 60% file tree, 40% stats.
-	leftWidth := m.width * 60 / 100
+	// Build the title bar and status bar.
+	titleBar := RenderTitleBar(buildinfo.Version, m.dir, m.width, m.styles)
 
-	// Compose panels.
-	leftStyle := lipgloss.NewStyle().
-		Width(leftWidth).
-		Height(m.height - 2)
-	leftPanel := leftStyle.Render(m.fileTree.View())
-	rightPanel := m.statsPanel.View()
-
-	// Join panels side by side.
-	separator := lipgloss.NewStyle().
-		Width(1).
-		Height(m.height - 2).
-		Render(strings.Repeat("|\n", m.height-3) + "|")
-
-	mainView := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, separator, rightPanel)
-
-	// Toast or status bar at the bottom.
-	var bottomBar string
+	var statusBar string
 	if m.toast.visible {
-		bottomBar = m.toast.view(m.width)
+		statusBar = m.toast.view(m.width)
 	} else {
-		bottomBar = m.renderStatusBar()
+		statusBar = RenderStatusBar(m.profileSelector.Current(), m.width, m.styles)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, mainView, bottomBar)
+	// Compose via the layout system.
+	return RenderLayout(LayoutParams{
+		Styles:       m.styles,
+		FileTreeView: m.fileTree.View(),
+		StatsView:    m.statsPanel.View(),
+		TitleBar:     titleBar,
+		StatusBar:    statusBar,
+		Mode:         m.styles.Layout,
+		Width:        m.width,
+		Height:       m.height,
+	})
 }
 
-// renderStatusBar renders the bottom status bar with key hints.
-func (m Model) renderStatusBar() string {
-	prof := m.profileSelector.Current()
-	status := fmt.Sprintf(
-		" Profile: %s | q: quit | ?: help | enter: generate | p: preview | tab: profile | space: toggle",
-		prof,
-	)
-
-	style := lipgloss.NewStyle().
-		Width(m.width).
-		Background(lipgloss.Color("236")).
-		Foreground(lipgloss.Color("252")).
-		Padding(0, 1)
-
-	return style.Render(status)
+// Styles returns the current computed styles. Useful for testing.
+func (m Model) Styles() Styles {
+	return m.styles
 }
 
 // helpOverlayModel is a stub for the help overlay.

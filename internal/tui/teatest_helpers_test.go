@@ -157,12 +157,14 @@ func mustNewModelWithTree(t *testing.T) Model {
 	m.fileTree = filetree.NewWithRoot(tree, ".")
 	m.statsPanel.SetTreeRoot(tree)
 
-	// Mark as ready with a reasonable window size.
+	// Mark as ready with a reasonable window size and compute styles.
 	m.ready = true
 	m.width = 120
 	m.height = 40
-	m.fileTree.SetSize(72, 38) // 60% of 120 = 72
-	m.statsPanel.SetSize(47, 38) // 120 - 72 - 1 = 47
+	m.styles = NewStyles(true, 120, 40)
+	// Inner panel sizes: left = 78-4 = 74, right = 41-4 = 37, height = 38-2 = 36
+	m.fileTree.SetSize(m.styles.LeftPanelWidth-4, m.styles.ContentHeight-2)
+	m.statsPanel.SetSize(m.styles.RightPanelWidth-4, m.styles.ContentHeight-2)
 
 	return m
 }
@@ -180,8 +182,9 @@ func mustNewModelWithTreeAndProfiles(t *testing.T, profiles []string) Model {
 	m.ready = true
 	m.width = 120
 	m.height = 40
-	m.fileTree.SetSize(72, 38)
-	m.statsPanel.SetSize(47, 38)
+	m.styles = NewStyles(true, 120, 40)
+	m.fileTree.SetSize(m.styles.LeftPanelWidth-4, m.styles.ContentHeight-2)
+	m.statsPanel.SetSize(m.styles.RightPanelWidth-4, m.styles.ContentHeight-2)
 
 	return m
 }
