@@ -24,7 +24,7 @@ LDFLAGS := -s -w \
 	-X '$(LDFLAGS_PKG).GoVersion=$(GO_VERSION)'
 
 # ─── Phony Targets ───────────────────────────────────────────────────────────
-.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot release-snapshot release-check completions man help
+.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot release-snapshot release-check completions man bench bench-compare bench-update-baseline help
 
 .DEFAULT_GOAL := help
 
@@ -95,6 +95,33 @@ completions: build ## Generate shell completion scripts in completions/
 # ─── Man Pages ──────────────────────────────────────────────────────────────
 man: build ## Generate man pages in man/
 	./$(BIN_DIR)/$(BINARY) docs man --output-dir ./man
+
+# ─── Benchmarks ─────────────────────────────────────────────────────────────
+BENCH_DIR      := ./internal/benchmark
+BENCH_BASELINE := testdata/benchmarks/baseline.txt
+BENCH_CURRENT  := $(BIN_DIR)/bench-current.txt
+
+bench: ## Run all benchmarks (build tag: bench)
+	@mkdir -p $(BIN_DIR)
+	go test -tags bench -bench=. -benchmem -count=5 -run=^$$ $(BENCH_DIR) | tee $(BENCH_CURRENT)
+	@echo "Results saved to $(BENCH_CURRENT)"
+
+bench-compare: bench ## Compare current benchmarks against baseline using benchstat
+	@if ! command -v benchstat >/dev/null 2>&1; then \
+		echo "benchstat not found. Install with:"; \
+		echo "  go install golang.org/x/perf/cmd/benchstat@latest"; \
+		exit 1; \
+	fi
+	@if [ ! -f $(BENCH_BASELINE) ]; then \
+		echo "No baseline found at $(BENCH_BASELINE). Run 'make bench-update-baseline' first."; \
+		exit 1; \
+	fi
+	benchstat $(BENCH_BASELINE) $(BENCH_CURRENT)
+
+bench-update-baseline: bench ## Save current benchmark results as the new baseline
+	@mkdir -p $$(dirname $(BENCH_BASELINE))
+	cp $(BENCH_CURRENT) $(BENCH_BASELINE)
+	@echo "Baseline updated: $(BENCH_BASELINE)"
 
 # ─── Install ─────────────────────────────────────────────────────────────────
 install: ## Install harvx to $GOPATH/bin with version metadata

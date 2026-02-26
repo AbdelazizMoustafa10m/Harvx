@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 93 |
+| Completed | 94 |
 | In Progress | 0 |
-| Not Started | 2 |
+| Not Started | 1 |
 
 ---
 
@@ -777,4 +777,34 @@
   - `Makefile` -- Added `completions` and `man` targets, updated `clean` to remove generated directories
   - `.goreleaser.yaml` -- Added man page generation hook, `man/*` in archive files
   - `.gitignore` -- Added `completions/` and `man/` to ignored directories
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-091: Performance Benchmarking Suite
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - Synthetic repository generator (`GenerateTestRepo`, `GenerateFileDescriptors`, `GenerateCachedLargeRepo`) with 7 file types, variable depth (flat/3-level/10-level), 100B-50KB sizes, and 1MB large files
+  - Discovery benchmarks: `BenchmarkDiscovery_1K`, `BenchmarkDiscovery_10K`, `BenchmarkDiscovery_50K`
+  - Tokenization benchmarks: `BenchmarkTokenization_1K` (none + cl100k sub-benchmarks), `BenchmarkTokenization_10K`
+  - Compression benchmark: `BenchmarkCompression_1K` with EngineAuto (AST + regex fallback)
+  - Redaction benchmarks: `BenchmarkRedaction_1K`, `BenchmarkRedaction_10K`
+  - Output rendering benchmarks: `BenchmarkOutputRendering_1K` (markdown + xml), `BenchmarkOutputRendering_10K`
+  - Full pipeline benchmarks: `BenchmarkFullPipeline_1K`, `BenchmarkFullPipeline_10K`, `BenchmarkFullPipeline_50K`
+  - SLO verification tests: `TestSLO_1KFiles_Under1Second`, `TestSLO_10KFiles_Under3Seconds`, `TestSLO_TUITokenRecalc_Under300ms`
+  - Memory guard test: `TestMemory_10KFiles_Under500MB` (HeapAlloc < 500MB, Sys < 1GB)
+  - Makefile targets: `bench`, `bench-compare` (benchstat), `bench-update-baseline`
+  - All benchmarks gated behind `//go:build bench` tag, excluded from regular `go test ./...`
+- **Files created/modified:**
+  - `internal/benchmark/fixtures.go` -- Synthetic repo generator with 7 content types and sync.Once caching
+  - `internal/benchmark/discovery_bench_test.go` -- Discovery stage benchmarks (1K/10K/50K)
+  - `internal/benchmark/tokenizer_bench_test.go` -- Tokenization benchmarks (1K/10K)
+  - `internal/benchmark/compression_bench_test.go` -- Compression benchmark (1K)
+  - `internal/benchmark/redaction_bench_test.go` -- Redaction benchmarks (1K/10K)
+  - `internal/benchmark/output_bench_test.go` -- Output rendering benchmarks (1K/10K)
+  - `internal/benchmark/pipeline_bench_test.go` -- Full pipeline benchmarks (1K/10K/50K)
+  - `internal/benchmark/slo_test.go` -- SLO verification tests (1K < 1s, 10K < 3s, TUI < 300ms)
+  - `internal/benchmark/memory_test.go` -- Memory usage guard test (10K < 500MB heap)
+  - `testdata/benchmarks/baseline.txt` -- Placeholder baseline for benchstat comparison
+  - `Makefile` -- Added `bench`, `bench-compare`, `bench-update-baseline` targets
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
