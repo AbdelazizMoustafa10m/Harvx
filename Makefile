@@ -24,7 +24,7 @@ LDFLAGS := -s -w \
 	-X '$(LDFLAGS_PKG).GoVersion=$(GO_VERSION)'
 
 # ─── Phony Targets ───────────────────────────────────────────────────────────
-.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot release-snapshot release-check completions man bench bench-compare bench-update-baseline help
+.PHONY: all build run test test-verbose test-cover test-integration lint fmt vet tidy clean install snapshot release-snapshot release-check completions man bench bench-compare bench-update-baseline help
 
 .DEFAULT_GOAL := help
 
@@ -52,6 +52,9 @@ test-cover: ## Run tests with coverage and generate HTML report
 	go test -race -count=1 -coverprofile=$(BIN_DIR)/coverage.out ./...
 	go tool cover -html=$(BIN_DIR)/coverage.out -o $(BIN_DIR)/coverage.html
 	@echo "Coverage report: $(BIN_DIR)/coverage.html"
+
+test-integration: ## Run integration tests against OSS test repos (build tag: integration)
+	go test -tags integration -race -count=1 -timeout=5m -v ./tests/integration/
 
 # ─── Lint ────────────────────────────────────────────────────────────────────
 lint: ## Run golangci-lint (install separately if not found)

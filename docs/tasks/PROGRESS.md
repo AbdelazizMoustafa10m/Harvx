@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 94 |
+| Completed | 95 |
 | In Progress | 0 |
-| Not Started | 1 |
+| Not Started | 0 |
 
 ---
 
@@ -808,3 +808,33 @@
   - `testdata/benchmarks/baseline.txt` -- Placeholder baseline for benchstat comparison
   - `Makefile` -- Added `bench`, `bench-compare`, `bench-update-baseline` targets
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-092: Integration Test Suite Against Real OSS Repos
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - 4 synthetic OSS-style test repositories in `testdata/` simulating real-world project types (Go CLI, TypeScript/Next.js, Python/FastAPI, multi-language monorepo)
+  - `TestRepo` struct and `testRepos()` registry in `tests/integration/repos.go` with per-repo metadata (language, expected file count, file type flags)
+  - 5 integration test files with 25+ test functions covering default profile, output formats, CLI flags, redaction, and compression
+  - Default profile tests: `TestDefaultProfile_AllRepos`, `TestDefaultProfile_BriefJSON_AllRepos`, language-specific content tests (Go, Python, Monorepo)
+  - Format tests: markdown sections, XML well-formedness via `encoding/xml.NewDecoder`, JSON metadata, determinism across all repos
+  - CLI flags tests: `--max-tokens`, `HARVX_MAX_TOKENS`, `--stdout`, `--git-tracked-only`, pipe chain, `--format xml`, verbose, quiet
+  - Compression tests: token reduction for Go/TS repos, all-repos exit-zero with `--compress`, regex and AST engine flags
+  - Redaction tests: default redaction, secret detection verification, `--no-redact`, redaction report, fail-on-redaction
+  - `make test-integration` Makefile target
+  - CI workflow `integration-tests` job in `.github/workflows/ci.yml`
+- **Files created/modified:**
+  - `testdata/oss-go-cli/` -- 15-file Go CLI "gosync" project with cobra commands, config, handler, watcher, API client
+  - `testdata/oss-ts-nextjs/` -- 15-file Next.js 14 "DevBlog" with pages, components, types, utils, CSS
+  - `testdata/oss-python-fastapi/` -- 17-file FastAPI "TaskAPI" with models, routes, services, utils, tests
+  - `testdata/oss-monorepo/` -- 20-file "Acme Platform" with TS core/api/web packages, Go worker service
+  - `tests/integration/repos.go` -- `TestRepo` struct, `projectRoot()`, `testRepos()`, `repoByName()`
+  - `tests/integration/default_profile_test.go` -- Default profile tests across all repo types
+  - `tests/integration/format_test.go` -- Output format validation (markdown, XML, JSON, determinism)
+  - `tests/integration/cli_flags_test.go` -- CLI flags and env var override tests
+  - `tests/integration/compression_test.go` -- Compression engine tests
+  - `tests/integration/redaction_test.go` -- Redaction pipeline tests
+  - `Makefile` -- Added `test-integration` target
+  - `.github/workflows/ci.yml` -- Added `integration-tests` job to CI pipeline
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓  `go test -tags integration` ✓ (all pass)
