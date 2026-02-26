@@ -37,6 +37,22 @@ type ThemeColors struct {
 	TitleBarFg     lipgloss.Color
 	StatusBarBg    lipgloss.Color
 	StatusBarFg    lipgloss.Color
+
+	// Tier colors for file tree rendering.
+	TierGold    lipgloss.Color // Tier 0
+	TierGreen   lipgloss.Color // Tier 1
+	TierBlue    lipgloss.Color // Tier 2
+	TierCyan    lipgloss.Color // Tier 3
+	TierMagenta lipgloss.Color // Tier 4
+	TierDim     lipgloss.Color // Tier 5
+
+	// File tree specific.
+	IncludedGreen lipgloss.Color
+	ExcludedGray  lipgloss.Color
+	PartialYellow lipgloss.Color
+	CursorBg      lipgloss.Color
+	SecretRed     lipgloss.Color
+	TokenCountDim lipgloss.Color
 }
 
 // darkColors returns the dark-theme color palette using ANSI 256 codes.
@@ -51,6 +67,20 @@ func darkColors() ThemeColors {
 		TitleBarFg:     lipgloss.Color("235"),
 		StatusBarBg:    lipgloss.Color("236"),
 		StatusBarFg:    lipgloss.Color("252"),
+
+		TierGold:    lipgloss.Color("220"),
+		TierGreen:   lipgloss.Color("34"),
+		TierBlue:    lipgloss.Color("33"),
+		TierCyan:    lipgloss.Color("36"),
+		TierMagenta: lipgloss.Color("133"),
+		TierDim:     lipgloss.Color("240"),
+
+		IncludedGreen: lipgloss.Color("34"),
+		ExcludedGray:  lipgloss.Color("240"),
+		PartialYellow: lipgloss.Color("220"),
+		CursorBg:      lipgloss.Color("238"),
+		SecretRed:     lipgloss.Color("196"),
+		TokenCountDim: lipgloss.Color("242"),
 	}
 }
 
@@ -66,6 +96,20 @@ func lightColors() ThemeColors {
 		TitleBarFg:     lipgloss.Color("253"),
 		StatusBarBg:    lipgloss.Color("246"),
 		StatusBarFg:    lipgloss.Color("237"),
+
+		TierGold:    lipgloss.Color("172"),
+		TierGreen:   lipgloss.Color("28"),
+		TierBlue:    lipgloss.Color("27"),
+		TierCyan:    lipgloss.Color("30"),
+		TierMagenta: lipgloss.Color("127"),
+		TierDim:     lipgloss.Color("246"),
+
+		IncludedGreen: lipgloss.Color("28"),
+		ExcludedGray:  lipgloss.Color("246"),
+		PartialYellow: lipgloss.Color("172"),
+		CursorBg:      lipgloss.Color("254"),
+		SecretRed:     lipgloss.Color("160"),
+		TokenCountDim: lipgloss.Color("244"),
 	}
 }
 

@@ -21,6 +21,7 @@ type Model struct {
 	ignorer discovery.Ignorer
 	loading map[string]bool // dirs currently being loaded
 	ready   bool
+	isDark  bool // whether the terminal has a dark background
 	logger  *slog.Logger
 }
 
@@ -65,6 +66,12 @@ func (m Model) Init() tea.Cmd {
 func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
+}
+
+// SetDark sets whether the terminal has a dark background, controlling
+// tier color selection in the view.
+func (m *Model) SetDark(isDark bool) {
+	m.isDark = isDark
 }
 
 // Root returns the root node of the tree.

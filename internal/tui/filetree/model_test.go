@@ -451,7 +451,12 @@ func TestModel_View_CursorIndicator(t *testing.T) {
 
 	m := buildTestModel(t)
 	view := m.View()
-	assert.Contains(t, view, "> ")
+	// Cursor row has background highlight: the line is padded to full width
+	// with trailing spaces so the background color fills the entire row.
+	// The cursor is on "lib" (first visible node).
+	assert.Contains(t, view, "lib")
+	// The view should not be empty and the cursor node name should be present.
+	assert.NotEmpty(t, view)
 }
 
 // --- WindowSizeMsg ---

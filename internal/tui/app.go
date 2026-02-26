@@ -223,6 +223,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.styles = NewStyles(lipgloss.HasDarkBackground(), msg.Width, msg.Height)
 		// Propagate computed panel sizes to sub-models.
 		m.fileTree.SetSize(m.styles.LeftPanelWidth-4, m.styles.ContentHeight-2)
+		m.fileTree.SetDark(lipgloss.HasDarkBackground())
 		m.statsPanel.SetSize(m.styles.RightPanelWidth-4, m.styles.ContentHeight-2)
 		return m, nil
 

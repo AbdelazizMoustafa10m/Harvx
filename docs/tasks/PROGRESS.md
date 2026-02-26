@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 88 |
+| Completed | 89 |
 | In Progress | 0 |
-| Not Started | 7 |
+| Not Started | 6 |
 
 ---
 
@@ -838,4 +838,31 @@
   - `internal/tui/app_test.go` -- Updated tests for new layout dimensions and status bar format
   - `internal/tui/teatest_helpers_test.go` -- Updated helpers to set styles on test models
   - `internal/tui/integration_test.go` -- Updated integration tests for new layout system
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-081: File Tree Visual Rendering & Tier Color Coding
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - Full lipgloss-styled file tree rendering replacing placeholder implementation
+  - Unicode tree-drawing characters (`├──`, `└──`, `│`) with parent chain walk for correct prefix generation
+  - Tri-state inclusion indicators: `[✓]` green (included), `[✗]` gray (excluded), `[◐]` yellow (partial)
+  - Tier color coding: Tier 0 gold, Tier 1 green, Tier 2 blue, Tier 3 cyan, Tier 4 magenta, Tier 5 dim gray
+  - Priority file star icon `★` and secret file shield icon `🛡` suffixes
+  - Bold directory names with expand/collapse indicators (`▸`/`▾`)
+  - Cursor row background highlighting with full-width padding
+  - Right-aligned token counts with thousands separator formatting `(1,234 tok)`
+  - Virtual scrolling (only renders viewport range) for large repos
+  - Long path truncation with ellipsis for narrow terminals
+  - Dark/light theme support via `isDark` flag on Model
+  - Extended `ThemeColors` struct with 12 new tier and file-tree color fields
+- **Files created/modified:**
+  - `internal/tui/filetree/icons.go` -- Icon and indicator constants (inclusion, directory, priority, secret, tree-drawing)
+  - `internal/tui/filetree/view.go` -- Complete rendering implementation: View, renderNode, treePrefix, renderInclusionIndicator, tierColor, formatThousands, truncateWithEllipsis
+  - `internal/tui/filetree/view_test.go` -- 24 tests: tree prefixes, virtual scrolling, indicators, icons, token counts, truncation, dark/light modes, helper functions
+  - `internal/tui/filetree/model.go` -- Added isDark field and SetDark method
+  - `internal/tui/filetree/model_test.go` -- Updated cursor indicator test for new background-highlight rendering
+  - `internal/tui/styles.go` -- Extended ThemeColors with TierGold/Green/Blue/Cyan/Magenta/Dim, IncludedGreen, ExcludedGray, PartialYellow, CursorBg, SecretRed, TokenCountDim
+  - `internal/tui/app.go` -- Added SetDark call in WindowSizeMsg handler
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
