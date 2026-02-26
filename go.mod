@@ -12,6 +12,7 @@ require (
 	github.com/knadh/koanf/v2 v2.3.2
 	github.com/modelcontextprotocol/go-sdk v1.3.1
 	github.com/pkoukk/tiktoken-go v0.1.8
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.9.0
@@ -51,7 +52,6 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect

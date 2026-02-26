@@ -24,7 +24,7 @@ LDFLAGS := -s -w \
 	-X '$(LDFLAGS_PKG).GoVersion=$(GO_VERSION)'
 
 # ─── Phony Targets ───────────────────────────────────────────────────────────
-.PHONY: all build run test test-verbose test-cover test-integration lint fmt vet tidy clean install snapshot release-snapshot release-check completions man bench bench-compare bench-update-baseline fuzz help
+.PHONY: all build run test test-verbose test-cover test-integration lint fmt vet tidy clean install snapshot release-snapshot release-check completions man bench bench-compare bench-update-baseline fuzz golden-update help
 
 .DEFAULT_GOAL := help
 
@@ -166,6 +166,10 @@ release-check: ## Validate .goreleaser.yaml configuration
 		exit 1; \
 	fi
 	goreleaser check
+
+# ─── Golden Tests ───────────────────────────────────────────────────────────
+golden-update: ## Regenerate golden test files
+	go test ./internal/golden/ -update -count=1
 
 # ─── Help ────────────────────────────────────────────────────────────────────
 help: ## Show available targets with descriptions

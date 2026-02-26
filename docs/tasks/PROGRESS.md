@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 95 |
+| Completed | 94 |
 | In Progress | 0 |
-| Not Started | 0 |
+| Not Started | 1 |
 
 ---
 
@@ -860,4 +860,28 @@
   - `testdata/fuzz/FuzzGlobPattern/` -- 2 seed corpus files (complex patterns, negation)
   - `testdata/fuzz/FuzzProfileInheritance/` -- 1 seed corpus file (deep chain)
   - `Makefile` -- Added `fuzz` target with FUZZ_TIME variable
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+
+### T-094: Golden Test Infrastructure
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - `internal/golden/` package with output normalization (timestamps, hashes, paths, timing), unified diff via `go-difflib`, and `GoldenFile` helper with `-update` flag
+  - Table-driven `TestGolden` with 5 scenarios: default-profile-markdown, default-profile-xml, redacted-markdown, token-budget-10k, monorepo-markdown
+  - Enhanced `testdata/sample-repo/` to 24 files across 8+ directories (added tsconfig.json, package.json, models/user.go, api/handler.go, api/handler_test.go, .github/workflows/ci.yml, docs/API.md)
+  - Built `testdata/monorepo/` with 3 packages (core TypeScript, api Go service, web React app), nested `.gitignore` files, shared root config (19 files)
+  - 5 golden reference files in `testdata/expected-output/` with header comments documenting generation command
+  - `make golden-update` Makefile target for regenerating golden files
+  - 10 normalize unit tests + 3 diff tests running with `go test ./...` (no build tag)
+- **Files created/modified:**
+  - `internal/golden/normalize.go` -- Output normalization for timestamps, hashes, paths, timing values
+  - `internal/golden/normalize_test.go` -- 10 table-driven normalize tests + 3 diff tests
+  - `internal/golden/helpers.go` -- GoldenFile compare/update helper, Diff unified diff, header generation
+  - `internal/golden/golden_test.go` -- TestGolden with 5 pipeline scenarios
+  - `testdata/sample-repo/{tsconfig.json,package.json,src/models/user.go,src/api/handler.go,src/api/handler_test.go,.github/workflows/ci.yml,docs/API.md}` -- Enhanced sample repo
+  - `testdata/monorepo/` -- 19-file multi-package repository (core/api/web)
+  - `testdata/expected-output/{default-profile-markdown.md,default-profile-xml.xml,redacted-markdown.md,token-budget-10k.md,monorepo-markdown.md}` -- Golden reference files
+  - `Makefile` -- Added `golden-update` target
+  - `go.mod` -- Promoted `pmezard/go-difflib` from indirect to direct dependency
 - **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
