@@ -647,255 +647,81 @@
 
 ---
 
-### T-079: Bubble Tea Application Scaffold & Elm Architecture
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - Root Bubble Tea `Model` with `Init`/`Update`/`View` implementing Elm architecture
-  - Sub-models for file tree, stats panel, profile selector, and help overlay (stubs for future tasks)
-  - Message types for inter-component TUI communication (`FileToggledMsg`, `TokenCountUpdatedMsg`, `ProfileChangedMsg`, `GenerateRequestedMsg`, `ErrorMsg`, `WindowSizeMsg`)
-  - Key binding definitions using `charmbracelet/bubbles/key` with `KeyMap` implementing `help.KeyMap`
-  - `--interactive`/`-i` CLI flag with smart default detection (auto-launch when no `harvx.toml` and TTY attached)
-  - TUI launch logic with `tea.WithAltScreen()` and `tea.WithMouseCellMotion()`
-  - Global key handling: `q`/`Esc` quit, `?` help toggle, `Enter` generate, `Tab` profile switch
-  - Window resize propagation to all sub-models
-- **Files created/modified:**
-  - `internal/tui/messages.go` -- TUI message types for inter-component communication
-  - `internal/tui/keys.go` -- KeyMap with default key bindings and help.KeyMap interface
-  - `internal/tui/app.go` -- Root Bubble Tea model with Elm architecture, sub-models, and multi-panel layout
-  - `internal/tui/app_test.go` -- 22 unit tests for constructor, key handling, message routing, view rendering
-  - `internal/cli/interactive.go` -- TUI launch logic and smart default detection
-  - `internal/cli/interactive_test.go` -- 8 tests for smart default and config tree detection
-  - `internal/cli/root.go` -- Wired --interactive flag into root RunE with smart default
-  - `internal/config/flags.go` -- Added Interactive bool field and --interactive/-i flag binding
-  - `internal/cli/generate_test.go` -- Updated test to pass --interactive=false for headless mode
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-080: File Tree Data Model & Keyboard Navigation
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `internal/tui/filetree/` package with Node tree data model, Model implementing Bubble Tea sub-model, keyboard navigation, viewport scrolling, lazy directory loading, and placeholder view rendering
-  - `Node` struct with tri-state inclusion (`Included`/`Excluded`/`Partial`), recursive toggle propagation, `propagateUp` ancestor recalculation, `VisibleNodes`, `FindByPath`, `IncludedFiles`, `SortChildren` (dirs first, then alphabetical)
-  - `Model` with cursor management, scroll offset, lazy directory loading via `DirLoadedMsg`, and integration with `discovery.Ignorer` for filtering and `discovery.IsBinary` for binary detection
-  - Keyboard navigation: `up/k`, `down/j`, `right/l` (expand), `left/h` (collapse/jump to parent), `space` (toggle), `enter` (expand/collapse), `pgup`, `pgdown`, `home/g`, `end/G`
-  - Lazy loading: `loadTopLevelCmd` scans root on `Init()`, `loadDirCmd` scans subdirectories on first expand, both filter via `Ignorer` and skip binary files
-  - `internal/tui/tuimsg/` package for shared message types to avoid circular imports between `tui` and `filetree` packages
-  - Updated root model (`app.go`) to replace stub `fileTreeModel` with real `filetree.Model`, forward key events and `DirLoadedMsg` to filetree, and init with file tree scan command
-  - Changed Generate key binding from `enter` to `ctrl+g` to avoid conflict with filetree's Enter expand/collapse behavior
-- **Files created:**
-  - `internal/tui/filetree/node.go` -- Node type, InclusionState, tri-state toggle/propagation, tree traversal helpers
-  - `internal/tui/filetree/model.go` -- File tree Bubble Tea sub-model with cursor, scroll, lazy loading state
-  - `internal/tui/filetree/update.go` -- Key event handling, directory expand/collapse, toggle, DirLoadedMsg processing
-  - `internal/tui/filetree/view.go` -- Placeholder text rendering with indentation, inclusion indicators, cursor
-  - `internal/tui/filetree/lazy.go` -- Lazy directory scanning with ignore/binary filtering, DirLoadedMsg type
-  - `internal/tui/filetree/node_test.go` -- 16 tests for Node operations, tri-state propagation, tree traversal
-  - `internal/tui/filetree/model_test.go` -- 26 tests for navigation, expand/collapse, toggle, DirLoaded, scroll, view
-  - `internal/tui/filetree/lazy_test.go` -- 11 tests for directory scanning, filtering, binary exclusion, lazy loading commands
-  - `internal/tui/tuimsg/messages.go` -- Shared message types (FileToggledMsg, TokenCountUpdatedMsg, etc.)
-- **Files modified:**
-  - `internal/tui/app.go` -- Replaced stub fileTreeModel with filetree.Model; added Options struct; forwarded key events and DirLoadedMsg
-  - `internal/tui/messages.go` -- Changed to type aliases re-exporting from tuimsg package
-  - `internal/tui/keys.go` -- Changed Generate binding from enter to ctrl+g
-  - `internal/tui/app_test.go` -- Updated tests for new filetree integration, ctrl+g binding, and removed old stub test
-- **Verification:** `go build` pass  `go vet` pass  `go test` pass
-
-### T-082: Stats Panel with Live Token Counting & Budget Bar
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `internal/tui/stats/` package implementing the real-time statistics sidebar panel for the TUI
-  - `Model` implementing `tea.Model` with Init/Update/View lifecycle
-  - Live token count display with thousands separator: `Tokens: 89,420 / 200,000`
-  - Visual budget utilization bar using block characters with color transitions: green (<70%), yellow (70-90%), red (>90%)
-  - File count display: `Files: 342 / 390 selected`
-  - Estimated output size from token count: `Size: ~2.4 MB`
-  - Compression savings display (when enabled): `Compressed: 52% reduction`
-  - Secrets/redaction count with red alert styling when > 0
-  - Tier breakdown table (T0-T5) showing file counts and token totals per tier
-  - Profile info header: `Profile: finvault | Target: claude`
-  - Tokenizer info: `Tokenizer: o200k_base`
-  - Debounced token recalculation at 200ms using generation counter pattern to prevent stale ticks
-  - "calculating..." indicator while recalculation is in progress
-  - Fixed-width configurable panel (default 35 chars) with lipgloss container width capping
-  - Async tree walking via `tea.Cmd` to avoid blocking the Update loop
-  - Integrated with root model: forwarding FileToggledMsg, ProfileChangedMsg, TokenCountUpdatedMsg, and stats-internal messages via default case
-- **Files created:**
-  - `internal/tui/stats/model.go` -- Stats panel Model (tea.Model), Options, New constructor, debounce handlers, accessors
-  - `internal/tui/stats/view.go` -- View rendering: header, budget bar, file count, size, compression, secrets, tier breakdown, tokenizer info
-  - `internal/tui/stats/calculate.go` -- Debounce scheduling, async token counting via tree walking, recalcTickMsg/tokenCountResult types
-  - `internal/tui/stats/format.go` -- FormatThousands, FormatSize, EstimateOutputSize, FormatPercentage, Truncate helpers
-  - `internal/tui/stats/model_test.go` -- 18 tests: Init, Update for all message types, debounce generation, stale tick, token count result, accessors, View content
-  - `internal/tui/stats/view_test.go` -- 7 tests: budget bar rendering, color transitions, narrow bar, block characters, tier breakdown, secrets alert, narrow panel
-  - `internal/tui/stats/calculate_test.go` -- 8 tests: walkTree with various tree configurations, secrets counting, nested dirs, multiple tiers, scheduleDebounce
-  - `internal/tui/stats/format_test.go` -- 5 test groups (table-driven): FormatThousands, FormatSize, EstimateOutputSize, FormatPercentage, Truncate
-- **Files modified:**
-  - `internal/tui/app.go` -- Replaced statsPanelModel stub with stats.Model; updated New constructor to create stats.New with config options; forwarded FileToggledMsg/ProfileChangedMsg/TokenCountUpdatedMsg to stats; added default case for stats-internal messages
-  - `internal/tui/app_test.go` -- Updated tests to use stats.Model accessors instead of unexported fields; added stats import; updated FileToggledMsg test to expect debounce cmd
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-083: Profile Selector & Action Keybindings
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `internal/tui/profile/` package with `Model` implementing `tea.Model` for Tab/Shift+Tab profile cycling with wraparound
-  - `RenderHeader` styled profile display with distinct purple background, target label, and index indicator (e.g., `Profile: finvault | Target: claude (2/3)`)
-  - Action keybindings in root model Update: Enter (generate), p (preview), s (save-as-profile), e (export to clipboard), q/Esc (quit)
-  - Overlay system (`overlayModel`) with three states: generating (spinner), previewing (stats summary), saving profile (text input)
-  - Toast message component with auto-dismiss after 2 seconds using generation-counter pattern to prevent stale dismissals
-  - Clipboard abstraction via `Clipboarder` interface with `noopClipboard` default and `ErrClipboardUnavailable` sentinel
-  - TOML serialization (`serializeSelectionToTOML`, `appendProfileToFile`) for save-as-profile flow with sorted deterministic output
-  - Full action handler chain: generate runs pipeline in `tea.Cmd` goroutine, preview shows overlay with tier breakdown, save prompts for name then writes TOML, export writes selected paths to clipboard
-  - Status bar at bottom with profile name and key hints; toast replaces status bar when visible
-  - `go.mod`/`go.sum` updated with `atotto/clipboard` transitive dependency from `bubbles/textinput`
-- **Files created/modified:**
-  - `internal/tui/profile/model.go` -- Profile selector Model with New, Next, Prev, Current, Count accessors
-  - `internal/tui/profile/view.go` -- RenderHeader with lipgloss styling for profile name, target, index
-  - `internal/tui/profile/model_test.go` -- 13 tests for constructor, cycling, Update, RenderHeader
-  - `internal/tui/overlay.go` -- Overlay model with spinner, text input, preview states and centered rendering
-  - `internal/tui/toast.go` -- Toast model with show/dismiss/view and 2s auto-dismiss
-  - `internal/tui/actions.go` -- Action handlers for generate, preview, save, export, clipboard
-  - `internal/tui/actions_test.go` -- 10 tests for all action handlers
-  - `internal/tui/clipboard.go` -- Clipboarder interface, noopClipboard, ErrClipboardUnavailable
-  - `internal/tui/serialize.go` -- TOML serialization and file append for save-as-profile
-  - `internal/tui/serialize_test.go` -- 6 tests for serialization and file operations
-  - `internal/tui/keys.go` -- Added Preview, Save, Export, ProfileTab, ProfileBackTab bindings
-  - `internal/tui/app.go` -- Wired profile selector, overlay, toast, all action handlers, status bar
-  - `internal/tui/app_test.go` -- 30+ tests covering actions, overlays, toasts, profile cycling
-  - `go.mod` -- Added atotto/clipboard transitive dependency
-  - `go.sum` -- Updated checksums
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-086: TUI State Serialization to Profile TOML & Smart Default Launch
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - `SerializeToProfile` function converting TUI file selection state into valid TOML profile with `extends = "default"`, `priority_files`, `include`/`ignore` patterns, `relevance` tier assignments, and preserved settings (format, max_tokens, tokenizer, target, compression, redaction)
-  - Pattern minimization algorithm (`MinimizePatterns`): bottom-up tree walk that emits `dir/**` globs when all children are included/excluded, and individual file entries for mixed directories
-  - `SaveProfileToFile` for writing/appending serialized profiles to `harvx.toml`
-  - Enhanced smart default detection: `IsNoArgsInvocation` checks `os.Args` for bare binary invocation; `ShouldLaunchInteractive` now requires no-args + TTY + no config file
-  - One-line hint printed to stderr on smart-default TUI launch
-  - `buildRelevanceTiers` converting tier-to-files mapping into TOML `tier_0` through `tier_5` arrays
-  - `HasManualIncludes` method for detecting non-glob include patterns
-- **Files created/modified:**
-  - `internal/tui/patterns.go` -- Pattern minimization algorithm with MinimizedPatterns, MinimizePatterns, collectTierInfo
-  - `internal/tui/patterns_test.go` -- 14 tests for pattern minimization including dir globs, mixed dirs, nested structures, determinism
-  - `internal/tui/serialize.go` -- Added SerializeToProfile, buildProfileData, buildRelevanceTiers, SaveProfileToFile
-  - `internal/tui/serialize_test.go` -- Enhanced with 18+ new tests for full serialization, round-trip TOML parsing, tier mapping
-  - `internal/cli/interactive.go` -- Added smartDefaultHint, IsNoArgsInvocation, osArgsProvider; enhanced ShouldLaunchInteractive; added smartDefault hint to runInteractive
-  - `internal/cli/interactive_test.go` -- Added tests for no-args invocation, smart default with args
-  - `internal/cli/root.go` -- Updated RunE to pass smartDefault bool to runInteractive
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-087: TUI Integration Testing & Pipeline Wiring
-
-- **Status:** Completed
-- **Date:** 2026-02-25
-- **What was built:**
-  - Comprehensive integration test suite (20 scenarios) exercising full TUI lifecycle: navigation, file toggling, profile switching, overlay flows, clipboard export, help overlay, window resize, error handling, goroutine leak detection
-  - Test infrastructure helpers (`teatest_helpers_test.go`) for programmatic TUI testing: `sendKey`, `sendMsg`, `drainCmds`, `buildTestTree`, `mustNewModelWithTree`, `assertViewContains`
-  - `NewWithRoot` constructor in filetree package for injecting pre-built tree structures in tests without filesystem access
-  - End-to-end flow verification: launch → navigate → toggle → stats update → generate/preview/save/export → quit
-  - Error condition testing: nil tree navigation, permission errors, clipboard unavailable, pipeline generation errors
-  - Goroutine leak detection with `runtime.NumGoroutine()` before/after comparison
-- **Files created/modified:**
-  - `internal/tui/integration_test.go` -- 20 integration test scenarios covering all TUI flows
-  - `internal/tui/teatest_helpers_test.go` -- Test helpers: sendKey, sendMsg, drainCmds, buildTestTree, mustNewModelWithTree, assertViewContains
-  - `internal/tui/filetree/model.go` -- Added NewWithRoot constructor for test tree injection
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
-
-### T-084: Lipgloss Styling, Responsive Layout & Theme Support
+### Phase 9: Interactive TUI (T-079 to T-087)
 
 - **Status:** Completed
 - **Date:** 2026-02-26
-- **What was built:**
-  - Complete `Styles` struct with `ThemeColors`, computed lipgloss styles, and responsive layout dimensions
-  - `NewStyles(isDark, width, height)` constructor creating styles adapted to terminal theme and size
-  - `ComputeLayout` with four modes: LayoutFull (>=100), LayoutCompressed (60-99), LayoutSinglePanel (40-59), LayoutTooSmall (<40 or <12)
-  - Dark and light theme color palettes using ANSI 256 codes for broad terminal compatibility
-  - `RenderLayout` composing title bar, multi-panel content, and status bar via `lipgloss.JoinVertical`/`JoinHorizontal`
-  - `RenderPanelWithBorder` with inline titles in top border using rounded Unicode box-drawing characters (╭─ Files ─╮)
-  - `RenderStatusBar` with profile name accent, key hints, and progressive truncation for narrow terminals
-  - `RenderTitleBar` with "Harvx" + version left, directory path right (left-truncated with "..." if too long)
-  - `RenderTooSmall` centered warning message when terminal is below minimum (40×12)
-  - Auto-detection of light/dark terminal via `lipgloss.HasDarkBackground()`
-  - Active panel border (brighter accent) vs inactive panel border (dimmer)
-  - Integrated layout system into root `Model.View()` replacing inline layout code
-  - 20 new unit tests for styles and layout plus updated existing tests
-- **Files created/modified:**
-  - `internal/tui/styles.go` -- Complete style system: LayoutMode, ThemeColors, Styles, ComputeLayout, NewStyles
-  - `internal/tui/layout.go` -- Responsive layout: LayoutParams, RenderLayout, RenderPanelWithBorder, RenderTooSmall
-  - `internal/tui/statusbar.go` -- RenderStatusBar with key hints and progressive truncation
-  - `internal/tui/titlebar.go` -- RenderTitleBar with version and directory path
-  - `internal/tui/styles_test.go` -- 7 tests: ComputeLayout boundaries, dark/light themes, panel widths, resize
-  - `internal/tui/layout_test.go` -- 13 tests: panel borders, inline titles, too-small, single/two-panel, bars, snapshot
-  - `internal/tui/app.go` -- Integrated Styles into Model, replaced View() with layout system, added Styles() accessor
-  - `internal/tui/app_test.go` -- Updated tests for new layout dimensions and status bar format
-  - `internal/tui/teatest_helpers_test.go` -- Updated helpers to set styles on test models
-  - `internal/tui/integration_test.go` -- Updated integration tests for new layout system
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+- **Tasks Completed:** 9 tasks
 
-### T-081: File Tree Visual Rendering & Tier Color Coding
+#### Features Implemented
 
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - Full lipgloss-styled file tree rendering replacing placeholder implementation
-  - Unicode tree-drawing characters (`├──`, `└──`, `│`) with parent chain walk for correct prefix generation
-  - Tri-state inclusion indicators: `[✓]` green (included), `[✗]` gray (excluded), `[◐]` yellow (partial)
-  - Tier color coding: Tier 0 gold, Tier 1 green, Tier 2 blue, Tier 3 cyan, Tier 4 magenta, Tier 5 dim gray
-  - Priority file star icon `★` and secret file shield icon `🛡` suffixes
-  - Bold directory names with expand/collapse indicators (`▸`/`▾`)
-  - Cursor row background highlighting with full-width padding
-  - Right-aligned token counts with thousands separator formatting `(1,234 tok)`
-  - Virtual scrolling (only renders viewport range) for large repos
-  - Long path truncation with ellipsis for narrow terminals
-  - Dark/light theme support via `isDark` flag on Model
-  - Extended `ThemeColors` struct with 12 new tier and file-tree color fields
-- **Files created/modified:**
-  - `internal/tui/filetree/icons.go` -- Icon and indicator constants (inclusion, directory, priority, secret, tree-drawing)
-  - `internal/tui/filetree/view.go` -- Complete rendering implementation: View, renderNode, treePrefix, renderInclusionIndicator, tierColor, formatThousands, truncateWithEllipsis
-  - `internal/tui/filetree/view_test.go` -- 24 tests: tree prefixes, virtual scrolling, indicators, icons, token counts, truncation, dark/light modes, helper functions
-  - `internal/tui/filetree/model.go` -- Added isDark field and SetDark method
-  - `internal/tui/filetree/model_test.go` -- Updated cursor indicator test for new background-highlight rendering
-  - `internal/tui/styles.go` -- Extended ThemeColors with TierGold/Green/Blue/Cyan/Magenta/Dim, IncludedGreen, ExcludedGray, PartialYellow, CursorBg, SecretRed, TokenCountDim
-  - `internal/tui/app.go` -- Added SetDark call in WindowSizeMsg handler
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Elm Architecture Scaffold | T-079 | Root `Model` with `Init`/`Update`/`View`, sub-model stubs, message types, `--interactive`/`-i` flag, `tea.WithAltScreen()` launch, global key handling |
+| File Tree Data Model | T-080 | `Node` with tri-state `InclusionState`, recursive toggle propagation, `propagateUp`, vim-key navigation, lazy directory loading via `DirLoadedMsg`, ignore/binary filtering |
+| File Tree Visual Rendering | T-081 | Lipgloss-styled Unicode tree chars (`├──`/`└──`/`│`), tier color coding (T0–T5), inclusion indicators (`[✓]`/`[✗]`/`[◐]`), virtual scrolling, right-aligned token counts, priority star and secret shield icons |
+| Stats Panel | T-082 | Live token count with thousands separator, budget utilization bar (green/yellow/red block chars), tier breakdown table, async debounced recalculation (generation-counter pattern), estimated output size, secrets alert |
+| Profile Selector & Actions | T-083 | Tab/Shift+Tab cycling with wraparound, `RenderHeader` with lipgloss styling, generate/preview/save/export keybindings, spinner/text-input/preview overlay system, 2s auto-dismiss toast, `Clipboarder` interface, TOML `serializeSelectionToTOML` |
+| Styling & Responsive Layout | T-084 | `Styles`/`ThemeColors` structs, `ComputeLayout` with four modes (Full ≥100, Compressed 60–99, SinglePanel 40–59, TooSmall <40\|<12), rounded Unicode panel borders with inline titles, `lipgloss.HasDarkBackground()` auto-detection |
+| Search, Filter & Help Overlay | T-085 | `/` fuzzy search (substring + subsequence fallback) with live highlighting, tier view cycling (`t`), select-all/deselect-all on visible nodes (`a`/`n`), `?` help overlay with 5 categorized sections, `Ctrl+L` clear filter |
+| State Serialization | T-086 | `SerializeToProfile` converting TUI state to TOML profile, `MinimizePatterns` bottom-up tree walk emitting `dir/**` globs, `SaveProfileToFile`, `IsNoArgsInvocation` smart-default detection |
+| Integration Testing | T-087 | 20-scenario integration test suite, `sendKey`/`sendMsg`/`drainCmds` helpers, goroutine leak detection, `NewWithRoot` for filesystem-free tree injection |
 
-### T-085: Search/Filter, Tier Views & Help Overlay
+#### Key Technical Decisions
 
-- **Status:** Completed
-- **Date:** 2026-02-26
-- **What was built:**
-  - Search component (`/` key) with `bubbles/textinput`, case-insensitive fuzzy matching (substring + subsequence fallback), match character highlighting, and live filtering as user types
-  - Filter predicates in filetree: `FilterState` with `SearchQuery` and `TierFilter`, `FilterNodes()` applied during `refreshVisible()`, directories included only if they have matching descendants
-  - Tier view cycling (`t` key): All → Tier 0 → Tier 1 → ... → Tier 5 → All, with panel header indicator
-  - Select all/none (`a`/`n` keys) operating on currently visible (filtered) nodes only, with parent state propagation
-  - Help overlay (`?` key) with categorized keybindings (Navigation, Selection, Filtering, Profiles, Actions) in a centered bordered box with dark/light theme support
-  - Dynamic panel title showing active filter indicators ("Files | Tier: 0 (critical) | Filter: main")
-  - `Ctrl+L` and second `/` press clear the current filter
-  - Search mode intercepts all keys while active (Enter keeps filter, Esc clears it)
-- **Files created/modified:**
-  - `internal/tui/search/model.go` -- Search model with text input, activate/deactivate, FilterAppliedMsg/FilterClearedMsg
-  - `internal/tui/search/fuzzy.go` -- Match (substring + subsequence), MatchSubstring helpers
-  - `internal/tui/search/view.go` -- HighlightMatches, RenderFilterIndicator
-  - `internal/tui/search/model_test.go` -- 12 tests for search model lifecycle
-  - `internal/tui/search/fuzzy_test.go` -- 14 tests for fuzzy matching
-  - `internal/tui/filetree/filter.go` -- FilterState, FilterNodes, SelectAll, DeselectAll, propagateAllParents
-  - `internal/tui/filetree/filter_test.go` -- 14 tests for filter predicates and selection
-  - `internal/tui/help/model.go` -- Help overlay Model with Toggle, Update
-  - `internal/tui/help/view.go` -- View rendering with 5 categorized sections, dark/light theme
-  - `internal/tui/help/model_test.go` -- 6 tests for help overlay toggle and dismiss
-  - `internal/tui/keys.go` -- Added Search, TierView, SelectAll, SelectNone, ClearFilter bindings
-  - `internal/tui/filetree/model.go` -- Added filter field, SetSearchFilter, CycleTierFilter, ClearAllFilters, SelectAllVisible, DeselectAllVisible
-  - `internal/tui/layout.go` -- Added FileTreeTitle to LayoutParams for dynamic panel title
-  - `internal/tui/statusbar.go` -- Added /, t, a/n key hints
-  - `internal/tui/app.go` -- Replaced helpOverlayModel with help.Model, added search.Model, wired all new keys with priority routing
-  - `internal/tui/app_test.go` -- Updated help overlay tests for new help.Model
-  - `internal/tui/integration_test.go` -- Updated help text assertion
-- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
+1. **`tuimsg` package** -- Shared message types (`FileToggledMsg`, `TokenCountUpdatedMsg`, etc.) prevent circular imports between `tui` and `filetree` packages
+2. **Generation-counter debounce** -- Stats panel increments a generation counter on each schedule; stale `recalcTickMsg` values with old counters are dropped, preventing ghost updates
+3. **`ctrl+g` for Generate** -- Frees `Enter` for filetree expand/collapse; avoids key conflict at the root Update layer
+4. **`Clipboarder` interface** -- `noopClipboard` default avoids hard CGO dependency; real clipboard injected only when available
+5. **Virtual scrolling** -- File tree renders only the viewport slice of `VisibleNodes`, keeping large repos responsive
+6. **`NewWithRoot` constructor** -- Injects a pre-built `Node` tree into `filetree.Model` in tests, eliminating all filesystem I/O in unit and integration tests
+
+#### Key Files Reference
+
+| Purpose | Location |
+| ------- | -------- |
+| Root Bubble Tea model, multi-panel layout wiring | `internal/tui/app.go` |
+| All key bindings (`KeyMap`, `help.KeyMap`) | `internal/tui/keys.go` |
+| Message type aliases (re-exports from `tuimsg`) | `internal/tui/messages.go` |
+| Generate/preview/save/export action handlers | `internal/tui/actions.go` |
+| Spinner/text-input/preview overlay model | `internal/tui/overlay.go` |
+| 2s auto-dismiss toast component | `internal/tui/toast.go` |
+| `Clipboarder` interface and `noopClipboard` | `internal/tui/clipboard.go` |
+| `SerializeToProfile`, `SaveProfileToFile` | `internal/tui/serialize.go` |
+| `MinimizePatterns` bottom-up glob algorithm | `internal/tui/patterns.go` |
+| Shared message types (`FileToggledMsg`, etc.) | `internal/tui/tuimsg/messages.go` |
+| `LayoutMode`, `ThemeColors`, `Styles`, `ComputeLayout`, `NewStyles` | `internal/tui/styles.go` |
+| `RenderLayout`, `RenderPanelWithBorder`, `RenderTooSmall` | `internal/tui/layout.go` |
+| `RenderStatusBar` with progressive truncation | `internal/tui/statusbar.go` |
+| `RenderTitleBar` with version and path | `internal/tui/titlebar.go` |
+| `Node` type, tri-state toggle, tree traversal | `internal/tui/filetree/node.go` |
+| File tree sub-model, cursor, scroll, filters | `internal/tui/filetree/model.go` |
+| Key event handling, expand/collapse, toggle | `internal/tui/filetree/update.go` |
+| Lipgloss rendering, Unicode tree chars, tier colors | `internal/tui/filetree/view.go` |
+| Lazy directory scanning, `DirLoadedMsg` | `internal/tui/filetree/lazy.go` |
+| `FilterState`, `FilterNodes`, `SelectAll`, `DeselectAll` | `internal/tui/filetree/filter.go` |
+| Icon/indicator constants | `internal/tui/filetree/icons.go` |
+| Stats `Model`, debounce handlers, accessors | `internal/tui/stats/model.go` |
+| Budget bar, tier breakdown, secrets alert rendering | `internal/tui/stats/view.go` |
+| Async token counting, `recalcTickMsg` | `internal/tui/stats/calculate.go` |
+| `FormatThousands`, `FormatSize`, `EstimateOutputSize` | `internal/tui/stats/format.go` |
+| Profile selector with `Next`/`Prev`/`Current` | `internal/tui/profile/model.go` |
+| `RenderHeader` with lipgloss accent styling | `internal/tui/profile/view.go` |
+| Search model, `FilterAppliedMsg`/`FilterClearedMsg` | `internal/tui/search/model.go` |
+| Fuzzy matching (substring + subsequence fallback) | `internal/tui/search/fuzzy.go` |
+| `HighlightMatches`, `RenderFilterIndicator` | `internal/tui/search/view.go` |
+| Help overlay `Model` with `Toggle` | `internal/tui/help/model.go` |
+| Help view with 5 categorized keybinding sections | `internal/tui/help/view.go` |
+| TUI launch logic, smart default detection | `internal/cli/interactive.go` |
+| `Interactive` bool field, `--interactive`/`-i` flag | `internal/config/flags.go` |
+| 20-scenario integration test suite | `internal/tui/integration_test.go` |
+| `sendKey`, `sendMsg`, `drainCmds`, `buildTestTree` helpers | `internal/tui/teatest_helpers_test.go` |
+
+#### Verification
+
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+
+---
+
