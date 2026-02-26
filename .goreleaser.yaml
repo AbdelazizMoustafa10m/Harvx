@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# GoReleaser v2 configuration for Harvx
+# Docs: https://goreleaser.com
+
+version: 2
+
+project_name: harvx
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+    # Generate shell completion files for inclusion in archives.
+    - mkdir -p completions
+    - sh -c "go run ./cmd/harvx completion bash > completions/harvx.bash"
+    - sh -c "go run ./cmd/harvx completion zsh > completions/harvx.zsh"
+    - sh -c "go run ./cmd/harvx completion fish > completions/harvx.fish"
+
+builds:
+  - id: harvx
+    main: ./cmd/harvx
+    binary: harvx
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/harvx/harvx/internal/buildinfo.Version={{.Version}}
+      - -X github.com/harvx/harvx/internal/buildinfo.Commit={{.Commit}}
+      - -X github.com/harvx/harvx/internal/buildinfo.Date={{.Date}}
+      - -X 'github.com/harvx/harvx/internal/buildinfo.GoVersion={{.Env.GOVERSION}}'
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - completions/*
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+checksum:
+  name_template: "{{ .ProjectName }}_checksums.txt"
+  algorithm: sha256
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+
+sboms:
+  - artifacts: archive
+    cmd: syft
+    args: ["${artifact}", "--output", "spdx-json=${document}"]
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: harvx
+    name: harvx
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"

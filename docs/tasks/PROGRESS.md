@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 90 |
+| Completed | 91 |
 | In Progress | 0 |
-| Not Started | 5 |
+| Not Started | 4 |
 
 ---
 
@@ -724,4 +724,22 @@
 - `go test ./...` pass
 
 ---
+
+### T-088: GoReleaser Configuration with Cosign Signing & Syft SBOM
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **What was built:**
+  - GoReleaser v2 configuration with 5 cross-platform build targets (darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64)
+  - Cosign keyless signing via Sigstore for checksum file authenticity
+  - Syft SBOM generation in SPDX JSON format for each archive
+  - Shell completion file generation (bash, zsh, fish) included in archives
+  - SHA-256 checksum file for all release archives
+  - Makefile targets for local snapshot builds and config validation
+  - Security documentation with verification instructions
+- **Files created/modified:**
+  - `.goreleaser.yaml` -- Complete GoReleaser v2 configuration with builds, archives, signing, SBOM
+  - `Makefile` -- Added `release-snapshot` and `release-check` targets
+  - `docs/SECURITY.md` -- Verification instructions for cosign, checksums, and SBOM
+- **Verification:** `go build` ✓  `go vet` ✓  `go test` ✓
 

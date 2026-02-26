@@ -24,7 +24,7 @@ LDFLAGS := -s -w \
 	-X '$(LDFLAGS_PKG).GoVersion=$(GO_VERSION)'
 
 # ─── Phony Targets ───────────────────────────────────────────────────────────
-.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot help
+.PHONY: all build run test test-verbose test-cover lint fmt vet tidy clean install snapshot release-snapshot release-check help
 
 .DEFAULT_GOAL := help
 
@@ -96,6 +96,20 @@ snapshot: ## GoReleaser snapshot build (safe: no publish)
 		exit 1; \
 	fi
 	goreleaser release --snapshot --clean
+
+release-snapshot: ## GoReleaser snapshot build with all 5 platform binaries
+	@if ! command -v goreleaser >/dev/null 2>&1; then \
+		echo "goreleaser not installed. See: https://goreleaser.com/install/"; \
+		exit 1; \
+	fi
+	goreleaser build --snapshot --clean
+
+release-check: ## Validate .goreleaser.yaml configuration
+	@if ! command -v goreleaser >/dev/null 2>&1; then \
+		echo "goreleaser not installed. See: https://goreleaser.com/install/"; \
+		exit 1; \
+	fi
+	goreleaser check
 
 # ─── Help ────────────────────────────────────────────────────────────────────
 help: ## Show available targets with descriptions
