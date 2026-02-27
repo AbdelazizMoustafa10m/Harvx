@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 61 |
+| Completed | 68 |
 | In Progress | 0 |
-| Not Started | 34 |
+| Not Started | 27 |
 
 ---
 
@@ -480,6 +480,70 @@
 | `--split` and `--output-metadata` CLI flag registration | `internal/config/flags.go` |
 | Golden test fixture files | `testdata/golden-fixtures/` |
 | Golden test reference outputs | `internal/output/testdata/golden/` |
+
+#### Verification
+
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+
+---
+
+### Phase 7: State & Diff (T-059 to T-065)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **Tasks Completed:** 7 tasks
+
+#### Features Implemented
+
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| State snapshot types | T-059 | `StateSnapshot` and `FileState` structs with deterministic JSON serialization, schema version validation, and `ErrUnsupportedVersion` sentinel |
+| Content hashing | T-060 | `Hasher` interface and `XXH3Hasher` implementation via `zeebo/xxh3`; `HashFile` streaming reader and `HashFileDescriptors` batch helper |
+| State cache persistence | T-061 | `StateCache` with atomic read/write/clear via `os.CreateTemp`+`os.Rename`; profile name sanitization; `ErrBranchMismatch`, `ErrNoState`, `ErrInvalidVersion` sentinels |
+| State comparison engine | T-062 | `CompareStates` O(n) two-pass algorithm producing `DiffResult` with sorted `Added`/`Modified`/`Deleted` slices; nil-safe; `HasChanges`, `TotalChanged`, `Summary` helpers |
+| Git-aware diffing | T-063 | `GitDiffer` with `GetChangedFiles`, `GetChangedFilesSince`, `BuildDiffResultFromGit`; `parseNameStatus` for `git diff --name-status`; `ErrGitNotFound`, `ErrNotGitRepo`, `ErrInvalidRef` sentinels |
+| `harvx diff` subcommand | T-064 | Cobra subcommand with `--since`/`--base`/`--head` flags; `DetermineDiffMode` mutual-exclusion validation; `RunDiff` dispatcher; `FormatChangeSummary`; `--diff-only` and `--profile` persistent root flags |
+| Cache subcommands & change summary | T-065 | `harvx cache clear` and `harvx cache show` (table/JSON); `RenderChangeSummary` in Markdown and XML; `NewDiffSummaryData` converter; `--clear-cache` wired in `PersistentPreRunE` |
+
+#### Key Technical Decisions
+
+1. **Deterministic JSON via sorted map keys** -- `StateSnapshot.Files` is a `map[string]FileState`; custom marshaler sorts keys before encoding to guarantee byte-identical output across runs
+2. **Atomic cache writes via rename** -- `os.CreateTemp` + `os.Rename` prevents torn reads on crash; Windows fallback handles cross-device rename errors
+3. **O(n) two-pass comparison** -- `CompareStates` uses hash-map lookups rather than nested loops; verified sub-millisecond on 10,000-file snapshots
+4. **Git CLI over libgit2** -- `exec.CommandContext` with `context.Context` keeps CGO disabled and allows cancellation; no C dependency
+5. **Three diff modes** -- cache-based, `--since <ref>`, and `--base/--head` PR review; `DetermineDiffMode` validates mutual exclusion at parse time
+
+#### Key Files Reference
+
+| Purpose | Location |
+| ------- | -------- |
+| StateSnapshot and FileState types, JSON serialization | `internal/diff/state.go` |
+| StateSnapshot unit tests and golden fixture validation | `internal/diff/state_test.go` |
+| Hasher interface | `internal/diff/hasher.go` |
+| XXH3Hasher, HashFile, HashFileDescriptors | `internal/diff/xxh3.go` |
+| XXH3 unit tests and benchmarks | `internal/diff/xxh3_test.go` |
+| Sentinel errors (all diff package errors) | `internal/diff/errors.go` |
+| StateCache atomic read/write/clear | `internal/diff/cache.go` |
+| StateCache unit and concurrency tests | `internal/diff/cache_test.go` |
+| CompareStates and DiffResult | `internal/diff/compare.go` |
+| Comparison unit tests and benchmark | `internal/diff/compare_test.go` |
+| GitDiffer, parseNameStatus, BuildDiffResultFromGit | `internal/diff/git.go` |
+| Git integration tests with real repos | `internal/diff/git_test.go` |
+| DiffMode, DiffOptions, RunDiff, FormatChangeSummary, walkDir | `internal/diff/diff.go` |
+| Diff orchestration unit and integration tests | `internal/diff/diff_test.go` |
+| `harvx diff` Cobra subcommand | `internal/cli/diff.go` |
+| diff CLI tests | `internal/cli/diff_test.go` |
+| `harvx cache` / `cache clear` / `cache show` Cobra commands | `internal/cli/cache.go` |
+| Cache subcommand tests | `internal/cli/cache_test.go` |
+| Root command with --clear-cache PersistentPreRunE | `internal/cli/root.go` |
+| DiffOnly and Profile fields, --diff-only / --profile flags | `internal/config/flags.go` |
+| RenderChangeSummary (Markdown/XML), NewDiffSummaryData | `internal/output/change_summary.go` |
+| Change summary rendering tests | `internal/output/change_summary_test.go` |
+| DiffSummaryData with Unchanged field | `internal/output/renderer.go` |
+| Golden fixture: populated snapshot | `testdata/state/valid_snapshot.json` |
+| Golden fixture: empty snapshot | `testdata/state/empty_snapshot.json` |
 
 #### Verification
 

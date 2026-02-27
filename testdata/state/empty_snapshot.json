@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "profile_name": "empty",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "git_branch": "",
+  "git_head_sha": "",
+  "root_dir": "/tmp/empty",
+  "files": {}
+}
