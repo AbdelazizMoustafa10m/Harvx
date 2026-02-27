@@ -110,7 +110,8 @@ func TestGenerateRunCallsPipeline(t *testing.T) {
 
 func TestRootNoSubcommandDelegatesToGenerate(t *testing.T) {
 	// Running harvx with no subcommand should delegate to generate.
-	rootCmd.SetArgs([]string{})
+	// Explicitly disable interactive mode to avoid TUI launch in test env.
+	rootCmd.SetArgs([]string{"--interactive=false"})
 	defer rootCmd.SetArgs(nil)
 
 	buf := new(bytes.Buffer)
