@@ -51,6 +51,12 @@ type FlagValues struct {
 	Compress        bool   // Enable tree-sitter compression
 	CompressTimeout int    // Per-file timeout in milliseconds (default: 5000)
 	CompressEngine  string // Compression engine: ast, regex, auto (default: auto)
+
+	// Split flag (T-056)
+	Split int // Max tokens per part for multi-part output (0 = disabled)
+
+	// Metadata sidecar flag (T-057)
+	OutputMetadata bool // Generate .meta.json sidecar alongside output
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -90,6 +96,12 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 	pf.BoolVar(&fv.Compress, "compress", false, "Enable tree-sitter code compression")
 	pf.IntVar(&fv.CompressTimeout, "compress-timeout", 5000, "Per-file compression timeout in milliseconds")
 	pf.StringVar(&fv.CompressEngine, "compress-engine", "auto", "Compression engine: ast, regex, auto, wasm (default: auto)")
+
+	// Split flag (T-056)
+	pf.IntVar(&fv.Split, "split", 0, "Split output into parts with max tokens per part (0 = disabled)")
+
+	// Metadata sidecar flag (T-057)
+	pf.BoolVar(&fv.OutputMetadata, "output-metadata", false, "Generate .meta.json sidecar file alongside output")
 
 	return fv
 }
@@ -176,6 +188,11 @@ func ValidateFlags(fv *FlagValues, cmd *cobra.Command) error {
 		// valid
 	default:
 		return fmt.Errorf("--compress-engine: invalid value %q (allowed: ast, regex, auto, wasm)", fv.CompressEngine)
+	}
+
+	// Validate --split
+	if fv.Split < 0 {
+		return fmt.Errorf("--split: must be a non-negative integer, got %d", fv.Split)
 	}
 
 	// Normalize --filter: strip leading dots

@@ -1,0 +1,122 @@
+# Harvx Context: sample-project
+
+| Field | Value |
+|-------|-------|
+| Generated | 2025-01-15T10:30:00Z |
+| Content Hash | e4df3bc3c71caf67 |
+| Profile | default |
+| Tokenizer | cl100k_base |
+| Total Tokens | 127 |
+| Total Files | 5 |
+
+## File Summary
+
+**Total Files:** 5 | **Total Tokens:** 127
+
+### Files by Tier
+
+| Tier | Label | Count |
+|------|-------|-------|
+| 0 | critical | 1 |
+| 1 | primary | 2 |
+| 3 | tests | 1 |
+| 4 | docs | 1 |
+
+### Top Files by Token Count
+
+| File | Tokens | Size |
+|------|--------|------|
+| internal/handler_test.go | 40 | 131 B |
+| internal/handler.go | 35 | 138 B |
+| cmd/main.go | 25 | 68 B |
+| go.mod | 15 | 39 B |
+| README.md | 12 | 60 B |
+
+## Directory Tree
+
+```
+📁 .
+├── 📁 cmd
+│   └── 📄 main.go
+├── 📁 internal
+│   ├── 📄 handler.go
+│   └── 📄 handler_test.go
+├── 📄 go.mod
+└── 📄 README.md
+```
+
+## Files
+
+### `go.mod`
+
+> **Size:** 39 B | **Tokens:** 15 | **Tier:** critical | **Compressed:** no
+
+```
+1 | module example.com/sample
+2 | 
+3 | go 1.24.0
+4 | 
+```
+
+### `README.md`
+
+> **Size:** 60 B | **Tokens:** 12 | **Tier:** docs | **Compressed:** no
+
+```markdown
+1 | # Sample Project
+2 | 
+3 | A sample project for testing output rendering.
+4 | 
+```
+
+### `cmd/main.go`
+
+> **Size:** 68 B | **Tokens:** 25 | **Tier:** primary | **Compressed:** no
+
+```go
+1 | package main
+2 | 
+3 | import "fmt"
+4 | 
+5 | func main() {
+6 | 	fmt.Println("hello world")
+7 | }
+8 | 
+```
+
+### `internal/handler.go`
+
+> **Size:** 138 B | **Tokens:** 35 | **Tier:** primary | **Compressed:** no
+
+```go
+ 1 | package internal
+ 2 | 
+ 3 | // Handler processes requests.
+ 4 | type Handler struct {
+ 5 | 	Name string
+ 6 | }
+ 7 | 
+ 8 | // Handle processes a single request.
+ 9 | func (h *Handler) Handle() error {
+10 | 	return nil
+11 | }
+12 | 
+```
+
+### `internal/handler_test.go`
+
+> **Size:** 131 B | **Tokens:** 40 | **Tier:** tests | **Compressed:** no
+
+```go
+ 1 | package internal
+ 2 | 
+ 3 | import "testing"
+ 4 | 
+ 5 | func TestHandler_Handle(t *testing.T) {
+ 6 | 	h := &Handler{Name: "test"}
+ 7 | 	if err := h.Handle(); err != nil {
+ 8 | 		t.Fatal(err)
+ 9 | 	}
+10 | }
+11 | 
+```

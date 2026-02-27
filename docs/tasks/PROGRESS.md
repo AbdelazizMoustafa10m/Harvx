@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 53 |
+| Completed | 61 |
 | In Progress | 0 |
-| Not Started | 42 |
+| Not Started | 34 |
 
 ---
 
@@ -424,6 +424,62 @@
 | Golden test fixtures (11 languages) | `testdata/compression/{typescript,javascript,go,python,rust,c,cpp,json,yaml,toml,e2e}/` |
 | CLI flags (--compress, --compress-timeout, --compress-engine) | `internal/config/flags.go` |
 | Pipeline compression step | `internal/pipeline/pipeline.go` |
+
+#### Verification
+
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+
+---
+
+### Phase 6: Output & Rendering (T-051 to T-058)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **Tasks Completed:** 8 tasks
+
+#### Features Implemented
+
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Directory Tree Builder | T-051 | `BuildTree`/`RenderTree` with Unicode box-drawing, directory collapsing, depth limits, and size/token annotations |
+| Markdown Renderer | T-052 | `MarkdownRenderer` via `text/template` with streaming `io.Writer`, line numbers, conditional diff section, and 60+ language extension map |
+| XML Renderer | T-053 | `XMLRenderer` producing Claude-optimized XML with CDATA wrapping, `]]>` boundary splitting, and safe attribute escaping |
+| Content Hashing | T-054 | `ContentHasher` (XXH3 64-bit over sorted file collections) and `IncrementalHasher` (`io.Writer`) for streaming hash during output |
+| Output Writer & Format Dispatch | T-055 | `OutputWriter` orchestrating renderer, hasher, and destination; atomic file writes; stdout mode with `io.MultiWriter`; 3-tier path resolution |
+| Output Splitter | T-056 | `Splitter` with greedy bin-packing respecting tier boundaries and file atomicity; `--split` CLI flag; `PartPath` with `.part-NNN` insertion |
+| Metadata JSON Sidecar | T-057 | `OutputMetadata` structs with snake_case JSON; `GenerateMetadata`/`WriteMetadata` with atomic write; `--output-metadata` CLI flag |
+| Pipeline Integration | T-058 | `RenderOutput` orchestration function converting `[]pipeline.FileDescriptor` to rendered output; golden test infrastructure with `HARVX_UPDATE_GOLDEN=1` |
+
+#### Key Technical Decisions
+
+1. **`text/template` for XML renderer** -- preserves exact whitespace control; avoids `encoding/xml`'s automatic escaping that would corrupt CDATA sections
+2. **Atomic file writes (temp → sync → close → rename)** -- prevents partial or corrupt output files on error in both `OutputWriter` and `WriteMetadata`
+3. **Null byte separators in XXH3 hash** -- prevents path/content boundary collisions; case-sensitive byte-order sort ensures platform-independent determinism
+4. **Greedy bin-packing with 15% overflow tolerance** -- keeps same-tier files from the same top-level directory together while respecting token budgets and file atomicity
+5. **`*float64` for `BudgetUsedPercent`** -- serializes as JSON `null` when no token budget is configured, distinguishing "zero usage" from "no budget"
+
+#### Key Files Reference
+
+| Purpose | Location |
+| ------- | -------- |
+| `Renderer` interface, `RenderData`, `FileRenderEntry`, `DiffSummaryData` | `internal/output/renderer.go` |
+| `TreeNode`, `FileEntry`, `TreeRenderOpts`; `BuildTree`, `RenderTree` | `internal/output/tree.go` |
+| `MarkdownRenderer` with context cancellation support | `internal/output/markdown.go` |
+| `XMLRenderer`, `wrapCDATA`, `xmlEscapeAttr` | `internal/output/xml.go` |
+| Markdown and XML template constants and `FuncMap`s | `internal/output/templates.go` |
+| `languageFromExt`, `formatBytes`, `addLineNumbers`, `tierLabel` helpers | `internal/output/helpers.go` |
+| `ContentHasher`, `IncrementalHasher`, `FileHashEntry`, `FormatHash` | `internal/output/hash.go` |
+| `OutputWriter`, `OutputOpts`, `OutputResult`, `countingWriter` | `internal/output/writer.go` |
+| Format constants, `NewRenderer` factory, `ResolveOutputPath` | `internal/output/format.go` |
+| `Splitter`, `SplitOpts`, `PartData`, `PartResult`, `PartPath`, `WriteSplit` | `internal/output/splitter.go` |
+| `OutputMetadata`, `Statistics`, `FileStats`; `GenerateMetadata`, `WriteMetadata` | `internal/output/metadata.go` |
+| `OutputConfig`, `RenderOutput` pipeline orchestration | `internal/output/pipeline.go` |
+| Golden test helpers (`loadGoldenFile`, `compareGolden`, `writeGoldenFile`) | `internal/output/testutil_test.go` |
+| `--split` and `--output-metadata` CLI flag registration | `internal/config/flags.go` |
+| Golden test fixture files | `testdata/golden-fixtures/` |
+| Golden test reference outputs | `internal/output/testdata/golden/` |
 
 #### Verification
 

@@ -1,0 +1,20 @@
+📁 .
+├── 📁 cmd/harvx
+│   └── 📄 main.go
+├── 📁 docs/api/v1
+│   └── 📄 endpoints.md
+├── 📁 internal
+│   ├── 📁 cli
+│   │   ├── 📄 root.go
+│   │   └── 📄 version.go
+│   ├── 📁 config
+│   │   ├── 📄 loader.go
+│   │   └── 📄 types.go
+│   └── 📁 discovery
+│       └── 📄 walker.go
+├── 📁 pkg/utils/helpers
+│   ├── 📄 format.go
+│   └── 📄 strings.go
+├── 📄 go.mod
+├── 📄 go.sum
+└── 📄 README.md

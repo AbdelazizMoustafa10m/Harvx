@@ -1,0 +1,73 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2025-01-15T10:30:00Z",
+  "profile": "default",
+  "tokenizer": "cl100k_base",
+  "format": "markdown",
+  "target": "generic",
+  "content_hash": "9bcb5afb3cf9f072",
+  "statistics": {
+    "total_files": 5,
+    "total_tokens": 127,
+    "total_bytes": 436,
+    "budget_used_percent": 12.7,
+    "max_tokens": 1000,
+    "files_by_tier": {
+      "0": 1,
+      "1": 2,
+      "3": 1,
+      "4": 1
+    },
+    "redactions_total": 0,
+    "redactions_by_type": {},
+    "compressed_files": 0,
+    "generation_time_ms": 42
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "tier": 4,
+      "tokens": 12,
+      "bytes": 60,
+      "redactions": 0,
+      "compressed": false,
+      "language": "markdown"
+    },
+    {
+      "path": "cmd/main.go",
+      "tier": 1,
+      "tokens": 25,
+      "bytes": 68,
+      "redactions": 0,
+      "compressed": false,
+      "language": "go"
+    },
+    {
+      "path": "go.mod",
+      "tier": 0,
+      "tokens": 15,
+      "bytes": 39,
+      "redactions": 0,
+      "compressed": false,
+      "language": ""
+    },
+    {
+      "path": "internal/handler.go",
+      "tier": 1,
+      "tokens": 35,
+      "bytes": 138,
+      "redactions": 0,
+      "compressed": false,
+      "language": "go"
+    },
+    {
+      "path": "internal/handler_test.go",
+      "tier": 3,
+      "tokens": 40,
+      "bytes": 131,
+      "redactions": 0,
+      "compressed": false,
+      "language": "go"
+    }
+  ]
+}
