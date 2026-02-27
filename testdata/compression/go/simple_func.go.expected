@@ -1,0 +1,15 @@
+package example
+
+import "fmt"
+
+// Greet returns a greeting message.
+func Greet(name string) string
+
+// add adds two integers.
+func add(a, b int) int
+
+// Divide performs division with error handling.
+func Divide(a, b float64) (float64, error)
+
+// ReadAll reads everything and returns named results.
+func ReadAll(path string) (data []byte, err error)

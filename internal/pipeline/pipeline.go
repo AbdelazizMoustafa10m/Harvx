@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
+	"github.com/harvx/harvx/internal/compression"
 	"github.com/harvx/harvx/internal/config"
 	"github.com/harvx/harvx/internal/security"
 )
@@ -72,6 +74,19 @@ func Run(ctx context.Context, cfg *config.FlagValues) error {
 		return NewRedactionError(fmt.Sprintf("secrets detected: %d redaction(s) found; failing as requested by --fail-on-redaction", summary.TotalCount))
 	}
 
+	// Run compression if enabled.
+	if cfg.Compress {
+		compressionCfg := buildCompressionConfig(cfg)
+		slog.Debug("compression configuration",
+			"enabled", compressionCfg.Enabled,
+			"timeout_per_file", compressionCfg.TimeoutPerFile,
+			"concurrency", compressionCfg.Concurrency,
+			"engine", compressionCfg.Engine,
+		)
+		// TODO: Apply compression to budget-surviving files once the full pipeline is wired.
+		_ = compressionCfg
+	}
+
 	return nil
 }
 
@@ -126,4 +141,26 @@ func maybeWriteReport(cfg *config.FlagValues, summary security.RedactionSummary)
 
 	slog.Info("redaction report written", "path", path)
 	return nil
+}
+
+// buildCompressionConfig derives a compression.CompressionConfig from the
+// resolved CLI flags.
+func buildCompressionConfig(cfg *config.FlagValues) compression.CompressionConfig {
+	cc := compression.DefaultCompressionConfig()
+	cc.Enabled = cfg.Compress
+	cc.TimeoutPerFile = time.Duration(cfg.CompressTimeout) * time.Millisecond
+
+	// Parse the engine flag. Validation already happened in ValidateFlags,
+	// so errors here are unexpected. Fall back to auto on error.
+	engine, err := compression.ParseCompressEngine(cfg.CompressEngine)
+	if err != nil {
+		slog.Warn("invalid compress engine, defaulting to auto",
+			"engine", cfg.CompressEngine,
+			"error", err,
+		)
+		engine = compression.EngineAuto
+	}
+	cc.Engine = engine
+
+	return cc
 }

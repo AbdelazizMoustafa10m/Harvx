@@ -1,0 +1,26 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+import type { User } from '@/types/user';
+
+interface ApiResponse<T> {
+  data: T;
+  status: number;
+  message: string;
+}
+
+type RequestHandler = (req: NextRequest) => Promise<NextResponse>;
+
+/** Validates the authorization header */
+function validateAuth(req: NextRequest): string | null
+
+/** Handles GET requests for user data */
+export async function GET(req: NextRequest): Promise<NextResponse>
+
+/** Handles POST requests to create a user */
+export async function POST(req: NextRequest): Promise<NextResponse>
+
+async function fetchUsers(token: string): Promise<User[]>
+
+async function createUser(data: unknown): Promise<User>
+
+export const config

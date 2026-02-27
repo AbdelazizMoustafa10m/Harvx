@@ -1,0 +1,39 @@
+#include <vector>
+
+#include <string>
+
+template<typename T>
+class Stack {
+public:
+private:
+    std::vector<T> data_;
+
+    void push(const T& value) { ... }
+
+    T pop() { ... }
+
+    bool empty() const { ... }
+};
+
+class Animal {
+public:
+protected:
+    std::string name_;
+
+    virtual ~Animal() = default;
+
+    virtual void speak() const = 0;
+
+    std::string name() const { ... }
+};
+
+class Dog : public Animal {
+public:
+private:
+    int tricks_count;
+
+    void speak() const override { ... }
+};
+
+template<typename T, typename U>
+U convert(const T& input)

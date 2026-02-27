@@ -1,0 +1,38 @@
+import { EventEmitter } from 'events';
+
+interface Loggable {
+  log(message: string): void;
+}
+
+interface Closeable {
+  close(): Promise<void>;
+}
+
+abstract class BaseConnection extends EventEmitter {
+  protected host: string;
+  protected port: number;
+
+  constructor(host: string, port: number) { ... }
+
+  abstract connect(): Promise<void>;
+
+  abstract disconnect(): Promise<void>;
+
+  get address(): string { ... }
+}
+
+class DatabaseConnection extends BaseConnection implements Loggable, Closeable {
+  private pool: ConnectionPool;
+
+  constructor(host: string, port: number) { ... }
+
+  async connect(): Promise<void> { ... }
+
+  async disconnect(): Promise<void> { ... }
+
+  log(message: string): void { ... }
+
+  async close(): Promise<void> { ... }
+}
+
+export { BaseConnection, DatabaseConnection };

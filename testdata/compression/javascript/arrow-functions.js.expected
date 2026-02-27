@@ -1,0 +1,7 @@
+const add = (a, b) => a + b
+
+const greet = (name) => { ... }
+
+export const handler = async (req) => { ... }
+
+export const multiply = (x, y) => x * y

@@ -1,0 +1,76 @@
+"""Protocol classes and type aliases for structural typing."""
+
+from typing import Protocol, TypeAlias, Optional, Sequence, Mapping, Any, runtime_checkable
+
+JSON: TypeAlias = dict[str, Any]
+Headers: TypeAlias = Mapping[str, str]
+PathLike: TypeAlias = str | bytes
+
+
+@runtime_checkable
+class Renderable(Protocol):
+    """Something that can be rendered to a string."""
+
+    def render(self) -> str:
+        """Render to string representation."""
+        ...
+
+
+class Serializable(Protocol):
+    """Something that can be serialized to JSON."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        ...
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Serializable":
+        """Create instance from dictionary."""
+        ...
+
+
+class Repository(Protocol[Any]):
+    """Generic repository protocol for data access."""
+
+    def get(self, id: str) -> Optional[Any]:
+        """Get an item by ID."""
+        ...
+
+    def list(self, limit: int = 100) -> Sequence[Any]:
+        """List items with optional limit."""
+        ...
+
+    def create(self, item: Any) -> str:
+        """Create a new item and return its ID."""
+        ...
+
+    def delete(self, id: str) -> bool:
+        """Delete an item by ID."""
+        ...
+
+
+class Logger(Protocol):
+    """Logging protocol."""
+
+    def info(self, msg: str, **kwargs: Any) -> None:
+        ...
+
+    def error(self, msg: str, **kwargs: Any) -> None:
+        ...
+
+    def debug(self, msg: str, **kwargs: Any) -> None:
+        ...
+
+
+class EventHandler(Protocol):
+    """Protocol for event handlers."""
+
+    event_name: str
+
+    def handle(self, payload: dict[str, Any]) -> None:
+        """Handle an event."""
+        ...
+
+    async def handle_async(self, payload: dict[str, Any]) -> None:
+        """Handle an event asynchronously."""
+        ...

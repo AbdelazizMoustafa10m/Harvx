@@ -1,0 +1,101 @@
+"""Task queue implementation for background job processing."""
+
+import asyncio
+
+import logging
+
+from typing import Any, Callable, Dict, List, Optional
+
+from dataclasses import dataclass, field
+
+from enum import Enum
+
+__all__ = ["TaskQueue", "Task", "TaskStatus", "TaskResult"]
+
+MAX_RETRIES: int = 3
+
+DEFAULT_TIMEOUT: float = 300.0
+
+QUEUE_SIZE: int = 1000
+
+class TaskStatus(Enum):
+    """Possible states for a task."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+@dataclass
+class TaskResult:
+    """Result of a task execution."""
+    task_id: str
+    status: TaskStatus
+    result: Optional[Any] = None
+    error: Optional[str] = None
+    duration: float = 0.0
+
+@dataclass
+class Task:
+    """A unit of work to be executed."""
+    id: str
+    name: str
+    func: Callable[..., Any]
+    args: tuple = ()
+    kwargs: Dict[str, Any] = field(default_factory=dict)
+    max_retries: int = MAX_RETRIES
+    timeout: float = DEFAULT_TIMEOUT
+    priority: int = 0
+
+    def __post_init__(self) -> None:
+
+class TaskQueue:
+    """Async task queue for background processing."""
+
+    def __init__(
+        self,
+        max_workers: int = 4,
+        queue_size: int = QUEUE_SIZE,
+    ) -> None:
+        """Initialize the task queue.
+
+        Args:
+            max_workers: Maximum concurrent workers.
+            queue_size: Maximum queue capacity.
+        """
+
+    async def start(self) -> None:
+        """Start the task queue workers."""
+
+    async def stop(self) -> None:
+        """Stop the task queue and wait for pending tasks."""
+
+    async def submit(self, task: Task) -> str:
+        """Submit a task for execution.
+
+        Args:
+            task: The task to execute.
+
+        Returns:
+            The task ID.
+
+        Raises:
+            RuntimeError: If the queue is not running.
+        """
+
+    async def get_result(self, task_id: str) -> Optional[TaskResult]:
+        """Get the result of a completed task."""
+
+    async def _worker(self, name: str) -> None:
+        """Worker loop that processes tasks from the queue."""
+
+    async def _execute(self, task: Task) -> TaskResult:
+        """Execute a single task with retry logic."""
+
+    @property
+    def pending_count(self) -> int:
+        """Number of tasks waiting in the queue."""
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the task queue is currently running."""

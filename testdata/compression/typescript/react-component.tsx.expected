@@ -1,0 +1,20 @@
+import React, { useState, useEffect } from 'react';
+
+import type { FC } from 'react';
+
+interface UserProps {
+  name: string;
+  age: number;
+  onUpdate: (user: User) => void;
+}
+
+type User = {
+  id: string;
+  name: string;
+  age: number;
+};
+
+/** A user profile component */
+const UserProfile: FC<UserProps> = ({ name, age, onUpdate }) => { ... }
+
+export default UserProfile;

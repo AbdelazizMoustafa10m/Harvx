@@ -1,0 +1,14 @@
+#include "config.h"
+
+#include <string.h>
+
+static int internal_counter = 0;
+
+/**
+ * Create a new config.
+ */
+struct Config *config_new(const char *host, int port)
+
+void config_free(struct Config *cfg)
+
+int config_validate(const struct Config *cfg)

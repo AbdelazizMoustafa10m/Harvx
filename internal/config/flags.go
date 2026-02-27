@@ -46,6 +46,11 @@ type FlagValues struct {
 	TokenCountOnly     bool   // Report token counts only, no output file generated
 	TopFiles           int    // Show N largest files by token count (0 = disabled)
 	Heatmap            bool   // Show token density heatmap (preview only)
+
+	// Compression flags (T-049, T-050)
+	Compress        bool   // Enable tree-sitter compression
+	CompressTimeout int    // Per-file timeout in milliseconds (default: 5000)
+	CompressEngine  string // Compression engine: ast, regex, auto (default: auto)
 }
 
 // BindFlags registers all global persistent flags on the given Cobra command
@@ -80,6 +85,11 @@ func BindFlags(cmd *cobra.Command) *FlagValues {
 	pf.StringVar(&fv.TruncationStrategy, "truncation-strategy", "skip", "Budget overflow: truncate or skip")
 	pf.BoolVar(&fv.TokenCountOnly, "token-count", false, "Report token counts only, no output file generated")
 	pf.IntVar(&fv.TopFiles, "top-files", 0, "Show N largest files by token count (0 = disabled)")
+
+	// Compression flags (T-049, T-050)
+	pf.BoolVar(&fv.Compress, "compress", false, "Enable tree-sitter code compression")
+	pf.IntVar(&fv.CompressTimeout, "compress-timeout", 5000, "Per-file compression timeout in milliseconds")
+	pf.StringVar(&fv.CompressEngine, "compress-engine", "auto", "Compression engine: ast, regex, auto, wasm (default: auto)")
 
 	return fv
 }
@@ -153,6 +163,19 @@ func ValidateFlags(fv *FlagValues, cmd *cobra.Command) error {
 		// valid
 	default:
 		return fmt.Errorf("--truncation-strategy: invalid value %q (allowed: truncate, skip)", fv.TruncationStrategy)
+	}
+
+	// Validate --compress-timeout
+	if fv.CompressTimeout <= 0 {
+		return fmt.Errorf("--compress-timeout: must be a positive integer, got %d", fv.CompressTimeout)
+	}
+
+	// Validate --compress-engine
+	switch fv.CompressEngine {
+	case "ast", "regex", "auto", "wasm":
+		// valid
+	default:
+		return fmt.Errorf("--compress-engine: invalid value %q (allowed: ast, regex, auto, wasm)", fv.CompressEngine)
 	}
 
 	// Normalize --filter: strip leading dots

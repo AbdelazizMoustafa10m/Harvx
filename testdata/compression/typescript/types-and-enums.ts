@@ -1,0 +1,28 @@
+enum Status {
+  Active = 'active',
+  Inactive = 'inactive',
+  Pending = 'pending',
+}
+
+const enum Direction {
+  Up = 'UP',
+  Down = 'DOWN',
+  Left = 'LEFT',
+  Right = 'RIGHT',
+}
+
+type Result<T> = Success<T> | Failure;
+
+type UserID = string;
+
+interface Serializable {
+  serialize(): string;
+  deserialize(data: string): void;
+}
+
+interface Printable extends Serializable {
+  print(): void;
+}
+
+export type { Result, UserID };
+export { Status, Direction };

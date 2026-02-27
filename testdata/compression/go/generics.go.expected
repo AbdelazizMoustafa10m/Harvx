@@ -1,0 +1,30 @@
+package collections
+
+import "sync"
+
+// Set is a generic set backed by a map.
+type Set[T comparable] struct {
+	items map[T]struct{}
+	mu    sync.RWMutex
+}
+
+// NewSet creates a new empty Set.
+func NewSet[T comparable]() *Set[T]
+
+// Add inserts an element into the set.
+func (s *Set[T]) Add(val T)
+
+// Contains checks if the set contains an element.
+func (s *Set[T]) Contains(val T) bool
+
+// Map applies a function to each element of a slice.
+func Map[T, U any](s []T, f func(T) U) []U
+
+// Filter returns elements matching the predicate.
+func Filter[T any](s []T, pred func(T) bool) []T
+
+// Pair holds two generic values.
+type Pair[A, B any] struct {
+	First  A
+	Second B
+}

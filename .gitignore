@@ -18,6 +18,8 @@ go.work.sum
 
 # ─── WASM Build Artifacts ────────────────────────────
 *.wasm
+# Allow tree-sitter grammar files (required for //go:embed)
+!grammars/*.wasm
 
 # ─── Harvx State ────────────────────────────────────
 .harvx/

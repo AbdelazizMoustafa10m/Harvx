@@ -1,0 +1,16 @@
+package main
+
+import "fmt"
+
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"github.com/example/pkg"
+	. "math"
+	_ "net/http/pprof"
+	alias "encoding/json"
+)
+
+func main()
