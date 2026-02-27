@@ -1,0 +1,11 @@
+# Harvx Performance Benchmark Baseline
+#
+# Generated with: make bench
+# To update: make bench-update-baseline
+#
+# This file is compared against current benchmark runs using benchstat
+# to detect performance regressions. Each update should be accompanied
+# by a commit noting the reason for the baseline change.
+#
+# Placeholder baseline -- run `make bench-update-baseline` to populate
+# with actual measurements from your hardware.

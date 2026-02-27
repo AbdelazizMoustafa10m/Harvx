@@ -1,0 +1,2 @@
+go test fuzz v1
+string("[!a-zA-Z0-9]/**/*.go")

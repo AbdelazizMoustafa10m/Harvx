@@ -1,0 +1,2 @@
+go test fuzz v1
+string("[profile.default.redaction_config]\nenabled = true\nexclude_paths = [\"testdata/**\"]\n\n[[profile.default.redaction_config.custom_patterns]]\nid = \"my-api-key\"\ndescription = \"Custom API key\"\nregex = \"MY_API_[A-Z0-9]+\"\nsecret_type = \"custom_api_key\"\nconfidence = \"high\"\n")

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("sk_\x6cive_51234567890abcdefghijklmnopqrstuvwxyz")

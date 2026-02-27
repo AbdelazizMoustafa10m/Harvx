@@ -1,0 +1,2 @@
+go test fuzz v1
+string("[profile.default]\nformat = \"markdown\"\nmax_tokens = 128000\ntokenizer = \"cl100k_base\"\ncompression = true\nredaction = true\ntarget = \"claude\"\nignore = [\"node_modules\", \".git\"]\n\n[profile.default.relevance]\ntier_0 = [\"go.mod\", \"go.sum\"]\ntier_1 = [\"cmd/**\", \"internal/**\"]\n\n[profile.default.redaction_config]\nenabled = true\nconfidence_threshold = \"high\"\n")

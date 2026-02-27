@@ -1,0 +1,2 @@
+go test fuzz v1
+string("DATABASE_URL=postgres://user:p@ssw0rd@host:5432/db")

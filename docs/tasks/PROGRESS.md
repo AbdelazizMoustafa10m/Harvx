@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 90 |
+| Completed | 95 |
 | In Progress | 0 |
-| Not Started | 5 |
+| Not Started | 0 |
 
 ---
 
@@ -722,6 +722,90 @@
 - `go build ./cmd/harvx/` pass
 - `go vet ./...` pass
 - `go test ./...` pass
+
+---
+
+### Phase 10: Polish & Distribution (T-088 to T-095)
+
+- **Status:** Completed
+- **Date:** 2026-02-26
+- **Tasks Completed:** 8 tasks
+
+#### Features Implemented
+
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| GoReleaser distribution | T-088 | Cross-platform builds (5 targets), Cosign keyless signing, Syft SBOM in SPDX JSON, SHA-256 checksums, completion files in archives |
+| GitHub Actions CI/Release | T-089 | Release workflow on `v*.*.*` tags with provenance attestation; CI workflow with vet, test, lint, goreleaser config check, coverage upload, README badges |
+| Shell completion & man pages | T-090 | Dynamic `--profile` and `--compress-engine` flag completion; hidden `harvx docs man` command via `cobra/doc.GenManTree`; Makefile `completions` and `man` targets |
+| Performance benchmarking | T-091 | Synthetic repo generator for 1K/10K/50K files; per-stage benchmarks (discovery, tokenization, compression, redaction, output, full pipeline); SLO tests; memory guard; `//go:build bench` tag |
+| Integration test suite | T-092 | 4 synthetic OSS-style fixtures (Go CLI, Next.js, FastAPI, monorepo); 25+ tests covering default profile, output formats, CLI flags, compression, redaction; `make test-integration` |
+| Fuzz testing | T-093 | 4 redaction fuzz targets (`FuzzRedactContent`, `FuzzRedactHighEntropy`, `FuzzRedactEnvFile`, `FuzzRedactMixedContent`); 3 config fuzz targets (`FuzzParseConfig`, `FuzzProfileInheritance`, `FuzzGlobPattern`); seed corpus in `testdata/fuzz/` |
+| Golden test infrastructure | T-094 | `internal/golden` package with output normalization (timestamps, hashes, paths, timing), unified diff via `go-difflib`, `GoldenFile` helper with `-update` flag; 5 pipeline scenarios; `make golden-update` |
+| Doctor command & README | T-095 | `harvx doctor` with 6 checks (git, large binaries, oversized files, build artifacts, config, stale cache), `--json` and `--fix` flags; comprehensive README with quickstart, persona recipes, command reference, Claude Code integration |
+
+#### Key Technical Decisions
+
+1. **`//go:build bench` tag** -- Benchmarks excluded from `go test ./...`; run only via `make bench` to keep CI fast
+2. **Cosign keyless signing via Sigstore** -- No long-lived key material; signing tied to OIDC identity in GitHub Actions
+3. **`go-difflib` for golden diffs** -- Promoted from indirect to direct dependency to produce unified diffs in golden test failures
+
+#### Key Files Reference
+
+| Purpose | Location |
+| ------- | -------- |
+| GoReleaser v2 config | `.goreleaser.yaml` |
+| CI workflow | `.github/workflows/ci.yml` |
+| Release workflow | `.github/workflows/release.yml` |
+| Makefile targets (all phases) | `Makefile` |
+| Security verification docs | `docs/SECURITY.md` |
+| Project README | `README.md` |
+| `docs man` subcommand | `internal/cli/docs.go` |
+| `docs man` tests | `internal/cli/docs_man_test.go` |
+| Root flag completions | `internal/cli/root.go` |
+| `doctor` subcommand | `internal/cli/doctor.go` |
+| `doctor` CLI tests | `internal/cli/doctor_test.go` |
+| Doctor check functions | `internal/doctor/checks.go` |
+| Doctor output formatters | `internal/doctor/reporter.go` |
+| Doctor check tests | `internal/doctor/checks_test.go` |
+| Doctor reporter tests | `internal/doctor/reporter_test.go` |
+| Golden output normalization | `internal/golden/normalize.go` |
+| Golden file helper | `internal/golden/helpers.go` |
+| Golden pipeline tests | `internal/golden/golden_test.go` |
+| Golden normalize tests | `internal/golden/normalize_test.go` |
+| Benchmark synthetic fixtures | `internal/benchmark/fixtures.go` |
+| Discovery benchmarks | `internal/benchmark/discovery_bench_test.go` |
+| Tokenizer benchmarks | `internal/benchmark/tokenizer_bench_test.go` |
+| Compression benchmarks | `internal/benchmark/compression_bench_test.go` |
+| Redaction benchmarks | `internal/benchmark/redaction_bench_test.go` |
+| Output rendering benchmarks | `internal/benchmark/output_bench_test.go` |
+| Full pipeline benchmarks | `internal/benchmark/pipeline_bench_test.go` |
+| SLO verification tests | `internal/benchmark/slo_test.go` |
+| Memory guard test | `internal/benchmark/memory_test.go` |
+| Benchmark baseline | `testdata/benchmarks/baseline.txt` |
+| Redaction fuzz tests | `internal/security/fuzz_test.go` |
+| Config fuzz tests | `internal/config/fuzz_test.go` |
+| Fuzz seed corpus | `testdata/fuzz/` |
+| Integration test registry | `tests/integration/repos.go` |
+| Default profile integration tests | `tests/integration/default_profile_test.go` |
+| Format integration tests | `tests/integration/format_test.go` |
+| CLI flags integration tests | `tests/integration/cli_flags_test.go` |
+| Compression integration tests | `tests/integration/compression_test.go` |
+| Redaction integration tests | `tests/integration/redaction_test.go` |
+| Go CLI OSS fixture | `testdata/oss-go-cli/` |
+| Next.js OSS fixture | `testdata/oss-ts-nextjs/` |
+| FastAPI OSS fixture | `testdata/oss-python-fastapi/` |
+| Monorepo OSS fixture | `testdata/oss-monorepo/` |
+| Enhanced sample repo | `testdata/sample-repo/` |
+| Multi-package monorepo fixture | `testdata/monorepo/` |
+| Golden reference files | `testdata/expected-output/` |
+
+#### Verification
+
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+- `go test -tags integration ./tests/integration/...` pass
 
 ---
 

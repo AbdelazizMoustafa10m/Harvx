@@ -80,6 +80,13 @@ func init() {
 	rootCmd.RegisterFlagCompletionFunc("target", completeTarget)
 	rootCmd.RegisterFlagCompletionFunc("tokenizer", completeTokenizer)
 	rootCmd.RegisterFlagCompletionFunc("truncation-strategy", completeTruncationStrategy)
+	rootCmd.RegisterFlagCompletionFunc("profile", completeProfileNames)
+	rootCmd.RegisterFlagCompletionFunc("compress-engine", completeCompressEngine)
+}
+
+// completeCompressEngine returns the valid values for the --compress-engine flag.
+func completeCompressEngine(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{"ast", "regex", "auto"}, cobra.ShellCompDirectiveNoFileComp
 }
 
 // completeFormat returns the valid values for the --format flag.

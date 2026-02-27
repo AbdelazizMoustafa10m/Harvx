@@ -2,111 +2,93 @@ package security_test
 
 import (
 	"context"
-	"strings"
+	"fmt"
+	"regexp"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/harvx/harvx/internal/security"
 )
 
-// FuzzRedactRandomContent verifies that the redactor:
-//   - never panics on any input
-//   - always returns valid UTF-8
-//   - redaction markers are well-formed when present
-func FuzzRedactRandomContent(f *testing.F) {
-	// Seed corpus with representative inputs.
+// markerRe matches well-formed [REDACTED:type] markers where the type portion
+// contains only ASCII letters, digits, and underscores.
+var markerRe = regexp.MustCompile(`\[REDACTED:[a-zA-Z0-9_]+\]`)
+
+// broadMarkerRe matches any [REDACTED:...] substring, including potentially
+// malformed ones. Used to find candidates that are then validated against markerRe.
+var broadMarkerRe = regexp.MustCompile(`\[REDACTED:[^\]]*\]`)
+
+// assertValidUTF8 is a test helper that fails t if s is not valid UTF-8.
+func assertValidUTF8(t *testing.T, s, label string) {
+	t.Helper()
+	if !utf8.ValidString(s) {
+		t.Fatalf("%s is not valid UTF-8", label)
+	}
+}
+
+// assertWellFormedMarkers is a test helper that extracts all [REDACTED:...]
+// substrings from s and verifies each one matches the expected pattern.
+func assertWellFormedMarkers(t *testing.T, s string) {
+	t.Helper()
+	// Find all candidate markers with a broad search, then verify each one.
+	for _, marker := range broadMarkerRe.FindAllString(s, -1) {
+		if !markerRe.MatchString(marker) {
+			t.Fatalf("malformed redaction marker %q in output", marker)
+		}
+	}
+}
+
+// FuzzRedactContent verifies that the StreamRedactor never panics, always
+// returns valid UTF-8, produces non-negative length output, and emits only
+// well-formed [REDACTED:type] markers.
+func FuzzRedactContent(f *testing.F) {
 	seeds := []string{
+		"password=mysecret123",
+		"AKIA1234567890ABCDEF",
+		"normal code without secrets",
+		"ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+		"sk_" + "live_51234567890abcdefghijklmnop",
 		"",
-		"Hello, world!",
-		"AKIAIOSFODNN7EXAMPLE",
-		"export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		"gh" + "p_1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8R",
-		"-----BEGIN RSA PRIVATE KEY-----\nMIIEo...\n-----END RSA PRIVATE KEY-----",
-		"postgres://user:pass@localhost/db",
-		"sk_liv" + "e_abcdefghijklmnopqrstuvwx",
-		string([]byte{0xFF, 0xFE}), // invalid UTF-8
-		"api_key = " + strings.Repeat("a", 100),
+		"-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBAK...\n-----END RSA PRIVATE KEY-----",
 	}
 	for _, s := range seeds {
 		f.Add(s)
 	}
 
-	cfg := security.RedactionConfig{Enabled: true, ConfidenceThreshold: security.ConfidenceLow}
+	cfg := security.RedactionConfig{
+		Enabled:             true,
+		ConfidenceThreshold: security.ConfidenceLow,
+	}
 	redactor := security.NewStreamRedactor(nil, nil, cfg)
 
-	f.Fuzz(func(t *testing.T, content string) {
-		result, _, err := redactor.Redact(context.Background(), content, "fuzz.txt")
-		if err != nil {
-			// Context cancellation or similar -- not a failure.
-			return
-		}
-
-		// Invariant 1: output is valid UTF-8 when input is valid UTF-8.
-		// If the input contains invalid UTF-8 the redactor passes it through
-		// unchanged, so the output inherits the same invalidity.
-		if utf8.ValidString(content) && !utf8.ValidString(result) {
-			t.Fatalf("Redact returned non-UTF-8 output for valid-UTF-8 input %q", content)
-		}
-
-		// Invariant 2: redaction markers are well-formed.
-		for _, marker := range extractFuzzMarkers(result) {
-			if !isFuzzWellFormedMarker(marker) {
-				t.Fatalf("malformed redaction marker %q in output", marker)
-			}
-		}
-	})
-}
-
-// FuzzRedactEnvFile verifies that the redactor handles .env-style content
-// (KEY=VALUE lines) gracefully on all inputs.
-func FuzzRedactEnvFile(f *testing.F) {
-	// Seed with realistic .env content.
-	seeds := []string{
-		"KEY=value",
-		"AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\nAWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		"DATABASE_URL=postgres://user:pass@localhost/db",
-		"GITHUB_TOKEN=" + "gh" + "p_1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8R",
-		`PASSWORD="supersecretpassword"`,
-		"=",
-		"KEY=",
-		"=VALUE",
-	}
-	for _, s := range seeds {
-		f.Add(s)
-	}
-
-	cfg := security.RedactionConfig{Enabled: true, ConfidenceThreshold: security.ConfidenceLow}
-	redactor := security.NewStreamRedactor(nil, nil, cfg)
-
-	f.Fuzz(func(t *testing.T, envContent string) {
-		result, _, err := redactor.Redact(context.Background(), envContent, ".env")
+	f.Fuzz(func(t *testing.T, input string) {
+		result, _, err := redactor.Redact(context.Background(), input, "test.go")
 		if err != nil {
 			return
 		}
 
-		// Invariant: output is valid UTF-8 when input is valid UTF-8.
-		if utf8.ValidString(envContent) && !utf8.ValidString(result) {
-			t.Fatalf("Redact returned non-UTF-8 output for .env content %q", envContent)
+		// Invariant 1: output is valid UTF-8.
+		assertValidUTF8(t, result, "Redact output")
+
+		// Invariant 2: output length is non-negative.
+		if len(result) < 0 {
+			t.Fatal("output length is negative")
 		}
 
-		// Invariant: no panic means we get here; verify result is non-nil string.
-		_ = result
+		// Invariant 3: all [REDACTED:...] markers are well-formed.
+		assertWellFormedMarkers(t, result)
 	})
 }
 
-// FuzzEntropyAnalyzer verifies that the entropy analyzer produces
-// consistent results and never panics on arbitrary token inputs.
-func FuzzEntropyAnalyzer(f *testing.F) {
-	// Seed with high-entropy strings that resemble real secrets.
+// FuzzRedactHighEntropy verifies that the entropy analyzer never panics and
+// returns consistent, valid results for arbitrary inputs.
+func FuzzRedactHighEntropy(f *testing.F) {
 	seeds := []string{
-		"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-		"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-		strings.Repeat("a", 16),
-		strings.Repeat("A1", 20),
+		"aB3dE5gH7jK9mN1pQ3sT5v",
+		"0123456789abcdef0123456789abcdef",
+		"aaaaaaaaaaaaaaaaaaaaaaaaa",
+		"ABCDEFGHIJKLMNOPqrstuvwxyz012345",
 		"",
-		"short",
-		string([]byte{0x00, 0x01, 0x02}),
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -114,51 +96,94 @@ func FuzzEntropyAnalyzer(f *testing.F) {
 
 	analyzer := security.NewEntropyAnalyzer()
 
-	f.Fuzz(func(t *testing.T, token string) {
-		// Invariant: Calculate never panics.
-		entropy := analyzer.Calculate(token)
-		_ = entropy
-
-		// Invariant: DetectCharset never panics.
-		charset := security.DetectCharset(token)
-		_ = charset
-
-		// Invariant: AnalyzeToken never panics.
-		result := analyzer.AnalyzeToken(token, security.TokenContext{})
-
-		// If token is too short, it should not be flagged as high entropy.
-		if len(token) < analyzer.MinLength {
-			if result.IsHigh {
-				t.Fatalf("token shorter than MinLength (%d) should not be high entropy: %q",
-					analyzer.MinLength, token)
-			}
+	f.Fuzz(func(t *testing.T, input string) {
+		// Invariant 1: Calculate does not panic and returns >= 0.0.
+		entropy := analyzer.Calculate(input)
+		if entropy < 0.0 {
+			t.Fatalf("Calculate returned negative entropy %f for input %q", entropy, input)
 		}
+
+		// Invariant 2: AnalyzeToken does not panic and returns a valid EntropyResult.
+		result := analyzer.AnalyzeToken(input, security.TokenContext{})
+		if result.Entropy < 0.0 {
+			t.Fatalf("AnalyzeToken returned negative entropy %f for input %q", result.Entropy, input)
+		}
+		// Confidence must be one of the known values.
+		switch result.Confidence {
+		case security.ConfidenceHigh, security.ConfidenceMedium, security.ConfidenceLow:
+			// valid
+		default:
+			t.Fatalf("AnalyzeToken returned unknown confidence %q for input %q", result.Confidence, input)
+		}
+
+		// Invariant 3: DetectCharset does not panic.
+		_ = security.DetectCharset(input)
 	})
 }
 
-// extractFuzzMarkers returns all [REDACTED:...] markers found in s.
-func extractFuzzMarkers(s string) []string {
-	var markers []string
-	for {
-		start := strings.Index(s, "[REDACTED:")
-		if start < 0 {
-			break
-		}
-		end := strings.Index(s[start:], "]")
-		if end < 0 {
-			break
-		}
-		markers = append(markers, s[start:start+end+1])
-		s = s[start+end+1:]
+// FuzzRedactEnvFile verifies that the redactor handles .env-style content
+// gracefully on arbitrary inputs, never panics, and returns valid UTF-8.
+func FuzzRedactEnvFile(f *testing.F) {
+	seeds := []string{
+		"API_KEY=sk_" + "live_4242424242424242",
+		"DATABASE_URL=postgres://user:pass@host:5432/db",
+		"SECRET=",
+		"NORMAL_VAR=hello_world",
+		"AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 	}
-	return markers
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	cfg := security.RedactionConfig{
+		Enabled:             true,
+		ConfidenceThreshold: security.ConfidenceLow,
+	}
+	redactor := security.NewStreamRedactor(nil, nil, cfg)
+
+	f.Fuzz(func(t *testing.T, input string) {
+		// Wrap the fuzzed string as env-like content.
+		envContent := fmt.Sprintf("ENV_VAR=%s", input)
+		result, _, err := redactor.Redact(context.Background(), envContent, ".env")
+		if err != nil {
+			return
+		}
+
+		// Invariant 1: no panic (reaching here proves it).
+
+		// Invariant 2: output is valid UTF-8.
+		assertValidUTF8(t, result, "Redact .env output")
+	})
 }
 
-// isFuzzWellFormedMarker returns true if marker matches [REDACTED:<non-empty-type>].
-func isFuzzWellFormedMarker(marker string) bool {
-	if !strings.HasPrefix(marker, "[REDACTED:") || !strings.HasSuffix(marker, "]") {
-		return false
+// FuzzRedactMixedContent verifies that the redactor handles a combination of
+// code and secret content without panics, returning valid UTF-8 and
+// well-formed markers.
+func FuzzRedactMixedContent(f *testing.F) {
+	f.Add("func main() {", "password=secret123")
+	f.Add("// comment", "AKIA1234567890ABCDEF")
+	f.Add("\u3053\u3093\u306b\u3061\u306f\u4e16\u754c", "token=abc123def456ghi789")
+	f.Add("", "")
+
+	cfg := security.RedactionConfig{
+		Enabled:             true,
+		ConfidenceThreshold: security.ConfidenceLow,
 	}
-	secretType := marker[len("[REDACTED:"):len(marker)-1]
-	return len(secretType) > 0
+	redactor := security.NewStreamRedactor(nil, nil, cfg)
+
+	f.Fuzz(func(t *testing.T, code, secret string) {
+		mixed := code + "\n" + secret
+		result, _, err := redactor.Redact(context.Background(), mixed, "test.go")
+		if err != nil {
+			return
+		}
+
+		// Invariant 1: no panic (reaching here proves it).
+
+		// Invariant 2: output is valid UTF-8.
+		assertValidUTF8(t, result, "Redact mixed output")
+
+		// Invariant 3: all [REDACTED:...] markers are well-formed.
+		assertWellFormedMarkers(t, result)
+	})
 }

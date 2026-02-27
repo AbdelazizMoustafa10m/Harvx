@@ -58,13 +58,6 @@ func buildHarvx() (string, error) {
 	return binaryPath, nil
 }
 
-// projectRoot returns the absolute path to the project root.
-func projectRoot() string {
-	// Navigate from tests/integration/ up to project root.
-	_, filename, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(filename), "..", "..")
-}
-
 // sampleRepoDir returns the absolute path to testdata/sample-repo.
 func sampleRepoDir() string {
 	return filepath.Join(projectRoot(), "testdata", "sample-repo")

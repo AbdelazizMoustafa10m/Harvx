@@ -1,0 +1,18 @@
+{
+  "name": "sample-repo",
+  "version": "1.0.0",
+  "description": "A sample repository for testing harvx golden tests",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0"
+  }
+}
