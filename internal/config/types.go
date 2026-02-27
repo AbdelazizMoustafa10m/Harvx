@@ -29,6 +29,10 @@ type Profile struct {
 	// Files are pruned from the output if the total exceeds this limit.
 	MaxTokens int `toml:"max_tokens"`
 
+	// BriefMaxTokens is the token budget for the Repo Brief artifact.
+	// Controls the maximum size of output from `harvx brief`. Default: 4000.
+	BriefMaxTokens int `toml:"brief_max_tokens"`
+
 	// Tokenizer selects the token counting model. Valid values: "cl100k_base", "o200k_base".
 	Tokenizer string `toml:"tokenizer"`
 
@@ -53,6 +57,19 @@ type Profile struct {
 	// Include is the list of glob patterns for files to explicitly include
 	// even if they would otherwise be ignored.
 	Include []string `toml:"include"`
+
+	// AssertInclude is the list of glob patterns that must each match at least
+	// one included file. If any pattern matches zero files, the pipeline fails
+	// with exit code 1. Used for CI coverage checks.
+	AssertInclude []string `toml:"assert_include"`
+
+	// SliceMaxTokens is the token budget for the Review Slice artifact.
+	// Controls the maximum size of output from `harvx review-slice`. Default: 20000.
+	SliceMaxTokens int `toml:"slice_max_tokens"`
+
+	// SliceDepth controls the neighborhood discovery depth for review-slice.
+	// 0 = no neighbors (changed files only), 1 = direct imports only (default).
+	SliceDepth int `toml:"slice_depth"`
 
 	// Relevance holds tier-based file sorting configuration. Each tier is
 	// a list of glob patterns that match files assigned to that tier.

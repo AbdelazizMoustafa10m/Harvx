@@ -23,6 +23,8 @@ go.work.sum
 
 # ─── Harvx State ────────────────────────────────────
 .harvx/
+# Allow test fixture workspace config
+!testdata/sample-repo/.harvx/
 .review-workspace/
 reports/review/
 

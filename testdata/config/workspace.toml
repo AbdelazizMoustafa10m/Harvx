@@ -1,0 +1,29 @@
+# Test fixture: full workspace manifest with all fields populated.
+
+[workspace]
+name = "MyOrg Platform"
+description = "Microservices platform with shared UI library"
+
+[[workspace.repos]]
+name = "api-gateway"
+path = "~/work/api-gateway"
+description = "Express.js API gateway, handles auth and routing"
+entrypoints = ["src/server.ts", "src/routes/"]
+integrates_with = ["user-service", "billing-service"]
+
+[[workspace.repos]]
+name = "user-service"
+path = "~/work/user-service"
+description = "User management microservice (Go)"
+entrypoints = ["cmd/server/main.go", "internal/handlers/"]
+integrates_with = ["api-gateway"]
+shared_schemas = ["proto/user.proto"]
+
+[[workspace.repos]]
+name = "billing-service"
+path = "~/work/billing-service"
+description = "Billing and payments service"
+entrypoints = ["src/main.py"]
+integrates_with = ["api-gateway", "user-service"]
+shared_schemas = ["proto/billing.proto"]
+docs = ["docs/billing-api.md", "docs/stripe-integration.md"]

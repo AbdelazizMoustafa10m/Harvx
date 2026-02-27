@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "harvx brief --profile session --stdout",
+        "timeout": 5000
+      }
+    ]
+  }
+}

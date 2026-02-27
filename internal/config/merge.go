@@ -22,7 +22,10 @@ func mergeProfile(base, override *Profile) *Profile {
 		Target:    mergeString(base.Target, override.Target),
 
 		// Scalar: int
-		MaxTokens: mergeInt(base.MaxTokens, override.MaxTokens),
+		MaxTokens:      mergeInt(base.MaxTokens, override.MaxTokens),
+		BriefMaxTokens: mergeInt(base.BriefMaxTokens, override.BriefMaxTokens),
+		SliceMaxTokens: mergeInt(base.SliceMaxTokens, override.SliceMaxTokens),
+		SliceDepth:     mergeInt(base.SliceDepth, override.SliceDepth),
 
 		// Scalar: bool -- override always wins (false is meaningful)
 		Compression: override.Compression,
@@ -32,6 +35,7 @@ func mergeProfile(base, override *Profile) *Profile {
 		Ignore:        mergeSlice(base.Ignore, override.Ignore),
 		PriorityFiles: mergeSlice(base.PriorityFiles, override.PriorityFiles),
 		Include:       mergeSlice(base.Include, override.Include),
+		AssertInclude: mergeSlice(base.AssertInclude, override.AssertInclude),
 
 		// Nested structs
 		Relevance:       mergeRelevance(base.Relevance, override.Relevance),

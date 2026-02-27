@@ -291,14 +291,16 @@ func flattenProfileRaw(raw map[string]interface{}) map[string]any {
 	}
 
 	// Integer fields: BurntSushi/toml decodes TOML integers as int64 in raw maps.
-	if v, ok := raw["max_tokens"]; ok {
-		switch n := v.(type) {
-		case int64:
-			flat["max_tokens"] = int(n)
-		case int:
-			flat["max_tokens"] = n
-		default:
-			flat["max_tokens"] = v
+	for _, intKey := range []string{"max_tokens", "brief_max_tokens", "slice_max_tokens", "slice_depth"} {
+		if v, ok := raw[intKey]; ok {
+			switch n := v.(type) {
+			case int64:
+				flat[intKey] = int(n)
+			case int:
+				flat[intKey] = n
+			default:
+				flat[intKey] = v
+			}
 		}
 	}
 
@@ -310,7 +312,7 @@ func flattenProfileRaw(raw map[string]interface{}) map[string]any {
 	}
 
 	// Slice fields.
-	for _, key := range []string{"ignore", "priority_files", "include"} {
+	for _, key := range []string{"ignore", "priority_files", "include", "assert_include"} {
 		if v, ok := raw[key]; ok {
 			flat[key] = rawToStringSlice(v)
 		}
@@ -381,8 +383,11 @@ func profileToFlatMap(p *Profile) map[string]any {
 	return map[string]any{
 		"output":      p.Output,
 		"format":      p.Format,
-		"max_tokens":  p.MaxTokens,
-		"tokenizer":   p.Tokenizer,
+		"max_tokens":       p.MaxTokens,
+		"brief_max_tokens": p.BriefMaxTokens,
+		"slice_max_tokens": p.SliceMaxTokens,
+		"slice_depth":      p.SliceDepth,
+		"tokenizer":        p.Tokenizer,
 		"compression": p.Compression,
 		"redaction":   p.Redaction,
 		"target":      p.Target,
@@ -390,6 +395,7 @@ func profileToFlatMap(p *Profile) map[string]any {
 		"ignore":         p.Ignore,
 		"priority_files": p.PriorityFiles,
 		"include":        p.Include,
+		"assert_include": p.AssertInclude,
 
 		"relevance.tier_0": p.Relevance.Tier0,
 		"relevance.tier_1": p.Relevance.Tier1,
@@ -407,10 +413,13 @@ func profileToFlatMap(p *Profile) map[string]any {
 // flatMapToProfile converts the current koanf state into a Profile struct.
 func flatMapToProfile(k *koanf.Koanf) *Profile {
 	return &Profile{
-		Output:      k.String("output"),
-		Format:      k.String("format"),
-		MaxTokens:   k.Int("max_tokens"),
-		Tokenizer:   k.String("tokenizer"),
+		Output:         k.String("output"),
+		Format:         k.String("format"),
+		MaxTokens:      k.Int("max_tokens"),
+		BriefMaxTokens: k.Int("brief_max_tokens"),
+		SliceMaxTokens: k.Int("slice_max_tokens"),
+		SliceDepth:     k.Int("slice_depth"),
+		Tokenizer:      k.String("tokenizer"),
 		Compression: k.Bool("compression"),
 		Redaction:   k.Bool("redaction"),
 		Target:      k.String("target"),
@@ -418,6 +427,7 @@ func flatMapToProfile(k *koanf.Koanf) *Profile {
 		Ignore:        k.Strings("ignore"),
 		PriorityFiles: k.Strings("priority_files"),
 		Include:       k.Strings("include"),
+		AssertInclude: k.Strings("assert_include"),
 
 		Relevance: RelevanceConfig{
 			Tier0: k.Strings("relevance.tier_0"),

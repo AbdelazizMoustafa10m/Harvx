@@ -1,0 +1,15 @@
+[profile.default]
+format = "markdown"
+max_tokens = 128000
+tokenizer = "none"
+
+[profile.test]
+format = "markdown"
+max_tokens = 5000
+tokenizer = "none"
+
+[profile.xml-test]
+format = "xml"
+target = "claude"
+max_tokens = 5000
+tokenizer = "none"

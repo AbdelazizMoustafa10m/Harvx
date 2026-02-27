@@ -311,6 +311,54 @@ func TestMergeProfile_IntScalar(t *testing.T) {
 		"zero override must fall back to base")
 }
 
+// TestMergeProfile_BriefMaxTokens verifies that BriefMaxTokens follows the
+// same mergeInt rules: non-zero override wins, zero falls back to base.
+func TestMergeProfile_BriefMaxTokens(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		base     int
+		override int
+		want     int
+	}{
+		{
+			name:     "override non-zero wins over base",
+			base:     4000,
+			override: 8000,
+			want:     8000,
+		},
+		{
+			name:     "override zero falls back to base",
+			base:     4000,
+			override: 0,
+			want:     4000,
+		},
+		{
+			name:     "both zero stays zero",
+			base:     0,
+			override: 0,
+			want:     0,
+		},
+		{
+			name:     "base zero with override non-zero",
+			base:     0,
+			override: 6000,
+			want:     6000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			base := &Profile{BriefMaxTokens: tt.base}
+			override := &Profile{BriefMaxTokens: tt.override}
+			result := mergeProfile(base, override)
+			assert.Equal(t, tt.want, result.BriefMaxTokens)
+		})
+	}
+}
+
 // TestMergeProfile_BoolScalars verifies that bool fields always take the
 // override value (false is a valid explicit override).
 func TestMergeProfile_BoolScalars(t *testing.T) {

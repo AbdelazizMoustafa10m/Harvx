@@ -4,9 +4,9 @@
 
 | Status | Count |
 |--------|-------|
-| Completed | 68 |
+| Completed | 81 |
 | In Progress | 0 |
-| Not Started | 27 |
+| Not Started | 14 |
 
 ---
 
@@ -550,6 +550,100 @@
 - `go build ./cmd/harvx/` pass
 - `go vet ./...` pass
 - `go test ./...` pass
+
+---
+
+### Phase 8: Workflows (T-066 to T-078)
+
+- **Status:** Completed
+- **Date:** 2026-02-25
+- **Tasks Completed:** 13 tasks
+
+#### Features Implemented
+
+| Feature | Tasks | Description |
+| ------- | ----- | ----------- |
+| Pipeline library API | T-066 | `Pipeline.Run()` with 7 stage service interfaces, functional options (`With*`), `RunResult`/`RunStats`/`StageTimings` with JSON serialization |
+| Output routing & exit codes | T-067 | `OutputMode` pipe detection via `os.ModeCharDevice`, `--stdout`/`HARVX_STDOUT`, `RunResult.ExitCode` propagated to `os.Exit` at CLI boundary |
+| JSON preview metadata | T-068 | `PreviewResult` struct, `BuildPreviewResult`, `--json` flag on `harvx preview`, `PreviewStages` selection helper |
+| Assert-include coverage checks | T-069 | `CheckAssertInclude` with doublestar globs, `AssertionError` type, comprehensive `HARVX_*` env var overrides with `parseBoolEnv` |
+| Repo brief command | T-070 | `harvx brief` generating stable 1–4K token artifact: README, invariants, ADRs, build commands, module map, token budget enforcement |
+| Review slice command | T-071 | `harvx review-slice --base --head` with multi-language import parser (Go/TS/JS/Python), bounded neighbor discovery, budget enforcement |
+| Module slice command | T-072 | `harvx slice --path` for targeted module context, multiple paths, reuses review-slice neighbor/budget infrastructure |
+| Workspace command | T-073 | `harvx workspace` with `.harvx/workspace.toml` manifest, `DiscoverWorkspaceConfig`, `ValidateWorkspace`, `workspace init` subcommand |
+| Session bootstrap docs | T-074 | Guides (session-bootstrap, review-pipeline, workspace-setup), hooks template, CLAUDE.md template, persona recipes |
+| Verify command | T-075 | `harvx verify` faithfulness checking: MATCH/REDACTION_DIFF/COMPRESSION_DIFF/UNEXPECTED_DIFF/FILE_CHANGED, `--sample`, unified diff snippets |
+| Quality evaluation | T-076 | `harvx quality`/`qa` golden questions harness, coverage analysis, `quality init`, CI-friendly `--json` output |
+| MCP server | T-077 | `harvx mcp serve` stdio transport with `brief`/`slice`/`review_slice` tools, typed `mcp.AddTool[In, Out]`, graceful SIGINT/SIGTERM shutdown |
+| Integration test suite | T-078 | 40 end-to-end tests via compiled binary: all workflow commands, env var overrides, exit codes, determinism, performance bounds |
+
+#### Key Technical Decisions
+
+1. **Functional options for pipeline stages** -- `PipelineOption` / `With*` constructors allow test doubles without interface indirection at call sites; `RunLegacy` preserves backward compatibility for the existing `generate` command
+2. **Pipe detection via `os.ModeCharDevice`** -- `DetectPipe` auto-suppresses progress output and ANSI color when stdout/stderr are piped, eliminating need for explicit `--quiet` in scripts
+3. **XXH3 content hashing on all outputs** -- deterministic byte-identical output enables prompt caching across commits; hash changes only when content changes
+4. **doublestar glob engine for `assert-include`** -- consistent with relevance tier patterns; avoids regex complexity for path matching on untrusted input
+5. **Direct workflow calls in MCP tool handlers** -- no subprocess spawning; each invocation gets independent state making handlers inherently thread-safe
+6. **Compiled binary via `TestMain` for integration tests** -- exercises real CLI flag registration, cobra wiring, and exit codes rather than unit-testing internals in isolation
+
+#### Key Files Reference
+
+| Purpose | Location |
+| ------- | -------- |
+| Stage interfaces and supporting types | `internal/pipeline/interfaces.go` |
+| Functional option constructors | `internal/pipeline/options.go` |
+| `RunOptions`, `RunResult`, `RunStats`, `StageTimings`, `PreviewResult` | `internal/pipeline/result.go` |
+| `Pipeline` struct, `Run`, `RunLegacy` | `internal/pipeline/pipeline.go` |
+| `CheckAssertInclude`, `AssertionError` | `internal/pipeline/assert.go` |
+| `OutputMode`, `DetectPipe`, `DetectOutputMode` | `internal/cli/output.go` |
+| `FlagValues`, `applyEnvOverrides`, `parseBoolEnv`, `--assert-include` | `internal/config/flags.go` |
+| `Profile` struct (all new fields: `AssertInclude`, `BriefMaxTokens`, `SliceMaxTokens`, `SliceDepth`) | `internal/config/types.go` |
+| Profile merge logic | `internal/config/merge.go` |
+| Profile flatten/resolve | `internal/config/resolver.go` |
+| Workspace manifest types, discovery, validation | `internal/config/workspace.go` |
+| Golden questions types, discovery, validation | `internal/config/quality.go` |
+| Brief generation: section discovery, budget, rendering | `internal/workflows/brief.go` |
+| Module map generation (50+ known dirs) | `internal/workflows/module_map.go` |
+| Makefile/package.json/go.mod/Cargo/pyproject extractors | `internal/workflows/section_extractor.go` |
+| Multi-language import parser (Go/TS/JS/Python) | `internal/workflows/imports.go` |
+| Bounded neighbor discovery | `internal/workflows/neighbors.go` |
+| `GenerateReviewSlice`, budget enforcement, rendering | `internal/workflows/review_slice.go` |
+| `GenerateModuleSlice`, `isModuleFile` | `internal/workflows/slice.go` |
+| `GenerateWorkspace`, Markdown+XML renderers | `internal/workflows/workspace.go` |
+| `ParseOutput`, Markdown+XML extractors | `internal/workflows/output_parser.go` |
+| `VerifyOutput`, redaction detection, simple diff | `internal/workflows/verify.go` |
+| `EvaluateQuality`, coverage analysis | `internal/workflows/quality.go` |
+| MCP server creation and lifecycle | `internal/server/mcp.go` |
+| MCP tool input/output types and handlers | `internal/server/tools.go` |
+| `harvx brief` Cobra command | `internal/cli/brief.go` |
+| `harvx review-slice` Cobra command | `internal/cli/review_slice.go` |
+| `harvx slice` Cobra command | `internal/cli/slice.go` |
+| `harvx workspace` / `workspace init` Cobra commands | `internal/cli/workspace.go` |
+| `harvx verify` Cobra command | `internal/cli/verify.go` |
+| `harvx quality` / `quality init` Cobra commands | `internal/cli/quality.go` |
+| `harvx mcp serve` Cobra command | `internal/cli/mcp.go` |
+| Integration test infrastructure (binary build, helpers) | `tests/integration/setup_test.go` |
+| Workflow end-to-end tests | `tests/integration/workflow_test.go` |
+| Pipeline composition tests | `tests/integration/pipeline_test.go` |
+| Env var override tests | `tests/integration/env_test.go` |
+| Exit code validation tests | `tests/integration/exitcode_test.go` |
+| Determinism and performance tests | `tests/integration/determinism_test.go` |
+| Session bootstrap guide | `docs/guides/session-bootstrap.md` |
+| Review pipeline guide | `docs/guides/review-pipeline.md` |
+| Workspace setup guide | `docs/guides/workspace-setup.md` |
+| Golden questions methodology | `docs/guides/golden-questions.md` |
+| MCP integration guide | `docs/guides/mcp-integration.md` |
+| Lean CLAUDE.md template | `docs/templates/CLAUDE.md` |
+| Claude Code hooks reference | `docs/templates/hooks.json` |
+| Sample golden questions TOML | `docs/templates/golden-questions.toml` |
+| LLM A/B evaluation shell script | `docs/templates/evaluate.sh` |
+
+#### Verification
+
+- `go build ./cmd/harvx/` pass
+- `go vet ./...` pass
+- `go test ./...` pass
+- `go test -tags integration` pass (40/40)
 
 ---
 

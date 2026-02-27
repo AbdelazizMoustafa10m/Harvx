@@ -1,0 +1,85 @@
+# Golden Questions Harness for [Project Name]
+#
+# Purpose:
+#   A set of repo-specific questions with known answers that measure whether
+#   LLM-generated reviews improve when given Harvx context versus diff-only
+#   context. Each question should be specific, verifiable, and dependent on
+#   architectural knowledge that lives in the codebase.
+#
+# Format:
+#   Each [[questions]] entry defines a single golden question with:
+#
+#     id              - Unique short identifier for the question (kebab-case).
+#     question        - The natural-language question posed to the LLM.
+#     expected_answer - The known-correct answer; used to judge LLM responses.
+#     category        - One of: architecture, configuration, security,
+#                       conventions, integration.
+#     critical_files  - File paths (or globs) that must be present in Harvx
+#                       output for the LLM to answer correctly. The
+#                       `harvx quality` command uses this list to compute
+#                       coverage without needing an LLM call.
+#
+# Usage:
+#   1. Copy this file to `.harvx/golden-questions.toml` in your repository.
+#   2. Replace the example questions with ones specific to your project.
+#   3. Run `harvx quality` to check critical-file coverage.
+#   4. Run `harvx quality --json` for CI-friendly structured output.
+#
+# Tip: Aim for 10-20 questions covering architecture, config, security,
+# conventions, and integration. Good questions are ones a new team member
+# would need codebase context to answer.
+
+# ---------------------------------------------------------------------------
+# Example 1: Architecture -- JWT validation location
+# Tests whether the LLM can identify where authentication logic lives.
+# ---------------------------------------------------------------------------
+[[questions]]
+id = "auth-jwt"
+question = "Where is JWT token validation performed?"
+expected_answer = "middleware.ts, verifyToken function"
+category = "architecture"
+critical_files = ["middleware.ts", "lib/auth/jwt.ts"]
+
+# ---------------------------------------------------------------------------
+# Example 2: Configuration -- default retry count
+# Tests whether the LLM can surface operational defaults from config files.
+# ---------------------------------------------------------------------------
+[[questions]]
+id = "retry-default"
+question = "What is the default retry count for API calls?"
+expected_answer = "3 retries with exponential backoff"
+category = "configuration"
+critical_files = ["lib/config/defaults.ts"]
+
+# ---------------------------------------------------------------------------
+# Example 3: Security -- SQL injection prevention
+# Tests whether the LLM understands the project's data-access patterns.
+# ---------------------------------------------------------------------------
+[[questions]]
+id = "sql-injection"
+question = "How does the application prevent SQL injection in database queries?"
+expected_answer = "All queries use parameterized prepared statements via the db.Query and db.Exec methods; raw string concatenation is forbidden by lint rules"
+category = "security"
+critical_files = ["internal/db/queries.go", "internal/db/connection.go", ".golangci.yml"]
+
+# ---------------------------------------------------------------------------
+# Example 4: Conventions -- function naming conventions
+# Tests whether the LLM can infer project-wide style rules from source code.
+# ---------------------------------------------------------------------------
+[[questions]]
+id = "naming-convention"
+question = "What naming convention is used for exported functions in this project?"
+expected_answer = "PascalCase verb-noun pattern (e.g., CreateUser, ValidateToken); constructors use New prefix (e.g., NewService)"
+category = "conventions"
+critical_files = ["CONTRIBUTING.md", "internal/service/user.go", "internal/service/auth.go"]
+
+# ---------------------------------------------------------------------------
+# Example 5: Integration -- API versioning strategy
+# Tests whether the LLM understands how the API evolves across versions.
+# ---------------------------------------------------------------------------
+[[questions]]
+id = "api-versioning"
+question = "What strategy does the project use for API versioning?"
+expected_answer = "URL path prefix versioning (e.g., /v1/, /v2/) with a version router that dispatches to version-specific handlers"
+category = "integration"
+critical_files = ["internal/api/router.go", "internal/api/v1/routes.go", "internal/api/v2/routes.go"]

@@ -1,0 +1,13 @@
+{
+  "total_files": 0,
+  "total_tokens": 0,
+  "tokenizer": "",
+  "tiers": {},
+  "redactions": 0,
+  "estimated_time_ms": 0,
+  "content_hash": "0",
+  "profile": "default",
+  "budget_utilization_percent": null,
+  "files_truncated": 0,
+  "files_omitted": 0
+}
