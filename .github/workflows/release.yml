@@ -109,6 +109,6 @@ jobs:
 
       - name: Attest checksum provenance
         if: steps.checksum.outputs.path != ''
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ steps.checksum.outputs.path }}
